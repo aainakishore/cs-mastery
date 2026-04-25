@@ -1,0 +1,18 @@
+{
+  "id": "rabbitmq",
+  "unit": 4,
+  "order": 23,
+  "title": "RabbitMQ",
+  "summary": "AMQP message broker: exchanges, queues, bindings, routing keys, and message acknowledgement.",
+  "prereqs": [
+    "kafka"
+  ],
+  "guide": "<!-- TODO: author full guide for RabbitMQ -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for RabbitMQ",
+    "checklist": [],
+    "hints": []
+  }
+}

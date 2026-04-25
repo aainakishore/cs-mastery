@@ -1,0 +1,18 @@
+{
+  "id": "error-logging",
+  "unit": 5,
+  "order": 32,
+  "title": "Error Logging and Observability",
+  "summary": "Structured logging, distributed tracing, metrics, alerts, and the three pillars of observability.",
+  "prereqs": [
+    "cicd-pipelines"
+  ],
+  "guide": "<!-- TODO: author full guide for Error Logging and Observability -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Error Logging and Observability",
+    "checklist": [],
+    "hints": []
+  }
+}

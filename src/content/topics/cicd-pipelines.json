@@ -1,0 +1,18 @@
+{
+  "id": "cicd-pipelines",
+  "unit": 5,
+  "order": 31,
+  "title": "CI/CD Pipelines",
+  "summary": "Continuous integration and delivery: pipeline stages, testing gates, blue/green and canary deployments.",
+  "prereqs": [
+    "serverless-patterns"
+  ],
+  "guide": "<!-- TODO: author full guide for CI/CD Pipelines -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for CI/CD Pipelines",
+    "checklist": [],
+    "hints": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "websockets",
+  "unit": 3,
+  "order": 14,
+  "title": "WebSockets",
+  "summary": "Full-duplex communication, handshake, use cases vs HTTP, and real-time app patterns.",
+  "prereqs": [
+    "rpc"
+  ],
+  "guide": "<!-- TODO: author full guide for WebSockets -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for WebSockets",
+    "checklist": [],
+    "hints": []
+  }
+}

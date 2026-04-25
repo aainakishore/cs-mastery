@@ -1,0 +1,18 @@
+{
+  "id": "aws-mastery",
+  "unit": 5,
+  "order": 29,
+  "title": "AWS Mastery",
+  "summary": "Lambda, API Gateway, CloudFormation, CDK. Serverless architecture design exercises.",
+  "prereqs": [
+    "aws-practitioner"
+  ],
+  "guide": "<!-- TODO: author full guide for AWS Mastery -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for AWS Mastery",
+    "checklist": [],
+    "hints": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "embedded-databases",
+  "unit": 1,
+  "order": 4,
+  "title": "Embedded Databases",
+  "summary": "SQLite and RocksDB: when to embed a database directly in your app.",
+  "prereqs": [
+    "relational-databases"
+  ],
+  "guide": "<!-- TODO: author full guide for Embedded Databases -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Embedded Databases",
+    "checklist": [],
+    "hints": []
+  }
+}

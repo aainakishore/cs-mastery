@@ -1,0 +1,18 @@
+{
+  "id": "rag",
+  "unit": 6,
+  "order": 34,
+  "title": "RAG",
+  "summary": "Retrieval-Augmented Generation: embeddings, vector databases, chunking strategies, and relevance.",
+  "prereqs": [
+    "agents"
+  ],
+  "guide": "<!-- TODO: author full guide for RAG -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for RAG",
+    "checklist": [],
+    "hints": []
+  }
+}

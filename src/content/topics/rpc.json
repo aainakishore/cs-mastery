@@ -1,0 +1,18 @@
+{
+  "id": "rpc",
+  "unit": 3,
+  "order": 13,
+  "title": "RPC and gRPC",
+  "summary": "Remote Procedure Calls, Protocol Buffers, and when gRPC beats REST.",
+  "prereqs": [
+    "proxies"
+  ],
+  "guide": "<!-- TODO: author full guide for RPC and gRPC -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for RPC and gRPC",
+    "checklist": [],
+    "hints": []
+  }
+}

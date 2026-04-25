@@ -1,0 +1,18 @@
+{
+  "id": "caching",
+  "unit": 4,
+  "order": 19,
+  "title": "Caching",
+  "summary": "LRU, write-through/back, CDN, cache invalidation: the hardest problem in CS.",
+  "prereqs": [
+    "load-balancing"
+  ],
+  "guide": "<!-- TODO: author full guide for Caching -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Caching",
+    "checklist": [],
+    "hints": []
+  }
+}

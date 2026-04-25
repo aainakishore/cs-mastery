@@ -1,0 +1,18 @@
+{
+  "id": "aws-practitioner",
+  "unit": 5,
+  "order": 28,
+  "title": "AWS Practitioner",
+  "summary": "Core AWS concepts: EC2, VPC, IAM, RDS, DynamoDB, S3. Mental models, no console walkthroughs.",
+  "prereqs": [
+    "kubernetes"
+  ],
+  "guide": "<!-- TODO: author full guide for AWS Practitioner -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for AWS Practitioner",
+    "checklist": [],
+    "hints": []
+  }
+}

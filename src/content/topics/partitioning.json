@@ -1,0 +1,18 @@
+{
+  "id": "partitioning",
+  "unit": 4,
+  "order": 21,
+  "title": "Partitioning",
+  "summary": "Partitioning vs sharding: table partitioning, time-based partitioning, and query performance.",
+  "prereqs": [
+    "sharding"
+  ],
+  "guide": "<!-- TODO: author full guide for Partitioning -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Partitioning",
+    "checklist": [],
+    "hints": []
+  }
+}

@@ -1,0 +1,299 @@
+{
+  "id": "linux-essentials",
+  "unit": 1,
+  "order": 1,
+  "title": "Linux Essentials",
+  "summary": "Master the Linux command line: filesystem, permissions, processes, pipes, and SSH. The foundation every engineer needs.",
+  "prereqs": [],
+  "guide": "# Linux Essentials\n\n## Why Linux?\nNearly every cloud server, Docker container, and CI runner runs Linux. If you work in backend engineering, DevOps, or cloud — you live here. Think of Linux as the universal backstage of the internet.\n\n---\n\n## The Filesystem Hierarchy\nLinux organizes everything as files (even hardware devices). The tree starts at `/` (root):\n\n```\n/\n├── bin/      # Essential binaries (ls, cp, mv)\n├── etc/      # Config files (nginx.conf, ssh/sshd_config)\n├── home/     # User home directories (/home/alice)\n├── var/      # Variable data: logs (/var/log), databases\n├── tmp/      # Temporary files, wiped on reboot\n├── usr/      # User-installed programs (/usr/bin, /usr/lib)\n└── proc/     # Virtual filesystem — running processes as files\n```\n\n**Analogy:** `/` is the root of a company org chart. `/etc` is HR (policies/configs). `/var/log` is the audit trail.\n\n**Real-world scenario:** Your Spring Boot app crashes at 3am. You SSH in and check `/var/log/syslog` and your app's log at `/var/log/myapp/app.log`. Understanding the hierarchy means you find the right file in 10 seconds, not 10 minutes.\n\n---\n\n## File Permissions\nEvery file has three permission sets: **owner**, **group**, **others**. Each can have **r**ead (4), **w**rite (2), **e**xecute (1).\n\n```bash\n$ ls -la /etc/passwd\n-rw-r--r-- 1 root root 2847 Jan  5 12:00 /etc/passwd\n# -rw-r--r--\n# ^ type: - = file, d = dir, l = symlink\n#  ^^^ owner: rw- = read+write\n#     ^^^ group: r-- = read only\n#        ^^^ others: r-- = read only\n```\n\n**chmod:** Change permissions.\n```bash\nchmod 755 script.sh    # rwxr-xr-x — owner full, others can read+execute\nchmod +x deploy.sh     # Add execute bit for everyone\nchmod 600 ~/.ssh/id_rsa # rw------- — SSH private key must be 600 or SSH refuses it\n```\n\n**chown:** Change ownership.\n```bash\nchown alice:devs report.txt  # owner=alice, group=devs\nsudo chown -R www-data:www-data /var/www/html  # Recursive\n```\n\n**Common pitfall:** Running your app as root because it can't write to a log directory. Fix: `chown -R appuser:appgroup /var/log/myapp`, then run the app as `appuser`.\n\n---\n\n## Essential Navigation & File Commands\n```bash\npwd          # Print working directory\nls -lah      # List with human-readable sizes, hidden files\ncd /etc      # Change directory\ncd ~         # Go home\ncd -         # Go to previous directory\nmkdir -p a/b/c   # Create nested dirs\nrm -rf dir/      # Recursively delete (DANGEROUS — no undo!)\ncp -r src/ dst/  # Recursive copy\nmv old.txt new.txt  # Move/rename\nfind /var/log -name '*.log' -mtime -1  # Files modified in last 24h\ngrep -r 'ERROR' /var/log/myapp/        # Recursive search in logs\n```\n\n**Pitfall:** `rm -rf /` with a leading space typo can wipe the filesystem. Modern systems have `--no-preserve-root` guards, but on containers it's fatal.\n\n---\n\n## Processes\n```bash\nps aux           # All running processes\ntop / htop       # Live resource monitor (htop is prettier)\nkill 1234        # Send SIGTERM (graceful shutdown) to PID 1234\nkill -9 1234     # Send SIGKILL (force kill — last resort)\npgrep nginx      # Find PIDs of processes named nginx\nnohup ./app &    # Run detached from terminal (survives logout)\njobs             # List background jobs in current shell\nbg / fg          # Send job to background / foreground\n```\n\n**Real-world scenario:** Your CI job hangs. You SSH into the runner, run `ps aux | grep mvn`, find the stuck Maven process, and `kill` it. Job unblocks in seconds.\n\n---\n\n## Pipes & Redirection\nPipes connect command output to command input — the Unix superpower.\n\n```bash\ncat access.log | grep 'POST' | awk '{print $1}' | sort | uniq -c | sort -rn | head -10\n# → Top 10 IPs making POST requests\n\njava -jar app.jar > app.log 2>&1 &\n# stdout → app.log, stderr → same file, run in background\n\necho 'export PATH=$PATH:/usr/local/bin' >> ~/.bashrc\n# >> appends; > overwrites\n```\n\n**Analogy:** Pipes are like assembly lines. Each worker (command) does one job and passes the result to the next.\n\n---\n\n## Package Management\n```bash\n# Debian/Ubuntu (apt)\nsudo apt update && sudo apt install nginx\nsudo apt remove nginx\n\n# RHEL/CentOS/Fedora (dnf/yum)\nsudo dnf install nginx\n\n# Check installed version\nnginx -v\ndpkg -l nginx\n```\n\n---\n\n## SSH\nSSH (Secure Shell) encrypts your terminal session to a remote server.\n\n```bash\nssh alice@192.168.1.10          # Connect by IP\nssh -i ~/.ssh/mykey.pem ec2-user@3.14.159.26  # AWS EC2\nscp file.txt alice@server:/home/alice/   # Secure copy\nssh-keygen -t ed25519            # Generate key pair\ncat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys  # Authorize your key on server\n```\n\n**Pitfall:** `Permission denied (publickey)` — check: key file is `600`, correct user, correct server IP, key is in `authorized_keys`.\n\n---\n\n## Mind Map\n```\nLinux\n├── Filesystem /\n│   ├── /etc (config)\n│   ├── /var/log (logs)\n│   └── /proc (processes)\n├── Permissions\n│   ├── rwx bitmask\n│   ├── chmod / chown\n│   └── 600 for keys, 755 for scripts\n├── Processes\n│   ├── ps, top, kill\n│   └── SIGTERM vs SIGKILL\n├── Pipes | and redirection > >>\n└── SSH\n    ├── Key-based auth\n    └── scp / port forwarding\n```\n\n## How This Connects\n- **Git** (next topic) runs on the shell — you'll use bash constantly.\n- **Docker** wraps Linux namespaces — you'll `docker exec -it` into containers and navigate this same filesystem.\n- **CI/CD** pipelines run bash scripts on Linux runners.\n- **Kubernetes** pods run Linux containers — `kubectl exec` drops you into a shell.\n",
+  "questions": [
+    {
+      "id": "linux-q1",
+      "type": "mcq",
+      "prompt": "Which directory contains system-wide configuration files on Linux?",
+      "choices": ["/bin", "/etc", "/var", "/usr"],
+      "answerIndex": 1,
+      "explanation": "/etc holds configuration files like nginx.conf, sshd_config, and hosts. /bin holds essential binaries, /var holds variable data like logs, /usr holds user-installed programs.",
+      "tags": ["filesystem", "linux-hierarchy"]
+    },
+    {
+      "id": "linux-q2",
+      "type": "mcq",
+      "prompt": "What does `chmod 600 ~/.ssh/id_rsa` do?",
+      "choices": [
+        "Gives the owner read+write, removes all permissions from group and others",
+        "Gives everyone read+write access",
+        "Makes the file executable for the owner",
+        "Removes all permissions from the file"
+      ],
+      "answerIndex": 0,
+      "explanation": "600 = rw------- : owner gets read(4)+write(2)=6, group gets 0, others get 0. SSH requires this exact permission on private keys.",
+      "tags": ["permissions", "ssh", "chmod"]
+    },
+    {
+      "id": "linux-q3",
+      "type": "mcq",
+      "prompt": "Which signal does `kill 1234` send by default?",
+      "choices": ["SIGKILL (9)", "SIGTERM (15)", "SIGHUP (1)", "SIGSTOP (19)"],
+      "answerIndex": 1,
+      "explanation": "By default kill sends SIGTERM (15), asking the process to exit gracefully. SIGKILL (kill -9) forces immediate termination and cannot be caught.",
+      "tags": ["processes", "signals"]
+    },
+    {
+      "id": "linux-q4",
+      "type": "codeOutput",
+      "prompt": "What does this command print?",
+      "code": "echo 'hello world' | tr 'a-z' 'A-Z'",
+      "choices": ["hello world", "HELLO WORLD", "Error", "hELLO wORLD"],
+      "answerIndex": 1,
+      "explanation": "tr translates characters. 'a-z' → 'A-Z' uppercases every lowercase letter, producing HELLO WORLD.",
+      "tags": ["pipes", "text-processing"]
+    },
+    {
+      "id": "linux-q5",
+      "type": "fillBlank",
+      "prompt": "To recursively change the owner of /var/www/html to user www-data group www-data, you use: `sudo chown ___ www-data:www-data /var/www/html`",
+      "accepted": ["-r", "-R", "-r flag", "-R flag"],
+      "explanation": "chown -R (recursive) traverses subdirectories. Without -R only the top-level directory ownership changes.",
+      "tags": ["permissions", "chown"]
+    },
+    {
+      "id": "linux-q6",
+      "type": "multi",
+      "prompt": "Which of the following are valid ways to run a command in the background? (Select all that apply)",
+      "choices": [
+        "Append & to the command",
+        "Use nohup before the command",
+        "Use Ctrl+Z then bg",
+        "Prefix with sudo"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "& runs immediately in background, nohup detaches from terminal (survives logout), Ctrl+Z suspends then bg resumes in background. sudo just elevates privileges.",
+      "tags": ["processes", "background-jobs"]
+    },
+    {
+      "id": "linux-q7",
+      "type": "order",
+      "prompt": "Order these steps to find which process is consuming the most CPU:",
+      "items": ["Run top or htop", "Press P to sort by CPU", "Identify the PID of the top process", "SSH into the server"],
+      "correctOrder": [3, 0, 1, 2],
+      "explanation": "First SSH in, then run top, sort by CPU with P, then identify the PID. top shows live stats and P sorts by CPU usage.",
+      "tags": ["processes", "monitoring"]
+    },
+    {
+      "id": "linux-q8",
+      "type": "match",
+      "prompt": "Match each directory to its primary purpose:",
+      "left": ["/etc", "/var/log", "/tmp", "/proc"],
+      "right": ["Configuration files", "Application and system logs", "Temporary files cleared on reboot", "Virtual filesystem for running processes"],
+      "pairs": [[0,0],[1,1],[2,2],[3,3]],
+      "explanation": "/etc=configs, /var/log=logs, /tmp=temp files, /proc=process info as virtual files.",
+      "tags": ["filesystem", "linux-hierarchy"]
+    },
+    {
+      "id": "linux-q9",
+      "type": "mcq",
+      "prompt": "What does `2>&1` mean in `java -jar app.jar > app.log 2>&1`?",
+      "choices": [
+        "Redirect stderr to stdout",
+        "Redirect stderr (fd 2) to the same destination as stdout (fd 1)",
+        "Run the process twice",
+        "Send output to two files"
+      ],
+      "answerIndex": 1,
+      "explanation": "2>&1 means 'redirect file descriptor 2 (stderr) to wherever fd 1 (stdout) currently points'. Since stdout is redirected to app.log, both streams go to app.log.",
+      "tags": ["redirection", "pipes"]
+    },
+    {
+      "id": "linux-q10",
+      "type": "mcq",
+      "prompt": "Which command finds all .log files modified in the last 24 hours under /var/log?",
+      "choices": [
+        "grep -r '.log' /var/log -mtime -1",
+        "find /var/log -name '*.log' -mtime -1",
+        "ls /var/log/*.log | sort -t -1",
+        "locate /var/log -name *.log -24h"
+      ],
+      "answerIndex": 1,
+      "explanation": "find with -name for glob matching and -mtime -1 for 'less than 1 day ago'. grep searches file contents, ls can't filter by modification time easily, and locate has no -mtime flag.",
+      "tags": ["filesystem", "find-command"]
+    },
+    {
+      "id": "linux-q11",
+      "type": "mcq",
+      "prompt": "What permission level is required on an SSH private key file for SSH to use it?",
+      "choices": ["644", "755", "600", "777"],
+      "answerIndex": 2,
+      "explanation": "SSH requires private key files to be 600 (rw-------). If group or others have any permission, SSH refuses with 'Permissions too open' error.",
+      "tags": ["ssh", "permissions"]
+    },
+    {
+      "id": "linux-q12",
+      "type": "fillBlank",
+      "prompt": "To append text to a file (not overwrite it), you use the redirection operator ___",
+      "accepted": [">>", "append", ">> operator"],
+      "explanation": ">> appends. > overwrites. This is critical — using > when you mean >> destroys existing log data.",
+      "tags": ["redirection", "pipes"]
+    },
+    {
+      "id": "linux-q13",
+      "type": "codeOutput",
+      "prompt": "What is the output of this command sequence?",
+      "code": "mkdir test && cd test && pwd",
+      "choices": ["/home/user", "/home/user/test", "test", "Error: cannot cd"],
+      "answerIndex": 1,
+      "explanation": "mkdir creates 'test', cd enters it, pwd prints the full absolute path which includes 'test' appended to the current directory.",
+      "tags": ["filesystem", "navigation"]
+    },
+    {
+      "id": "linux-q14",
+      "type": "mcq",
+      "prompt": "What does `ps aux | grep nginx | grep -v grep` do?",
+      "choices": [
+        "Lists all processes then removes nginx entries",
+        "Shows nginx processes excluding the grep process itself",
+        "Kills all nginx processes",
+        "Restarts nginx service"
+      ],
+      "answerIndex": 1,
+      "explanation": "ps aux lists all processes. grep nginx filters for nginx. grep -v grep removes the 'grep nginx' process from results (which would also match 'nginx').",
+      "tags": ["processes", "pipes"]
+    },
+    {
+      "id": "linux-q15",
+      "type": "multi",
+      "prompt": "Which of the following directories are typically found under Linux root (/)? (Select all that apply)",
+      "choices": ["/bin", "/etc", "/windows", "/var", "/library"],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "/bin, /etc, /var are standard Linux FHS directories. /windows and /library are macOS/Windows concepts not typically found on Linux.",
+      "tags": ["filesystem", "linux-hierarchy"]
+    },
+    {
+      "id": "linux-q16",
+      "type": "mcq",
+      "prompt": "Which command generates a new SSH key pair using the ed25519 algorithm?",
+      "choices": [
+        "ssh-keygen -t rsa",
+        "ssh-keygen -t ed25519",
+        "openssl genrsa -out key.pem",
+        "gpg --gen-key"
+      ],
+      "answerIndex": 1,
+      "explanation": "ssh-keygen -t ed25519 creates a modern ed25519 key pair. ed25519 is preferred over RSA for new keys — smaller, faster, equally secure.",
+      "tags": ["ssh", "key-generation"]
+    },
+    {
+      "id": "linux-q17",
+      "type": "order",
+      "prompt": "Order these steps to securely copy a file from local machine to a remote server:",
+      "items": ["Verify the file exists on remote with ssh+ls", "Run scp file.txt user@server:/path/", "Ensure SSH key is set up", "Check destination path exists on remote"],
+      "correctOrder": [2, 3, 1, 0],
+      "explanation": "First ensure SSH works, verify the destination exists, copy with scp, then verify the copy succeeded.",
+      "tags": ["ssh", "scp"]
+    },
+    {
+      "id": "linux-q18",
+      "type": "mcq",
+      "prompt": "What does `chmod +x script.sh` do?",
+      "choices": [
+        "Makes script.sh executable for the owner only",
+        "Adds execute permission for all (owner, group, others)",
+        "Removes execute permission",
+        "Adds read+execute for owner"
+      ],
+      "answerIndex": 1,
+      "explanation": "+x without specifying a user class adds execute for all. Use a (all) implicitly. To restrict: chmod u+x adds only for owner.",
+      "tags": ["permissions", "chmod"]
+    },
+    {
+      "id": "linux-q19",
+      "type": "fillBlank",
+      "prompt": "To search recursively for the string 'NullPointerException' in all .log files under /var/log, you would run: `grep ___ 'NullPointerException' /var/log/*.log`",
+      "accepted": ["-r", "-R", "-r flag", "-R flag", "recursive"],
+      "explanation": "grep -r (recursive) traverses subdirectories. Without -R, grep only searches the directly specified files.",
+      "tags": ["grep", "text-processing"]
+    },
+    {
+      "id": "linux-q20",
+      "type": "mcq",
+      "prompt": "Your app needs write access to /var/log/myapp. The app runs as user 'appuser'. What is the correct fix?",
+      "choices": [
+        "chmod 777 /var/log/myapp",
+        "Run the app as root",
+        "sudo chown -R appuser:appuser /var/log/myapp",
+        "sudo chmod +r /var/log/myapp"
+      ],
+      "answerIndex": 2,
+      "explanation": "Changing ownership to appuser is the secure, correct approach. chmod 777 is dangerous (anyone can write). Running as root is a security risk. chmod +r only adds read, not write.",
+      "tags": ["permissions", "chown", "security"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "linux-fc1",
+      "front": "What directory contains all system configuration files?",
+      "back": "/etc — e.g. /etc/nginx/nginx.conf, /etc/ssh/sshd_config, /etc/hosts",
+      "tags": ["filesystem", "linux-hierarchy"]
+    },
+    {
+      "id": "linux-fc2",
+      "front": "What does chmod 600 mean in octal notation?",
+      "back": "rw------- : owner read(4)+write(2)=6, group 0, others 0. Required for SSH private keys.",
+      "tags": ["permissions", "chmod"]
+    },
+    {
+      "id": "linux-fc3",
+      "front": "Difference between SIGTERM and SIGKILL?",
+      "back": "SIGTERM (15) asks process to exit gracefully (can be caught/ignored). SIGKILL (9) immediately terminates — cannot be caught. Use SIGTERM first, SIGKILL as last resort.",
+      "tags": ["processes", "signals"]
+    },
+    {
+      "id": "linux-fc4",
+      "front": "What does the | (pipe) operator do?",
+      "back": "Connects stdout of left command to stdin of right command. e.g. cat access.log | grep ERROR — feeds log content to grep.",
+      "tags": ["pipes"]
+    },
+    {
+      "id": "linux-fc5",
+      "front": "How do you run a command that survives terminal logout?",
+      "back": "nohup ./app & — nohup ignores SIGHUP (terminal close), & backgrounds the process.",
+      "tags": ["processes", "background-jobs"]
+    },
+    {
+      "id": "linux-fc6",
+      "front": "What does 2>&1 mean?",
+      "back": "Redirect file descriptor 2 (stderr) to wherever fd 1 (stdout) points. cmd > file.log 2>&1 sends both stdout and stderr to file.log.",
+      "tags": ["redirection"]
+    },
+    {
+      "id": "linux-fc7",
+      "front": "What command finds files modified in the last 24 hours?",
+      "back": "find /path -name '*.log' -mtime -1 — -mtime -1 means 'less than 1 day ago'.",
+      "tags": ["find-command", "filesystem"]
+    },
+    {
+      "id": "linux-fc8",
+      "front": "What is the difference between > and >> redirection?",
+      "back": "> overwrites the file (destroys existing content). >> appends to the file. Always use >> for logs.",
+      "tags": ["redirection", "pipes"]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Linux Server Hardening Checklist\n\nYou've just been handed SSH access to a fresh Ubuntu 22.04 VPS that will run your Spring Boot API in production. Before deploying your app, you need to harden the server.\n\n**Your task:** Design a minimal but effective server hardening plan. For each action, briefly explain *why* it matters (1–2 sentences). No need to run commands — think through the decisions.\n\nConsider: default credentials, SSH configuration, user privileges, firewall rules, log monitoring, software updates, and file permissions for your app.\n\nThis is a brain exercise. Write your plan as bullet points or a numbered list.",
+    "checklist": [
+      { "id": "proj-linux-1", "text": "Disabled root SSH login (PermitRootLogin no in sshd_config) and justified why", "weight": 15 },
+      { "id": "proj-linux-2", "text": "Created a non-root user for the app with minimum required permissions", "weight": 15 },
+      { "id": "proj-linux-3", "text": "Configured SSH key-based auth only (PasswordAuthentication no) and noted the risk if done wrong", "weight": 15 },
+      { "id": "proj-linux-4", "text": "Identified which ports to open with a firewall (e.g. ufw) and why others should be closed", "weight": 15 },
+      { "id": "proj-linux-5", "text": "Described where app logs go, who owns those files, and what permissions they need", "weight": 15 },
+      { "id": "proj-linux-6", "text": "Mentioned automatic security updates or a patching strategy", "weight": 10 },
+      { "id": "proj-linux-7", "text": "Identified at least one common mistake (e.g. chmod 777, running as root) and how to avoid it", "weight": 15 }
+    ],
+    "hints": [
+      "Think about the principle of least privilege: every user and process should have only the access it needs, nothing more.",
+      "SSH hardening has two layers: authentication method (keys > passwords) and authorization (which user can log in). Consider both.",
+      "A firewall should follow a 'deny all, allow specific' strategy. Ask yourself: what ports does my app actually need? (hint: 22 for SSH, 8080 or 443 for app, nothing else)"
+    ]
+  }
+}
+

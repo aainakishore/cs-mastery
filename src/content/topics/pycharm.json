@@ -1,0 +1,18 @@
+{
+  "id": "pycharm",
+  "unit": 7,
+  "order": 37,
+  "title": "PyCharm Power-Use",
+  "summary": "Debugger, inspections, refactoring, virtual envs, remote interpreters, and productivity shortcuts.",
+  "prereqs": [
+    "leverage-strategies"
+  ],
+  "guide": "<!-- TODO: author full guide for PyCharm Power-Use -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for PyCharm Power-Use",
+    "checklist": [],
+    "hints": []
+  }
+}

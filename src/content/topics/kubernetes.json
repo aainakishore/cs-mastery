@@ -1,0 +1,18 @@
+{
+  "id": "kubernetes",
+  "unit": 5,
+  "order": 27,
+  "title": "Kubernetes",
+  "summary": "Pods, deployments, services, ingress, HPA, namespaces, and kubectl essentials.",
+  "prereqs": [
+    "docker"
+  ],
+  "guide": "<!-- TODO: author full guide for Kubernetes -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Kubernetes",
+    "checklist": [],
+    "hints": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "docker",
+  "unit": 5,
+  "order": 26,
+  "title": "Docker",
+  "summary": "Containers, images, Dockerfile, layers, networking, volumes, and docker-compose.",
+  "prereqs": [
+    "cloud-fundamentals"
+  ],
+  "guide": "<!-- TODO: author full guide for Docker -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Docker",
+    "checklist": [],
+    "hints": []
+  }
+}

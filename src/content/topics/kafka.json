@@ -1,0 +1,18 @@
+{
+  "id": "kafka",
+  "unit": 4,
+  "order": 22,
+  "title": "Kafka",
+  "summary": "Distributed event streaming: topics, partitions, consumer groups, offset, and at-least-once delivery.",
+  "prereqs": [
+    "partitioning"
+  ],
+  "guide": "<!-- TODO: author full guide for Kafka -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Kafka",
+    "checklist": [],
+    "hints": []
+  }
+}

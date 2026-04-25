@@ -1,0 +1,18 @@
+{
+  "id": "transformers",
+  "unit": 2,
+  "order": 7,
+  "title": "Transformers",
+  "summary": "Attention mechanisms, self-attention, and the architecture behind all modern LLMs.",
+  "prereqs": [
+    "neural-nets"
+  ],
+  "guide": "<!-- TODO: author full guide for Transformers -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Transformers",
+    "checklist": [],
+    "hints": []
+  }
+}

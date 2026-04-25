@@ -1,0 +1,18 @@
+{
+  "id": "leverage-strategies",
+  "unit": 6,
+  "order": 36,
+  "title": "Leverage Strategies",
+  "summary": "Max output, minimum energy: AI tools, automation, and mental models to 10x your output.",
+  "prereqs": [
+    "fine-tuning"
+  ],
+  "guide": "<!-- TODO: author full guide for Leverage Strategies -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Leverage Strategies",
+    "checklist": [],
+    "hints": []
+  }
+}

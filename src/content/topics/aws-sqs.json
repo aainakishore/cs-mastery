@@ -1,0 +1,18 @@
+{
+  "id": "aws-sqs",
+  "unit": 4,
+  "order": 24,
+  "title": "AWS SQS",
+  "summary": "AWS Simple Queue Service: standard vs FIFO queues, visibility timeout, DLQ, and Lambda triggers.",
+  "prereqs": [
+    "rabbitmq"
+  ],
+  "guide": "<!-- TODO: author full guide for AWS SQS -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for AWS SQS",
+    "checklist": [],
+    "hints": []
+  }
+}

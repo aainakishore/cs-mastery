@@ -1,0 +1,18 @@
+{
+  "id": "sharding",
+  "unit": 4,
+  "order": 20,
+  "title": "Sharding",
+  "summary": "Horizontal partitioning of databases: hash sharding, range sharding, and hotspot avoidance.",
+  "prereqs": [
+    "caching"
+  ],
+  "guide": "<!-- TODO: author full guide for Sharding -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Sharding",
+    "checklist": [],
+    "hints": []
+  }
+}

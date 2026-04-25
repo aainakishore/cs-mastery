@@ -1,0 +1,18 @@
+{
+  "id": "relational-databases",
+  "unit": 1,
+  "order": 3,
+  "title": "Relational Databases and SQL",
+  "summary": "Master SQL, ACID properties, indexes, joins, and query optimization.",
+  "prereqs": [
+    "git-fundamentals"
+  ],
+  "guide": "<!-- TODO: author full guide for Relational Databases and SQL -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Relational Databases and SQL",
+    "checklist": [],
+    "hints": []
+  }
+}

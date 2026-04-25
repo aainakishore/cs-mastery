@@ -1,0 +1,18 @@
+{
+  "id": "qps-capacity",
+  "unit": 3,
+  "order": 17,
+  "title": "QPS and Capacity Planning",
+  "summary": "Queries per second, throughput vs latency, back-of-napkin capacity math for system design.",
+  "prereqs": [
+    "rate-limiting"
+  ],
+  "guide": "<!-- TODO: author full guide for QPS and Capacity Planning -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for QPS and Capacity Planning",
+    "checklist": [],
+    "hints": []
+  }
+}

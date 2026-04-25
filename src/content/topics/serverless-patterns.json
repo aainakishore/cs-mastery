@@ -1,0 +1,18 @@
+{
+  "id": "serverless-patterns",
+  "unit": 5,
+  "order": 30,
+  "title": "Serverless Patterns",
+  "summary": "Event-driven architecture, fan-out, saga pattern, cold starts, and cost vs speed tradeoffs.",
+  "prereqs": [
+    "aws-mastery"
+  ],
+  "guide": "<!-- TODO: author full guide for Serverless Patterns -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Serverless Patterns",
+    "checklist": [],
+    "hints": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "llms",
+  "unit": 2,
+  "order": 8,
+  "title": "LLMs",
+  "summary": "How large language models generate text, tokenization, context windows, and limits.",
+  "prereqs": [
+    "transformers"
+  ],
+  "guide": "<!-- TODO: author full guide for LLMs -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for LLMs",
+    "checklist": [],
+    "hints": []
+  }
+}

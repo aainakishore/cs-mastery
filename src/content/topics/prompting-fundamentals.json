@@ -1,0 +1,18 @@
+{
+  "id": "prompting-fundamentals",
+  "unit": 2,
+  "order": 9,
+  "title": "Prompting Fundamentals",
+  "summary": "Prompt engineering techniques: zero-shot, few-shot, chain-of-thought, and structured outputs.",
+  "prereqs": [
+    "llms"
+  ],
+  "guide": "<!-- TODO: author full guide for Prompting Fundamentals -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Prompting Fundamentals",
+    "checklist": [],
+    "hints": []
+  }
+}

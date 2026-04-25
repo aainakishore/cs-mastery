@@ -1,0 +1,18 @@
+{
+  "id": "fine-tuning",
+  "unit": 6,
+  "order": 35,
+  "title": "Fine-Tuning",
+  "summary": "LoRA, SFT, RLHF: when and how to fine-tune vs prompt-engineer, cost tradeoffs.",
+  "prereqs": [
+    "rag"
+  ],
+  "guide": "<!-- TODO: author full guide for Fine-Tuning -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Fine-Tuning",
+    "checklist": [],
+    "hints": []
+  }
+}

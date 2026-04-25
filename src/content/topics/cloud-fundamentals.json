@@ -1,0 +1,18 @@
+{
+  "id": "cloud-fundamentals",
+  "unit": 5,
+  "order": 25,
+  "title": "Cloud Fundamentals",
+  "summary": "IaaS/PaaS/SaaS, regions, availability zones, shared responsibility model.",
+  "prereqs": [
+    "aws-sqs"
+  ],
+  "guide": "<!-- TODO: author full guide for Cloud Fundamentals -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for Cloud Fundamentals",
+    "checklist": [],
+    "hints": []
+  }
+}

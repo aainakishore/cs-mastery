@@ -1,0 +1,18 @@
+{
+  "id": "agents",
+  "unit": 6,
+  "order": 33,
+  "title": "AI Agents",
+  "summary": "Tool-use, planning loops, ReAct pattern, multi-agent systems, and agentic failure modes.",
+  "prereqs": [
+    "error-logging"
+  ],
+  "guide": "<!-- TODO: author full guide for AI Agents -->",
+  "questions": [],
+  "flashcards": [],
+  "project": {
+    "brief": "TODO: author project brief for AI Agents",
+    "checklist": [],
+    "hints": []
+  }
+}
