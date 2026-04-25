@@ -129,7 +129,7 @@ export default function App() {
     <ErrorBoundary>
       <ProgressProvider>
         <HeartsProvider>
-          <BrowserRouter>
+          <BrowserRouter basename="/cs-mastery">
             <AppShell />
           </BrowserRouter>
         </HeartsProvider>
