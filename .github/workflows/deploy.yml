@@ -37,12 +37,9 @@ jobs:
           npm -v
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-          else
-            npm install --legacy-peer-deps
-          fi
+        run: npm ci --legacy-peer-deps
+        env:
+          npm_config_registry: https://registry.npmjs.org/
 
       - name: Build
         run: npm run build
