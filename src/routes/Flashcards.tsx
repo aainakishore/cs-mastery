@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { getTopicById } from '../content'
 import { useProgress } from '../state/ProgressContext'
 import { FlashcardDeck } from '../components/FlashcardDeck'
+import { Layout } from '../components/Layout'
 
 export function Flashcards() {
   const { id } = useParams<{ id: string }>()
@@ -12,22 +13,15 @@ export function Flashcards() {
 
   if (!topic) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        Topic not found.
-      </div>
+      <Layout title="Flashcards" back="/">
+        <div className="p-8 text-center text-slate-400">Topic not found.</div>
+      </Layout>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <div className="sticky top-0 bg-slate-950/90 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(`/topic/${id}`)} className="text-slate-400 hover:text-white text-sm">← Back</button>
-        <div>
-          <div className="text-xs text-indigo-400">Flashcards</div>
-          <div className="font-bold">{topic.title}</div>
-        </div>
-      </div>
-      <div className="max-w-xl mx-auto px-4 py-8">
+    <Layout title={`Flashcards: ${topic.title}`} back={`/topic/${id}`}>
+      <div className="max-w-xl mx-auto px-4 py-6">
         {topic.flashcards.length > 0 ? (
           <FlashcardDeck
             cards={topic.flashcards}
@@ -38,11 +32,10 @@ export function Flashcards() {
           />
         ) : (
           <div className="bg-slate-800 rounded-2xl p-8 text-center text-slate-400">
-            Flashcards coming soon for this topic.
+            <p>Flashcards coming soon for this topic.</p>
           </div>
         )}
       </div>
-    </div>
+    </Layout>
   )
 }
-
