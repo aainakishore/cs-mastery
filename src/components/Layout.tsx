@@ -42,6 +42,7 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
     { path: '/',         label: 'Home',    icon: '🏠' },
     { path: '/review',   label: 'Review',  icon: '🔁' },
     { path: '/mindmap',  label: 'Map',     icon: '🗺️' },
+    { path: '/stats',    label: 'Stats',   icon: '📊' },
     { path: '/settings', label: 'Settings',icon: '⚙️' },
   ]
 

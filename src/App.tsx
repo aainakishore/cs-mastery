@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, Component, type ReactNode } from 'react'
 import { ProgressProvider, useProgress } from './state/ProgressContext'
 import { HeartsProvider } from './state/HeartsContext'
 import { BreakModal } from './components/BreakModal'
+import { AchievementToast } from './components/AchievementToast'
 import { Home } from './routes/Home'
 import { Topic } from './routes/Topic'
 import { Quiz } from './routes/Quiz'
@@ -12,6 +13,10 @@ import { Review } from './routes/Review'
 import { Flashcards } from './routes/Flashcards'
 import { Settings } from './routes/Settings'
 import { MindMapRoute } from './routes/MindMapRoute'
+import { Stats } from './routes/Stats'
+import { getSettings } from './lib/storage'
+import { getDueTopicIds } from './lib/scheduler'
+import type { Achievement } from './lib/achievements'
 
 const BREAK_INTERVAL_MS = 20 * 60 * 1000 // 20 minutes of VISIBLE use
 
@@ -50,9 +55,31 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string |
 }
 
 function AppShell() {
-  const { grantStreakBoost } = useProgress()
+  const { grantStreakBoost, reviewSchedules, flashcardSchedules } = useProgress()
   const [showBreak, setShowBreak] = useState(false)
+  const [pendingAchievement, setPendingAchievement] = useState<Achievement | null>(null)
   const sessionStartRef = useRef<number | null>(null)
+
+  // Apply saved theme on mount
+  useEffect(() => {
+    const s = getSettings()
+    document.documentElement.classList.toggle('light-mode', s.theme === 'light')
+  }, [])
+
+  // Schedule review notifications once per session
+  useEffect(() => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    const dueCount = getDueTopicIds(reviewSchedules as never).length + getDueTopicIds(flashcardSchedules as never).length
+    if (dueCount > 0 && !sessionStorage.getItem('csm:notified-today')) {
+      sessionStorage.setItem('csm:notified-today', '1')
+      setTimeout(() => {
+        new Notification('CS Mastery — Time to review! 🔁', {
+          body: `${dueCount} item${dueCount > 1 ? 's' : ''} due for review today.`,
+          icon: '/icon-192.png',
+        })
+      }, 5000)
+    }
+  }, [reviewSchedules, flashcardSchedules])
 
   useEffect(() => {
     // Start counting when tab becomes visible, stop when hidden
@@ -107,10 +134,11 @@ function AppShell() {
     <>
       {showBreak && (
         <BreakModal
-          onBoost={() => grantStreakBoost()}
+          onBoost={() => { grantStreakBoost(); setShowBreak(false) }}
           onDismiss={() => setShowBreak(false)}
         />
       )}
+      <AchievementToast achievement={pendingAchievement} onDone={() => setPendingAchievement(null)} />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/topic/:id" element={<Topic />} />
@@ -121,6 +149,7 @@ function AppShell() {
         <Route path="/flashcards/:id" element={<Flashcards />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/mindmap" element={<MindMapRoute />} />
+        <Route path="/stats" element={<Stats />} />
       </Routes>
     </>
   )

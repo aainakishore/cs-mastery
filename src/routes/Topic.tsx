@@ -5,6 +5,7 @@ import { useProgress } from '../state/ProgressContext'
 import { useHearts } from '../state/HeartsContext'
 import { GuideView } from '../components/GuideView'
 import { Layout } from '../components/Layout'
+import { TopicNotes } from '../components/TopicNotes'
 
 export function Topic() {
   const { id } = useParams<{ id: string }>()
@@ -48,6 +49,8 @@ export function Topic() {
             <p>Guide coming soon for this topic.</p>
           </div>
         )}
+
+        <TopicNotes topicId={topic.id} />
       </div>
 
       {/* Sticky CTA bar */}

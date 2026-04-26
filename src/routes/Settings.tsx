@@ -1,13 +1,47 @@
-import { useRef } from 'react'
-import { Download, Upload, Trash2 } from 'lucide-react'
+import { useRef, useState, useEffect } from 'react'
+import { Download, Upload, Trash2, Bell, Volume2, VolumeX, Sun, Moon } from 'lucide-react'
 import { exportProgress, importProgress, resetProgress } from '../lib/sync'
 import { useProgress } from '../state/ProgressContext'
 import { Layout } from '../components/Layout'
+import { getSettings, setSettings } from '../lib/storage'
+import type { AppSettings } from '../content/schema'
 
 export function Settings() {
   const { xp, streak, topicProgress } = useProgress()
   const fileRef = useRef<HTMLInputElement>(null)
   const learnedCount = topicProgress.filter((p) => p.status === 'learned').length
+
+  const [settings, setLocalSettings] = useState<AppSettings>(() => getSettings())
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default')
+
+  useEffect(() => {
+    if ('Notification' in window) setNotifPermission(Notification.permission)
+  }, [])
+
+  const updateSetting = <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
+    const next = { ...settings, [key]: val }
+    setLocalSettings(next)
+    setSettings(next)
+    // Apply theme immediately
+    if (key === 'theme') {
+      document.documentElement.classList.toggle('light-mode', val === 'light')
+    }
+  }
+
+  const requestNotifications = async () => {
+    if (!('Notification' in window)) return alert('Notifications not supported in this browser.')
+    const result = await Notification.requestPermission()
+    setNotifPermission(result)
+    if (result === 'granted') {
+      // Schedule a test notification
+      setTimeout(() => {
+        new Notification('CS Mastery 🎓', {
+          body: 'Notifications enabled! You\'ll be reminded when topics are due for review.',
+          icon: '/icon-192.png',
+        })
+      }, 500)
+    }
+  }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -46,6 +80,81 @@ export function Settings() {
           </div>
         </div>
 
+        {/* Preferences */}
+        <div className="bg-slate-800 rounded-2xl p-5 space-y-4">
+          <h3 className="font-bold text-slate-200">Preferences</h3>
+
+          {/* Sound toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {settings.sound ? <Volume2 size={18} className="text-indigo-400" /> : <VolumeX size={18} className="text-slate-500" />}
+              <div>
+                <div className="text-sm text-slate-200 font-medium">Sound effects</div>
+                <div className="text-xs text-slate-500">Coin, correct, wrong, fanfare</div>
+              </div>
+            </div>
+            <button
+              onClick={() => updateSetting('sound', !settings.sound)}
+              className={`w-12 h-6 rounded-full transition-colors relative ${settings.sound ? 'bg-indigo-600' : 'bg-slate-700'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${settings.sound ? 'left-6' : 'left-0.5'}`} />
+            </button>
+          </div>
+
+          {/* Animations toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">✨</span>
+              <div>
+                <div className="text-sm text-slate-200 font-medium">Animations</div>
+                <div className="text-xs text-slate-500">Confetti, celebrations</div>
+              </div>
+            </div>
+            <button
+              onClick={() => updateSetting('animations', !settings.animations)}
+              className={`w-12 h-6 rounded-full transition-colors relative ${settings.animations ? 'bg-indigo-600' : 'bg-slate-700'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${settings.animations ? 'left-6' : 'left-0.5'}`} />
+            </button>
+          </div>
+
+          {/* Theme toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {settings.theme === 'dark' ? <Moon size={18} className="text-indigo-400" /> : <Sun size={18} className="text-yellow-400" />}
+              <div>
+                <div className="text-sm text-slate-200 font-medium">Theme</div>
+                <div className="text-xs text-slate-500">{settings.theme === 'dark' ? 'Dark mode' : 'Light mode'}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => updateSetting('theme', settings.theme === 'dark' ? 'light' : 'dark')}
+              className={`w-12 h-6 rounded-full transition-colors relative ${settings.theme === 'light' ? 'bg-yellow-500' : 'bg-slate-700'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${settings.theme === 'light' ? 'left-6' : 'left-0.5'}`} />
+            </button>
+          </div>
+
+          {/* Notifications */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Bell size={18} className={notifPermission === 'granted' ? 'text-emerald-400' : 'text-slate-500'} />
+              <div>
+                <div className="text-sm text-slate-200 font-medium">Review reminders</div>
+                <div className="text-xs text-slate-500">
+                  {notifPermission === 'granted' ? '✓ Enabled' : notifPermission === 'denied' ? 'Blocked by browser' : 'Tap to enable'}
+                </div>
+              </div>
+            </div>
+            {notifPermission !== 'granted' && notifPermission !== 'denied' && (
+              <button onClick={requestNotifications} className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold">
+                Enable
+              </button>
+            )}
+            {notifPermission === 'granted' && <span className="text-emerald-400 text-lg">✓</span>}
+          </div>
+        </div>
+
         {/* Sync */}
         <div className="bg-slate-800 rounded-2xl p-5 space-y-4">
           <h3 className="font-bold text-slate-200">Cross-device sync</h3>
@@ -67,9 +176,7 @@ export function Settings() {
           </button>
         </div>
 
-        <div className="text-center text-slate-600 text-xs space-y-1">
-          <p>CS Mastery v1.0 — No network. No accounts. 100% local.</p>
-        </div>
+        <div className="text-center text-slate-600 text-xs">CS Mastery v1.0 — No network. No accounts. 100% local.</div>
       </div>
     </Layout>
   )
