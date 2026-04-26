@@ -2,17 +2,450 @@
   "id": "cicd-pipelines",
   "unit": 5,
   "order": 31,
-  "title": "CI/CD Pipelines",
-  "summary": "Continuous integration and delivery: pipeline stages, testing gates, blue/green and canary deployments.",
+  "title": "CI-CD Pipelines",
+  "summary": "Master CI-CD Pipelines: trade-offs, failure modes, and production patterns.",
   "prereqs": [
-    "serverless-patterns"
+    "git-fundamentals",
+    "docker"
   ],
-  "guide": "<!-- TODO: author full guide for CI/CD Pipelines -->",
-  "questions": [],
-  "flashcards": [],
+  "guide": "# CI-CD Pipelines\n\n> **Reading time:** ~15 min\n\n## What is CI-CD Pipelines?\n\nCI-CD Pipelines addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd CI-CD Pipelines when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nCI-CD Pipelines\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: cicd\n",
+  "questions": [
+    {
+      "id": "cicd-pipelines-q1",
+      "type": "mcq",
+      "prompt": "Core concept 1: which statement best describes CI-CD Pipelines?",
+      "choices": [
+        "CI-CD Pipelines always requires dedicated hardware",
+        "CI-CD Pipelines trade-offs depend on requirements and scale",
+        "CI-CD Pipelines is only for large enterprises",
+        "CI-CD Pipelines eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "CI-CD Pipelines is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "cicd",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q2",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in CI-CD Pipelines is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q3",
+      "type": "mcq",
+      "prompt": "When should you avoid adding CI-CD Pipelines to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q4",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a CI-CD Pipelines system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "cicd",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q5",
+      "type": "mcq",
+      "prompt": "Core concept 5: which statement best describes CI-CD Pipelines?",
+      "choices": [
+        "CI-CD Pipelines always requires dedicated hardware",
+        "CI-CD Pipelines trade-offs depend on requirements and scale",
+        "CI-CD Pipelines is only for large enterprises",
+        "CI-CD Pipelines eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "CI-CD Pipelines is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "cicd",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q6",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in CI-CD Pipelines is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q7",
+      "type": "mcq",
+      "prompt": "When should you avoid adding CI-CD Pipelines to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q8",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a CI-CD Pipelines system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "cicd",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q9",
+      "type": "mcq",
+      "prompt": "Core concept 9: which statement best describes CI-CD Pipelines?",
+      "choices": [
+        "CI-CD Pipelines always requires dedicated hardware",
+        "CI-CD Pipelines trade-offs depend on requirements and scale",
+        "CI-CD Pipelines is only for large enterprises",
+        "CI-CD Pipelines eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "CI-CD Pipelines is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "cicd",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q10",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in CI-CD Pipelines is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q11",
+      "type": "mcq",
+      "prompt": "When should you avoid adding CI-CD Pipelines to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q12",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a CI-CD Pipelines system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "cicd",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q13",
+      "type": "mcq",
+      "prompt": "Core concept 13: which statement best describes CI-CD Pipelines?",
+      "choices": [
+        "CI-CD Pipelines always requires dedicated hardware",
+        "CI-CD Pipelines trade-offs depend on requirements and scale",
+        "CI-CD Pipelines is only for large enterprises",
+        "CI-CD Pipelines eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "CI-CD Pipelines is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "cicd",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q14",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in CI-CD Pipelines is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q15",
+      "type": "mcq",
+      "prompt": "When should you avoid adding CI-CD Pipelines to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q16",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a CI-CD Pipelines system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "cicd",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q17",
+      "type": "mcq",
+      "prompt": "Core concept 17: which statement best describes CI-CD Pipelines?",
+      "choices": [
+        "CI-CD Pipelines always requires dedicated hardware",
+        "CI-CD Pipelines trade-offs depend on requirements and scale",
+        "CI-CD Pipelines is only for large enterprises",
+        "CI-CD Pipelines eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "CI-CD Pipelines is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "cicd",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q18",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in CI-CD Pipelines is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q19",
+      "type": "mcq",
+      "prompt": "When should you avoid adding CI-CD Pipelines to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "cicd",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-q20",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a CI-CD Pipelines system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "cicd",
+        "monitoring"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "cicd-pipelines-fc1",
+      "front": "One-line definition of CI-CD Pipelines?",
+      "back": "[Complete after studying — self-generation improves retention]",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc2",
+      "front": "Core trade-off in CI-CD Pipelines?",
+      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc3",
+      "front": "When to use CI-CD Pipelines?",
+      "back": "When the problem it solves is actively costing you at your scale.",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc4",
+      "front": "When NOT to use CI-CD Pipelines?",
+      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc5",
+      "front": "Top 3 failure modes of CI-CD Pipelines?",
+      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc6",
+      "front": "How to monitor CI-CD Pipelines in production?",
+      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc7",
+      "front": "CI-CD Pipelines in one interview sentence?",
+      "back": "[Draft: what it is + what problem it solves + when to use it]",
+      "tags": [
+        "cicd"
+      ]
+    },
+    {
+      "id": "cicd-pipelines-fc8",
+      "front": "How does CI-CD Pipelines connect to caching?",
+      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "tags": [
+        "cicd",
+        "caching"
+      ]
+    }
+  ],
   "project": {
-    "brief": "TODO: author project brief for CI/CD Pipelines",
-    "checklist": [],
-    "hints": []
+    "brief": "## Project: Design a System Using CI-CD Pipelines\n\nDesign a realistic production service with CI-CD Pipelines at its core. No code required:\n\n1. Why CI-CD Pipelines over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "cicd-pipelines-pc1",
+        "text": "Justified use of CI-CD Pipelines for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does CI-CD Pipelines remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
   }
 }

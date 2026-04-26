@@ -39,9 +39,10 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
   const { pct, minutes } = useActiveMinutes()
 
   const navItems = [
-    { path: '/',        label: 'Home',    icon: '🏠' },
-    { path: '/review',  label: 'Review',  icon: '🔁' },
-    { path: '/settings',label: 'Settings',icon: '⚙️' },
+    { path: '/',         label: 'Home',    icon: '🏠' },
+    { path: '/review',   label: 'Review',  icon: '🔁' },
+    { path: '/mindmap',  label: 'Map',     icon: '🗺️' },
+    { path: '/settings', label: 'Settings',icon: '⚙️' },
   ]
 
   return (

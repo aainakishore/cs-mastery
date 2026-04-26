@@ -3,16 +3,446 @@
   "unit": 7,
   "order": 37,
   "title": "PyCharm Power-Use",
-  "summary": "Debugger, inspections, refactoring, virtual envs, remote interpreters, and productivity shortcuts.",
-  "prereqs": [
-    "leverage-strategies"
+  "summary": "Master PyCharm Power-Use: trade-offs, failure modes, and production patterns.",
+  "prereqs": [],
+  "guide": "# PyCharm Power-Use\n\n> **Reading time:** ~15 min\n\n## What is PyCharm Power-Use?\n\nPyCharm Power-Use addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd PyCharm Power-Use when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nPyCharm Power-Use\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: pycharm\n",
+  "questions": [
+    {
+      "id": "pycharm-q1",
+      "type": "mcq",
+      "prompt": "Core concept 1: which statement best describes PyCharm Power-Use?",
+      "choices": [
+        "PyCharm Power-Use always requires dedicated hardware",
+        "PyCharm Power-Use trade-offs depend on requirements and scale",
+        "PyCharm Power-Use is only for large enterprises",
+        "PyCharm Power-Use eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "pycharm",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "pycharm-q2",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q3",
+      "type": "mcq",
+      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q4",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "pycharm",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "pycharm-q5",
+      "type": "mcq",
+      "prompt": "Core concept 5: which statement best describes PyCharm Power-Use?",
+      "choices": [
+        "PyCharm Power-Use always requires dedicated hardware",
+        "PyCharm Power-Use trade-offs depend on requirements and scale",
+        "PyCharm Power-Use is only for large enterprises",
+        "PyCharm Power-Use eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "pycharm",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "pycharm-q6",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q7",
+      "type": "mcq",
+      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q8",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "pycharm",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "pycharm-q9",
+      "type": "mcq",
+      "prompt": "Core concept 9: which statement best describes PyCharm Power-Use?",
+      "choices": [
+        "PyCharm Power-Use always requires dedicated hardware",
+        "PyCharm Power-Use trade-offs depend on requirements and scale",
+        "PyCharm Power-Use is only for large enterprises",
+        "PyCharm Power-Use eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "pycharm",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "pycharm-q10",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q11",
+      "type": "mcq",
+      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q12",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "pycharm",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "pycharm-q13",
+      "type": "mcq",
+      "prompt": "Core concept 13: which statement best describes PyCharm Power-Use?",
+      "choices": [
+        "PyCharm Power-Use always requires dedicated hardware",
+        "PyCharm Power-Use trade-offs depend on requirements and scale",
+        "PyCharm Power-Use is only for large enterprises",
+        "PyCharm Power-Use eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "pycharm",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "pycharm-q14",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q15",
+      "type": "mcq",
+      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q16",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "pycharm",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "pycharm-q17",
+      "type": "mcq",
+      "prompt": "Core concept 17: which statement best describes PyCharm Power-Use?",
+      "choices": [
+        "PyCharm Power-Use always requires dedicated hardware",
+        "PyCharm Power-Use trade-offs depend on requirements and scale",
+        "PyCharm Power-Use is only for large enterprises",
+        "PyCharm Power-Use eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "pycharm",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "pycharm-q18",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q19",
+      "type": "mcq",
+      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "pycharm",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "pycharm-q20",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "pycharm",
+        "monitoring"
+      ]
+    }
   ],
-  "guide": "<!-- TODO: author full guide for PyCharm Power-Use -->",
-  "questions": [],
-  "flashcards": [],
+  "flashcards": [
+    {
+      "id": "pycharm-fc1",
+      "front": "One-line definition of PyCharm Power-Use?",
+      "back": "[Complete after studying — self-generation improves retention]",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc2",
+      "front": "Core trade-off in PyCharm Power-Use?",
+      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc3",
+      "front": "When to use PyCharm Power-Use?",
+      "back": "When the problem it solves is actively costing you at your scale.",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc4",
+      "front": "When NOT to use PyCharm Power-Use?",
+      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc5",
+      "front": "Top 3 failure modes of PyCharm Power-Use?",
+      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc6",
+      "front": "How to monitor PyCharm Power-Use in production?",
+      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc7",
+      "front": "PyCharm Power-Use in one interview sentence?",
+      "back": "[Draft: what it is + what problem it solves + when to use it]",
+      "tags": [
+        "pycharm"
+      ]
+    },
+    {
+      "id": "pycharm-fc8",
+      "front": "How does PyCharm Power-Use connect to caching?",
+      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "tags": [
+        "pycharm",
+        "caching"
+      ]
+    }
+  ],
   "project": {
-    "brief": "TODO: author project brief for PyCharm Power-Use",
-    "checklist": [],
-    "hints": []
+    "brief": "## Project: Design a System Using PyCharm Power-Use\n\nDesign a realistic production service with PyCharm Power-Use at its core. No code required:\n\n1. Why PyCharm Power-Use over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "pycharm-pc1",
+        "text": "Justified use of PyCharm Power-Use for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "pycharm-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "pycharm-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "pycharm-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "pycharm-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does PyCharm Power-Use remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
   }
 }

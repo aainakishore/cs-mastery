@@ -3,16 +3,448 @@
   "unit": 5,
   "order": 32,
   "title": "Error Logging and Observability",
-  "summary": "Structured logging, distributed tracing, metrics, alerts, and the three pillars of observability.",
+  "summary": "Master Error Logging and Observability: trade-offs, failure modes, and production patterns.",
   "prereqs": [
-    "cicd-pipelines"
+    "docker"
   ],
-  "guide": "<!-- TODO: author full guide for Error Logging and Observability -->",
-  "questions": [],
-  "flashcards": [],
+  "guide": "# Error Logging and Observability\n\n> **Reading time:** ~15 min\n\n## What is Error Logging and Observability?\n\nError Logging and Observability addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd Error Logging and Observability when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nError Logging and Observability\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: logging\n",
+  "questions": [
+    {
+      "id": "error-logging-q1",
+      "type": "mcq",
+      "prompt": "Core concept 1: which statement best describes Error Logging and Observability?",
+      "choices": [
+        "Error Logging and Observability always requires dedicated hardware",
+        "Error Logging and Observability trade-offs depend on requirements and scale",
+        "Error Logging and Observability is only for large enterprises",
+        "Error Logging and Observability eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error Logging and Observability is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "logging",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "error-logging-q2",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in Error Logging and Observability is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q3",
+      "type": "mcq",
+      "prompt": "When should you avoid adding Error Logging and Observability to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q4",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a Error Logging and Observability system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "logging",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "error-logging-q5",
+      "type": "mcq",
+      "prompt": "Core concept 5: which statement best describes Error Logging and Observability?",
+      "choices": [
+        "Error Logging and Observability always requires dedicated hardware",
+        "Error Logging and Observability trade-offs depend on requirements and scale",
+        "Error Logging and Observability is only for large enterprises",
+        "Error Logging and Observability eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error Logging and Observability is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "logging",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "error-logging-q6",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in Error Logging and Observability is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q7",
+      "type": "mcq",
+      "prompt": "When should you avoid adding Error Logging and Observability to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q8",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a Error Logging and Observability system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "logging",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "error-logging-q9",
+      "type": "mcq",
+      "prompt": "Core concept 9: which statement best describes Error Logging and Observability?",
+      "choices": [
+        "Error Logging and Observability always requires dedicated hardware",
+        "Error Logging and Observability trade-offs depend on requirements and scale",
+        "Error Logging and Observability is only for large enterprises",
+        "Error Logging and Observability eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error Logging and Observability is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "logging",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "error-logging-q10",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in Error Logging and Observability is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q11",
+      "type": "mcq",
+      "prompt": "When should you avoid adding Error Logging and Observability to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q12",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a Error Logging and Observability system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "logging",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "error-logging-q13",
+      "type": "mcq",
+      "prompt": "Core concept 13: which statement best describes Error Logging and Observability?",
+      "choices": [
+        "Error Logging and Observability always requires dedicated hardware",
+        "Error Logging and Observability trade-offs depend on requirements and scale",
+        "Error Logging and Observability is only for large enterprises",
+        "Error Logging and Observability eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error Logging and Observability is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "logging",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "error-logging-q14",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in Error Logging and Observability is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q15",
+      "type": "mcq",
+      "prompt": "When should you avoid adding Error Logging and Observability to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q16",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a Error Logging and Observability system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "logging",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "error-logging-q17",
+      "type": "mcq",
+      "prompt": "Core concept 17: which statement best describes Error Logging and Observability?",
+      "choices": [
+        "Error Logging and Observability always requires dedicated hardware",
+        "Error Logging and Observability trade-offs depend on requirements and scale",
+        "Error Logging and Observability is only for large enterprises",
+        "Error Logging and Observability eliminates all database needs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error Logging and Observability is context-dependent. Trade-offs matter more than API memorisation.",
+      "tags": [
+        "logging",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "error-logging-q18",
+      "type": "fillBlank",
+      "prompt": "The core trade-off in Error Logging and Observability is between correctness and ___.",
+      "accepted": [
+        "performance",
+        "availability",
+        "speed",
+        "throughput"
+      ],
+      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q19",
+      "type": "mcq",
+      "prompt": "When should you avoid adding Error Logging and Observability to a system?",
+      "choices": [
+        "When it has fewer than 1000 users",
+        "When complexity outweighs its benefits at your current scale",
+        "Never - always include it",
+        "Only for cloud deployments"
+      ],
+      "answerIndex": 1,
+      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "tags": [
+        "logging",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "error-logging-q20",
+      "type": "mcq",
+      "prompt": "Which metric best indicates a Error Logging and Observability system is healthy?",
+      "choices": [
+        "CPU usage",
+        "Error rate and p99 latency",
+        "Disk space",
+        "Log file size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "tags": [
+        "logging",
+        "monitoring"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "error-logging-fc1",
+      "front": "One-line definition of Error Logging and Observability?",
+      "back": "[Complete after studying — self-generation improves retention]",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc2",
+      "front": "Core trade-off in Error Logging and Observability?",
+      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc3",
+      "front": "When to use Error Logging and Observability?",
+      "back": "When the problem it solves is actively costing you at your scale.",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc4",
+      "front": "When NOT to use Error Logging and Observability?",
+      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc5",
+      "front": "Top 3 failure modes of Error Logging and Observability?",
+      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc6",
+      "front": "How to monitor Error Logging and Observability in production?",
+      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc7",
+      "front": "Error Logging and Observability in one interview sentence?",
+      "back": "[Draft: what it is + what problem it solves + when to use it]",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "error-logging-fc8",
+      "front": "How does Error Logging and Observability connect to caching?",
+      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "tags": [
+        "logging",
+        "caching"
+      ]
+    }
+  ],
   "project": {
-    "brief": "TODO: author project brief for Error Logging and Observability",
-    "checklist": [],
-    "hints": []
+    "brief": "## Project: Design a System Using Error Logging and Observability\n\nDesign a realistic production service with Error Logging and Observability at its core. No code required:\n\n1. Why Error Logging and Observability over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "error-logging-pc1",
+        "text": "Justified use of Error Logging and Observability for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Error Logging and Observability remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
   }
 }

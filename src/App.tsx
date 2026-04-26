@@ -11,6 +11,7 @@ import { Project } from './routes/Project'
 import { Review } from './routes/Review'
 import { Flashcards } from './routes/Flashcards'
 import { Settings } from './routes/Settings'
+import { MindMapRoute } from './routes/MindMapRoute'
 
 const BREAK_INTERVAL_MS = 20 * 60 * 1000 // 20 minutes of VISIBLE use
 
@@ -119,6 +120,7 @@ function AppShell() {
         <Route path="/review" element={<Review />} />
         <Route path="/flashcards/:id" element={<Flashcards />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/mindmap" element={<MindMapRoute />} />
       </Routes>
     </>
   )

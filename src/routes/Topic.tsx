@@ -21,11 +21,20 @@ export function Topic() {
   const progress = getTopicProgress(topic.id)
   const hasGuide = !topic.guide.startsWith('<!--')
 
+  // Extract reading time from guide (looks for "~N min" in second line)
+  const readingTimeMatch = topic.guide.match(/~(\d+)\s*min/)
+  const readingTime = readingTimeMatch ? parseInt(readingTimeMatch[1]) : null
+
   return (
     <Layout title={topic.title} back="/">
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs bg-indigo-800 text-indigo-200 px-2 py-0.5 rounded-full font-semibold">Unit {topic.unit}</span>
+          {readingTime && (
+            <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+              📖 ~{readingTime} min read
+            </span>
+          )}
           {progress.status === 'learned' && (
             <span className="text-emerald-400 text-xs font-bold bg-emerald-900/40 px-2 py-1 rounded-full">✓ Learned</span>
           )}
