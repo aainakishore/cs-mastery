@@ -1,13 +1,13 @@
 name: Deploy to GitHub Pages
 
 env:
-  # Opt in now to avoid Node 20 action-runtime deprecation noise.
+  # Keep action runtime on Node 24 (deprecation warning fix)
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: # allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,7 +16,6 @@ permissions:
 
 concurrency:
   group: pages
-  # Do not cancel in-progress pages deploys (caused previous "higher priority request" cancellations).
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
 
       - name: Print environment
@@ -38,7 +37,12 @@ jobs:
           npm -v
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
 
       - name: Build
         run: npm run build
