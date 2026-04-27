@@ -1,0 +1,132 @@
+{
+  "id": "cloud-fundamentals",
+  "unit": 5,
+  "order": 25,
+  "title": "Cloud Fundamentals",
+  "summary": "Master Cloud Fundamentals: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "linux-essentials"
+  ],
+  "guide": "# Cloud Fundamentals\n\nCloud computing provides on-demand access to computing resources (servers, storage, databases, networking) over the internet, paying only for what you use.\n\n## Service Models\n\n```\nIaaS (Infrastructure as a Service):\n  You manage: OS, runtime, app, data\n  Provider manages: hardware, networking, virtualization\n  Examples: AWS EC2, Azure VMs, GCP Compute Engine\n  When: need full control, custom OS configuration\n\nPaaS (Platform as a Service):\n  You manage: app, data\n  Provider manages: OS, runtime, scaling, infrastructure\n  Examples: Heroku, AWS Elastic Beanstalk, Google App Engine\n  When: focus on code, not infrastructure\n\nSaaS (Software as a Service):\n  You manage: just usage/data\n  Provider manages: everything\n  Examples: Salesforce, Gmail, GitHub, Slack\n  When: consuming software\n\nFaaS (Function as a Service / Serverless):\n  You manage: function code only\n  Provider manages: servers, scaling, runtime\n  Examples: AWS Lambda, Cloudflare Workers, Vercel Functions\n  When: event-driven, unpredictable traffic, scale-to-zero\n```\n\n## Core Cloud Concepts\n\n```\nRegions and Availability Zones (AZs):\n  Region:  geographic area (us-east-1 = N. Virginia)\n  AZ:      independent data center within a region (us-east-1a, 1b, 1c)\n  Deploy across 2+ AZs for high availability (one AZ failure = still running)\n\nElasticity vs Scalability:\n  Scalability: can scale to meet demand\n  Elasticity: automatically scales up AND down based on demand\n\nCapEx vs OpEx:\n  On-premise: CapEx (large upfront investment, depreciated over 5 years)\n  Cloud: OpEx (pay-as-you-go, no upfront)\n```\n\n## AWS Core Services\n\n```\nCompute:     EC2 (VMs), Lambda (serverless), ECS/EKS (containers)\nStorage:     S3 (object store), EBS (block = VM disk), EFS (shared file system)\nDatabase:    RDS (relational), DynamoDB (NoSQL), ElastiCache (Redis)\nNetworking:  VPC, Route 53 (DNS), CloudFront (CDN), API Gateway\nSecurity:    IAM (identity), KMS (encryption keys), WAF\nMonitoring:  CloudWatch (metrics + logs), X-Ray (distributed tracing)\n```\n\n## AWS IAM Best Practices\n\n```\nLeast privilege: grant minimum permissions needed\n  Bad:  AdministratorAccess to all EC2 instances\n  Good: arn:aws:iam::*:policy/read-only-s3-production-bucket\n\nMFA: enable for root account always\nRoles: use IAM roles for services (not access keys)\nRotation: rotate access keys < 90 days\n```\n\n## Common Pitfalls\n- **Single AZ deployment** \u2014 AZ outages happen. Deploy across 2+ AZs.\n- **Hardcoded credentials** \u2014 never put AWS keys in code. Use IAM roles for EC2/Lambda, environment variables for local.\n- **Over-provisioning** \u2014 cloud advantage is pay-per-use. Use auto-scaling; don't provision for peak all the time.\n- **Public S3 buckets** \u2014 default-block all public access unless intentional. Many data breaches are from misconfigured S3.\n",
+  "questions": [
+    {
+      "id": "cloud-q1",
+      "type": "mcq",
+      "prompt": "IaaS vs PaaS vs FaaS \u2014 what does each abstract away from the developer?",
+      "choices": [
+        "Nothing different",
+        "IaaS: abstracts hardware/networking (dev manages OS+app). PaaS: abstracts OS+runtime (dev manages app+data only). FaaS: abstracts EVERYTHING except function code \u2014 autoscales, pay-per-invocation",
+        "All identical",
+        "FaaS requires containers"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each level removes more operational responsibility. IaaS: closest to data center ownership. PaaS: no OS patches. FaaS: zero servers to think about \u2014 write a function, everything else managed.",
+      "tags": [
+        "cloud",
+        "IaaS",
+        "PaaS",
+        "FaaS"
+      ]
+    },
+    {
+      "id": "cloud-q2",
+      "type": "mcq",
+      "prompt": "Why deploy across multiple Availability Zones?",
+      "choices": [
+        "Lower cost",
+        "An AZ is an independent data center \u2014 power, cooling, and network failures are isolated. Deploying across 2+ AZs means a single AZ failure doesn't cause an outage. AWS SLA requires multi-AZ for 99.99% uptime",
+        "AZs are same as regions",
+        "Single AZ is sufficient"
+      ],
+      "answerIndex": 1,
+      "explanation": "AZ failures happen (rare but real). AWS doesn't guarantee single-AZ uptime. Multi-AZ with a load balancer: traffic shifts to healthy AZs automatically. ELB, RDS Multi-AZ are native multi-AZ services.",
+      "tags": [
+        "cloud",
+        "availability",
+        "AZ"
+      ]
+    },
+    {
+      "id": "cloud-q3",
+      "type": "mcq",
+      "prompt": "AWS IAM: should an EC2 instance use an access key or an IAM role?",
+      "choices": [
+        "Access key is simpler",
+        "IAM role \u2014 attached to the EC2 instance, credentials are auto-rotated by AWS, never stored in code or environment. Access keys stored on instances get leaked in code or stolen from the instance",
+        "Both equivalent",
+        "Access keys are required for EC2"
+      ],
+      "answerIndex": 1,
+      "explanation": "IAM roles for EC2: app code calls AWS SDK \u2192 SDK automatically gets temporary credentials from the instance metadata service. No keys to store, rotate, or accidentally commit to GitHub.",
+      "tags": [
+        "cloud",
+        "IAM",
+        "security"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "cloud-fc1",
+      "front": "IaaS vs PaaS vs SaaS vs FaaS",
+      "back": "IaaS: manage OS up. PaaS: manage app+data. SaaS: just use it. FaaS: function code only, provider manages everything \u2014 scales to zero, per-invocation billing.",
+      "tags": [
+        "cloud"
+      ]
+    },
+    {
+      "id": "cloud-fc2",
+      "front": "Regions and AZs",
+      "back": "Region: geographic area. AZ: independent data center in region. Multi-AZ deployment: 2+ AZs in same region. Failure of 1 AZ \u2192 traffic shifts to others. Required for >99.9% availability.",
+      "tags": [
+        "cloud",
+        "HA"
+      ]
+    },
+    {
+      "id": "cloud-fc3",
+      "front": "IAM least privilege",
+      "back": "Grant minimum permissions. Use roles for services (not access keys). MFA on root. No wildcard * for sensitive operations. Audit with IAM Access Analyzer. Rotate keys < 90 days.",
+      "tags": [
+        "cloud",
+        "IAM",
+        "security"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Cloud Fundamentals\n\nDesign a realistic production service with Cloud Fundamentals at its core. No code required:\n\n1. Why Cloud Fundamentals over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "cloud-fundamentals-pc1",
+        "text": "Justified use of Cloud Fundamentals for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "cloud-fundamentals-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "cloud-fundamentals-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "cloud-fundamentals-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "cloud-fundamentals-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Cloud Fundamentals remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

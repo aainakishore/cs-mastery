@@ -1,9 +1,10 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState } from 'react'
 import { Download, Upload, Trash2, Bell, Volume2, VolumeX, Sun, Moon } from 'lucide-react'
 import { exportProgress, importProgress, resetProgress } from '../lib/sync'
 import { useProgress } from '../state/ProgressContext'
 import { Layout } from '../components/Layout'
-import { getSettings, setSettings } from '../lib/storage'
+import { getLastStudied, getSettings, setSettings } from '../lib/storage'
+import { getCurrentNudge } from '../lib/nudgeMessages'
 import type { AppSettings } from '../content/schema'
 
 export function Settings() {
@@ -12,11 +13,9 @@ export function Settings() {
   const learnedCount = topicProgress.filter((p) => p.status === 'learned').length
 
   const [settings, setLocalSettings] = useState<AppSettings>(() => getSettings())
-  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default')
-
-  useEffect(() => {
-    if ('Notification' in window) setNotifPermission(Notification.permission)
-  }, [])
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() =>
+    'Notification' in window ? Notification.permission : 'default',
+  )
 
   const updateSetting = <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
     const next = { ...settings, [key]: val }
@@ -41,6 +40,25 @@ export function Settings() {
         })
       }, 500)
     }
+  }
+
+  const getHoursSinceLastStudy = () => {
+    const lastStudied = getLastStudied()
+    if (!lastStudied) return 48
+    return Math.max(0, (Date.now() - new Date(lastStudied).getTime()) / (1000 * 60 * 60))
+  }
+
+  const testNudge = () => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    const nudge = getCurrentNudge(Math.max(getHoursSinceLastStudy(), 2)) ?? {
+      title: 'CS Mastery reminder 🧠',
+      body: 'Time for a quick study session.',
+    }
+    new Notification(nudge.title, {
+      body: nudge.body,
+      icon: '/icon-192.png',
+      tag: 'csm-nudge-test',
+    })
   }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,18 +158,29 @@ export function Settings() {
             <div className="flex items-center gap-3">
               <Bell size={18} className={notifPermission === 'granted' ? 'text-emerald-400' : 'text-slate-500'} />
               <div>
-                <div className="text-sm text-slate-200 font-medium">Review reminders</div>
+                <div className="text-sm text-slate-200 font-medium">Angry study reminders 😤</div>
                 <div className="text-xs text-slate-500">
-                  {notifPermission === 'granted' ? '✓ Enabled' : notifPermission === 'denied' ? 'Blocked by browser' : 'Tap to enable'}
+                  {notifPermission === 'granted'
+                    ? '✓ Active — reminders enabled'
+                    : notifPermission === 'denied'
+                    ? 'Blocked — enable in browser settings'
+                    : 'Gets angrier the longer you ignore it'}
                 </div>
               </div>
             </div>
-            {notifPermission !== 'granted' && notifPermission !== 'denied' && (
-              <button onClick={requestNotifications} className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold">
-                Enable
-              </button>
-            )}
-            {notifPermission === 'granted' && <span className="text-emerald-400 text-lg">✓</span>}
+            <div className="flex gap-2">
+              {notifPermission === 'granted' && (
+                <button onClick={testNudge} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded-lg">
+                  Test
+                </button>
+              )}
+              {notifPermission !== 'granted' && notifPermission !== 'denied' && (
+                <button onClick={requestNotifications} className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold">
+                  Enable
+                </button>
+              )}
+              {notifPermission === 'granted' && <span className="text-emerald-400 text-lg">✓</span>}
+            </div>
           </div>
         </div>
 

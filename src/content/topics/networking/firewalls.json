@@ -1,0 +1,98 @@
+{
+  "id": "firewalls",
+  "unit": 3,
+  "order": 10,
+  "title": "Firewalls",
+  "summary": "Stateful vs stateless firewalls, rules, DMZ, and network security fundamentals.",
+  "prereqs": [
+    "prompting-fundamentals"
+  ],
+  "guide": "# Firewalls\n\nA firewall is a **network security device** (hardware or software) that monitors and controls incoming/outgoing network traffic based on rules. It's the primary boundary between trusted internal networks and untrusted external networks.\n\n## Types of Firewalls\n\n```\nPacket Filter (L3/L4):\n  Inspects IP headers + TCP/UDP ports only\n  Fast, stateless, no session context\n  Rule: ALLOW TCP src any dst 10.0.0.1 port 443\n\nStateful Firewall (L3/L4):\n  Tracks TCP connection state (SYN, ESTABLISHED, FIN)\n  Allows ESTABLISHED traffic back automatically\n  Blocks packets that don't match known sessions\n\nApplication Layer (WAF/L7):\n  Inspects HTTP payload, headers, body\n  Detects SQL injection, XSS, DDoS patterns\n  More CPU-intensive\n\nNext-Gen Firewall (NGFW):\n  Combines stateful + application + IDS/IPS\n  Deep packet inspection, user identity awareness\n```\n\n## Firewall Rules \u2014 Direction Matters\n\n```\nIngress (inbound) rules:  control what enters the network\nEgress  (outbound) rules: control what leaves the network\n\nTypical DMZ rule set:\n  ALLOW inbound TCP to :80, :443    (web server)\n  ALLOW inbound TCP to :25          (mail server in DMZ)\n  DENY  inbound ALL others\n  ALLOW outbound ESTABLISHED (return traffic)\n  DENY  outbound from DMZ to internal network\n\nSecurity principle: DENY ALL by default, then ALLOW specific exceptions.\n```\n\n## Cloud Security Groups vs Firewalls\n\n```\nAWS Security Groups:\n  Stateful \u2014 return traffic automatically allowed\n  Rules are per-resource (EC2 instance)\n  No explicit DENY \u2014 only ALLOW rules (implicit deny)\n\nAWS NACLs (Network ACLs):\n  Stateless \u2014 must explicitly allow return traffic\n  Applied at subnet level\n  Numbered rules, evaluated in order\n  Support explicit DENY\n```\n\n## Common Pitfalls\n- **Too permissive rules** \u2014 `ALLOW ALL` is the enemy of security. Restrict to minimum required ports.\n- **Forgetting egress rules** \u2014 malware and data exfiltration go outbound. Control outbound traffic too.\n- **Rule ordering** \u2014 packet filter rules are evaluated top-to-bottom; first match wins. Put specific rules before broad ones.\n- **Forgetting ephemeral ports** \u2014 PASV FTP, response traffic, and load balancers need high port ranges (1024-65535) for return traffic in stateless firewalls.\n",
+  "questions": [
+    {
+      "id": "fw-q1",
+      "type": "mcq",
+      "prompt": "Stateful vs stateless firewall \u2014 key difference?",
+      "choices": [
+        "Stateful is faster",
+        "Stateful tracks TCP session state \u2014 it knows which connections are established so return traffic is automatically allowed without explicit rules. Stateless inspects each packet in isolation",
+        "Stateless is more secure",
+        "They are equivalent"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stateful firewalls model TCP state machines. An ESTABLISHED connection's return packets are allowed automatically. Stateless firewalls need explicit rules for both request AND response directions.",
+      "tags": [
+        "firewalls",
+        "stateful"
+      ]
+    },
+    {
+      "id": "fw-q2",
+      "type": "mcq",
+      "prompt": "AWS Security Groups vs Network ACLs \u2014 key difference?",
+      "choices": [
+        "Security Groups are per-region; NACLs per-VPC",
+        "Security Groups are stateful (return traffic automatic), applied per-resource. NACLs are stateless, applied per-subnet, support explicit DENY, numbered rules evaluated in order",
+        "Security Groups are cheaper",
+        "NACLs are deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "Important AWS detail: Security Groups are instance-level, stateful, no explicit deny. NACLs are subnet-level, stateless (must allow return traffic), support DENY rules.",
+      "tags": [
+        "firewalls",
+        "aws",
+        "security-groups"
+      ]
+    },
+    {
+      "id": "fw-q3",
+      "type": "mcq",
+      "prompt": "Security principle for firewall default policy?",
+      "choices": [
+        "ALLOW ALL by default, DENY exceptions",
+        "DENY ALL by default, ALLOW specific exceptions \u2014 least-privilege principle",
+        "Block only known bad IPs",
+        "Use AI to decide"
+      ],
+      "answerIndex": 1,
+      "explanation": "Deny-by-default is the security baseline. Only explicitly listed traffic is allowed. Any unrecognized traffic is blocked. This limits the blast radius of misconfiguration.",
+      "tags": [
+        "firewalls",
+        "security"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "fw-fc1",
+      "front": "Firewall types by layer",
+      "back": "L3/L4 packet filter: IP+port rules, fast, stateless. Stateful: tracks TCP connections, auto-allows return traffic. L7/WAF: HTTP-aware, detects injection attacks. NGFW: combines all + IDS/IPS.",
+      "tags": [
+        "firewalls"
+      ]
+    },
+    {
+      "id": "fw-fc2",
+      "front": "AWS Security Group vs NACL",
+      "back": "Security Group: stateful, per-instance, ALLOW only (implicit deny). NACL: stateless, per-subnet, numbered rules, supports explicit DENY. Use both for defence-in-depth.",
+      "tags": [
+        "firewalls",
+        "aws"
+      ]
+    },
+    {
+      "id": "fw-fc3",
+      "front": "Default deny principle",
+      "back": "DENY ALL by default, then ALLOW minimum required. Reduces attack surface \u2014 misconfiguration adds security rather than removing it.",
+      "tags": [
+        "firewalls",
+        "security"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "TODO: author project brief for Firewalls",
+    "checklist": [],
+    "hints": []
+  }
+}

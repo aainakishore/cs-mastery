@@ -1,0 +1,218 @@
+{
+  "id": "fin-fundamental-analysis",
+  "unit": 8,
+  "order": 52,
+  "title": "Fundamental Analysis",
+  "summary": "Valuing companies using financial statements, ratios like P/E, and business quality metrics.",
+  "prereqs": ["fin-stock-market-basics"],
+  "guide": "# Fundamental Analysis\n\nFundamental analysis (FA) asks: **Is this company worth buying at the current price?** It examines financial health, competitive position, management quality, and growth prospects.\n\n**Contrasted with TA:** TA asks 'when to buy'. FA asks 'what to buy'.\n\n## The Three Financial Statements\n\n### 1. Income Statement (P&L)\n- **Revenue** (top line): total money earned\n- **COGS**: cost of producing goods/services\n- **Gross Profit** = Revenue − COGS\n- **Operating Expenses**: salaries, R&D, marketing\n- **EBITDA**: Earnings Before Interest, Tax, Depreciation, Amortisation\n- **Net Profit** (bottom line): what's left after everything\n\n### 2. Balance Sheet\n- **Assets** = what the company owns (cash, inventory, property)\n- **Liabilities** = what it owes (loans, payables)\n- **Equity** = Assets − Liabilities (shareholders' stake)\n\n### 3. Cash Flow Statement\n- **Operating CF**: cash from core business\n- **Investing CF**: buying/selling assets\n- **Financing CF**: loans, dividends, share buybacks\n\n**Key insight:** Net profit can be manipulated via accounting; **free cash flow** (operating CF − capex) is harder to fake.\n\n## Key Financial Ratios\n\n### Valuation Ratios\n| Ratio | Formula | Meaning |\n|---|---|---|\n| **P/E** | Price / EPS | How much you pay per ₹1 of earnings |\n| **P/B** | Price / Book Value per share | Price vs accounting value |\n| **EV/EBITDA** | Enterprise Value / EBITDA | All-inclusive valuation multiple |\n| **P/S** | Price / Revenue per share | Useful for loss-making companies |\n\n**P/E analogy:** If P/E = 20, you're paying ₹20 for ₹1 of current earnings. High P/E = market expects high future growth. Low P/E = either cheap or trouble ahead.\n\n### Profitability Ratios\n- **ROE** (Return on Equity) = Net Profit / Shareholders' Equity → how efficiently equity is used\n- **ROCE** (Return on Capital Employed) → broader efficiency metric\n- **Net Margin** = Net Profit / Revenue → % of each rupee that becomes profit\n- **Gross Margin** = Gross Profit / Revenue → pricing power indicator\n\n### Debt Ratios\n- **Debt-to-Equity** = Total Debt / Equity → higher = more leveraged/risky\n- **Interest Coverage** = EBIT / Interest Expense → can the company service its debt?\n\n## Competitive Moat (Warren Buffett's Concept)\nA **moat** is a sustainable competitive advantage:\n- **Brand moat**: Apple, Coca-Cola — premium pricing power\n- **Network effect**: WhatsApp — more valuable with more users\n- **Cost moat**: Walmart, Amazon — scale advantages\n- **Switching cost moat**: Salesforce — painful to leave\n- **IP moat**: Patents, proprietary tech\n\n**Analogy:** Castle moat protects from invaders. Business moat protects from competitors eroding profits.\n\n## Real-World Scenarios\n**Scenario 1:** HDFC Bank has P/E of 22 vs competitor at 18. Is HDFC overpriced? Not necessarily — HDFC has higher ROE, better asset quality, and stronger brand. Premium is justified.\n\n**Scenario 2:** A startup shows ₹100cr revenue and ₹50cr net loss. P/E is meaningless. Use P/S or EV/Revenue instead. Check if losses are narrowing quarter over quarter.\n\n## Common Pitfalls\n1. **P/E in isolation** — meaningless without industry comparison and growth context.\n2. **Confusing revenue growth with profitability** — a company can grow sales while burning cash.\n3. **Ignoring debt** — low P/E + high debt = value trap.\n4. **Promoter pledging** — if founders pledge most shares as loan collateral, there's default risk.\n5. **Accounting shenanigans** — inflated revenue, understated expenses. Always check cash flow.\n\n## Mind Map\n- Fundamental Analysis\n  - Financial Statements: P&L, Balance Sheet, Cash Flow\n  - Ratios: P/E, P/B, ROE, Debt/Equity\n  - Qualitative: Moat, Management, Industry\n  - Valuation: DCF, Comparables, Asset-based\n  - Red flags: Debt, Pledging, Declining margins\n\n## Connections\n- **Stock Market Basics** — prices, EPS, dividends\n- **Macroeconomics** — interest rates affect P/E, cost of capital\n- **Options** — fundamental view informs direction for options strategies",
+  "questions": [
+    {
+      "id": "ffa-q1",
+      "type": "mcq",
+      "prompt": "P/E ratio is calculated as:",
+      "choices": ["Price × EPS", "Price / EPS", "EPS / Price", "Revenue / Price"],
+      "answerIndex": 1,
+      "explanation": "P/E = Stock Price / Earnings Per Share. It tells you how much you pay per unit of earnings.",
+      "tags": ["pe-ratio", "valuation"]
+    },
+    {
+      "id": "ffa-q2",
+      "type": "mcq",
+      "prompt": "A company's 'moat' refers to:",
+      "choices": ["Its physical asset base", "Its sustainable competitive advantage", "Its P/E ratio relative to peers", "Its cash balance"],
+      "answerIndex": 1,
+      "explanation": "Moat = durable competitive advantage that protects profits from erosion by competitors.",
+      "tags": ["moat", "qualitative"]
+    },
+    {
+      "id": "ffa-q3",
+      "type": "mcq",
+      "prompt": "Which financial statement shows cash generated from core business operations?",
+      "choices": ["Income Statement", "Balance Sheet", "Cash Flow Statement", "Notes to Accounts"],
+      "answerIndex": 2,
+      "explanation": "Operating Cash Flow is found in the Cash Flow Statement — it's harder to manipulate than net profit.",
+      "tags": ["financial-statements", "cash-flow"]
+    },
+    {
+      "id": "ffa-q4",
+      "type": "mcq",
+      "prompt": "ROE measures:",
+      "choices": ["How much debt the company has", "Efficiency of using shareholder equity to generate profit", "Revenue growth rate", "Dividend payout ratio"],
+      "answerIndex": 1,
+      "explanation": "ROE = Net Profit / Shareholders' Equity = how much profit per rupee of equity invested.",
+      "tags": ["roe", "profitability"]
+    },
+    {
+      "id": "ffa-q5",
+      "type": "mcq",
+      "prompt": "For a loss-making startup, the most appropriate valuation metric is:",
+      "choices": ["P/E ratio", "P/S or EV/Revenue ratio", "Dividend yield", "Debt/Equity ratio"],
+      "answerIndex": 1,
+      "explanation": "P/E doesn't work for loss-making companies. P/S (Price-to-Sales) or EV/Revenue are used instead.",
+      "tags": ["valuation", "pe-ratio"]
+    },
+    {
+      "id": "ffa-q6",
+      "type": "mcq",
+      "prompt": "Shareholders' Equity on the balance sheet equals:",
+      "choices": ["Revenue minus expenses", "Assets minus Liabilities", "Cash plus inventory", "Debt plus equity"],
+      "answerIndex": 1,
+      "explanation": "Equity = Assets − Liabilities. It represents the net worth belonging to shareholders.",
+      "tags": ["balance-sheet"]
+    },
+    {
+      "id": "ffa-q7",
+      "type": "multi",
+      "prompt": "Which of these represent types of competitive moats? (Select all that apply)",
+      "choices": ["Brand strength", "High Debt/Equity ratio", "Network effects", "Switching costs", "Low gross margin"],
+      "answerIndexes": [0, 2, 3],
+      "explanation": "Brand, network effects, and switching costs are moats. High D/E and low margins are actually weaknesses.",
+      "tags": ["moat"]
+    },
+    {
+      "id": "ffa-q8",
+      "type": "mcq",
+      "prompt": "Interest Coverage Ratio = EBIT / Interest Expense. A ratio of 1.2 means:",
+      "choices": ["Company is very safe to lend to", "Company barely covers interest — risk of default", "Company pays dividends", "Company has no debt"],
+      "answerIndex": 1,
+      "explanation": "ICR of 1.2 means EBIT covers interest only 1.2x — very thin margin. A good ICR is typically > 3.",
+      "tags": ["debt", "interest-coverage"]
+    },
+    {
+      "id": "ffa-q9",
+      "type": "mcq",
+      "prompt": "EBITDA stands for:",
+      "choices": ["Earnings Before Income Tax, Depreciation, Amortisation", "Earnings Before Interest, Tax, Depreciation, Amortisation", "Earnings Based on Internal Tax, Debt, Assets", "Earnings Before Investment, Tax, Dividends, Acquisitions"],
+      "answerIndex": 1,
+      "explanation": "EBITDA = Earnings Before Interest, Taxes, Depreciation & Amortisation. Proxy for operating cash generation.",
+      "tags": ["ebitda", "financial-statements"]
+    },
+    {
+      "id": "ffa-q10",
+      "type": "mcq",
+      "prompt": "A promoter pledging 90% of their shares as loan collateral is a red flag because:",
+      "choices": ["It indicates high dividends", "If the stock falls, lenders can force-sell shares causing a crash", "It means high ROE", "It lowers the P/E ratio"],
+      "answerIndex": 1,
+      "explanation": "If the pledged shares fall in value, lenders issue margin calls. Promoter may need to sell shares = massive supply, price crash.",
+      "tags": ["red-flags", "pledging"]
+    },
+    {
+      "id": "ffa-q11",
+      "type": "fillBlank",
+      "prompt": "Free Cash Flow = Operating Cash Flow minus capital ___.",
+      "accepted": ["expenditure", "capex", "expenditures"],
+      "explanation": "FCF = Operating CF − CapEx. It's the cash truly available to shareholders after maintaining/growing assets.",
+      "tags": ["cash-flow", "fcf"]
+    },
+    {
+      "id": "ffa-q12",
+      "type": "match",
+      "prompt": "Match the ratio to what it measures:",
+      "left": ["P/E", "ROE", "Debt/Equity", "Gross Margin"],
+      "right": ["Price paid per unit of earnings", "Profit efficiency of shareholder equity", "Financial leverage/risk", "Pricing power and production efficiency"],
+      "pairs": [[0,0],[1,1],[2,2],[3,3]],
+      "explanation": "Each ratio has a specific purpose in evaluating a different aspect of company health.",
+      "tags": ["ratios", "valuation"]
+    },
+    {
+      "id": "ffa-q13",
+      "type": "mcq",
+      "prompt": "A 'value trap' typically describes:",
+      "choices": ["A stock with very high P/E", "A stock that looks cheap on P/E but has underlying problems", "A bond paying high returns", "An ETF tracking a niche index"],
+      "answerIndex": 1,
+      "explanation": "Value traps look like bargains (low P/E) but have declining businesses, debt problems, or structural issues — the cheap looks deserved.",
+      "tags": ["valuation", "red-flags"]
+    },
+    {
+      "id": "ffa-q14",
+      "type": "mcq",
+      "prompt": "Net Profit Margin of 25% means:",
+      "choices": ["Revenue grew 25% year-on-year", "25 paisa of every revenue rupee becomes net profit", "Gross margin is 25%", "The company has 25% ROE"],
+      "answerIndex": 1,
+      "explanation": "Net Margin = Net Profit / Revenue × 100. 25% means 25 paise profit per ₹1 revenue.",
+      "tags": ["margins", "profitability"]
+    },
+    {
+      "id": "ffa-q15",
+      "type": "mcq",
+      "prompt": "EV/EBITDA is preferred over P/E when comparing companies because:",
+      "choices": ["It ignores cash flows", "It accounts for debt in the valuation, making cross-company comparison fairer", "It only works for banks", "It's simpler to calculate"],
+      "answerIndex": 1,
+      "explanation": "EV (Enterprise Value) includes debt. Two companies with same P/E but different debt levels look different on EV/EBITDA.",
+      "tags": ["ebitda", "valuation"]
+    },
+    {
+      "id": "ffa-q16",
+      "type": "mcq",
+      "prompt": "A company with strong brand pricing power (e.g., Apple) typically shows this in:",
+      "choices": ["Low Debt/Equity", "High Gross Margin", "Low P/E ratio", "High asset turnover"],
+      "answerIndex": 1,
+      "explanation": "Brand moat = ability to charge premium prices = high gross margins. Apple's gross margins are ~45%+ vs cheaper competitors.",
+      "tags": ["moat", "margins"]
+    },
+    {
+      "id": "ffa-q17",
+      "type": "mcq",
+      "prompt": "Operating Cash Flow is considered more reliable than Net Profit for analysis because:",
+      "choices": ["It excludes all expenses", "It's harder to manipulate via accounting adjustments", "It includes financing activities", "It uses accrual accounting"],
+      "answerIndex": 1,
+      "explanation": "Net profit can be gamed via timing of expense recognition, depreciation choices, etc. Cash doesn't lie.",
+      "tags": ["cash-flow", "red-flags"]
+    },
+    {
+      "id": "ffa-q18",
+      "type": "mcq",
+      "prompt": "P/B ratio compares market price to:",
+      "choices": ["Revenue per share", "Book value (net assets) per share", "Borrowings per share", "Brand value per share"],
+      "answerIndex": 1,
+      "explanation": "P/B = Price / Book Value per share. Book value = total assets − total liabilities. Banks are commonly valued on P/B.",
+      "tags": ["pb-ratio", "valuation"]
+    },
+    {
+      "id": "ffa-q19",
+      "type": "mcq",
+      "prompt": "Discounted Cash Flow (DCF) valuation is based on the concept that:",
+      "choices": ["Past earnings predict future prices", "A company's value equals the sum of its future cash flows in today's money", "The market is always right", "Book value determines intrinsic value"],
+      "answerIndex": 1,
+      "explanation": "DCF discounts all projected future free cash flows back to present value using a discount rate (cost of capital).",
+      "tags": ["dcf", "valuation"]
+    },
+    {
+      "id": "ffa-q20",
+      "type": "mcq",
+      "prompt": "A company shows rising revenue but falling operating cash flow. This likely indicates:",
+      "choices": ["Excellent growth", "Revenue being recognized but not yet collected (rising receivables)", "High dividend payout", "Lower debt"],
+      "answerIndex": 1,
+      "explanation": "Revenue recognition without cash collection = aggressive revenue accounting or collection problems — a red flag.",
+      "tags": ["red-flags", "cash-flow"]
+    }
+  ],
+  "flashcards": [
+    { "id": "ffa-fc1", "front": "P/E Ratio", "back": "Price / EPS. How much you pay per ₹1 of earnings. Compare within industry + consider growth rate (PEG = P/E / Growth%).", "tags": ["valuation"] },
+    { "id": "ffa-fc2", "front": "ROE", "back": "Return on Equity = Net Profit / Shareholders' Equity. Measures profit efficiency. >15% is generally good.", "tags": ["profitability"] },
+    { "id": "ffa-fc3", "front": "Moat types", "back": "Brand, Network effects, Switching costs, Cost advantage, IP/Patents. Makes competitive position durable.", "tags": ["moat"] },
+    { "id": "ffa-fc4", "front": "Free Cash Flow", "back": "Operating CF − CapEx. The 'real' cash available. Hard to fake. Good companies = FCF growing alongside profits.", "tags": ["cash-flow"] },
+    { "id": "ffa-fc5", "front": "Debt/Equity Ratio", "back": "Total Debt / Shareholders' Equity. Higher = more leveraged. >2 is generally risky; varies by industry.", "tags": ["debt"] },
+    { "id": "ffa-fc6", "front": "EBITDA", "back": "Earnings Before Interest, Tax, Depreciation, Amortisation. Operating profit proxy. Used for EV/EBITDA valuation.", "tags": ["ebitda"] },
+    { "id": "ffa-fc7", "front": "Value trap", "back": "Stock looks cheap (low P/E) but has underlying structural problems. 'Cheap for a reason'.", "tags": ["red-flags"] },
+    { "id": "ffa-fc8", "front": "Balance Sheet equation", "back": "Assets = Liabilities + Shareholders' Equity. Always balanced. Equity is the residual interest.", "tags": ["balance-sheet"] }
+  ],
+  "project": {
+    "brief": "**Company Valuation Exercise:** Imagine you're evaluating two IT companies:\n\n**Company A:** Revenue ₹500cr growing 20% YoY, Net Margin 18%, ROE 22%, Debt/Equity 0.1, P/E 35, strong brand, 80% revenue from Fortune 500 clients.\n\n**Company B:** Revenue ₹400cr growing 30% YoY, Net Margin 8%, ROE 12%, Debt/Equity 1.8, P/E 25, no clear moat, 60% revenue from 2 clients.\n\nDecide which company you'd invest in and at what price you'd consider buying. Build a qualitative + quantitative case for your decision.",
+    "checklist": [
+      { "id": "p1", "text": "Compare and contrast all given financial metrics systematically", "weight": 20 },
+      { "id": "p2", "text": "Identify the moat (or lack thereof) for each company", "weight": 15 },
+      { "id": "p3", "text": "Identify key risks in each company's profile", "weight": 20 },
+      { "id": "p4", "text": "Make a clear buy/avoid recommendation with justification", "weight": 20 },
+      { "id": "p5", "text": "Describe what valuation (P/E or EV/EBITDA) would make the chosen stock attractive", "weight": 15 },
+      { "id": "p6", "text": "List 2+ qualitative factors you'd want to research further", "weight": 10 }
+    ],
+    "hints": [
+      "Client concentration risk: if 60% revenue comes from 2 clients, losing one is catastrophic.",
+      "High growth + low margins might improve over time — or might not. Ask why margins are thin.",
+      "Debt/Equity of 1.8 for an IT services company (asset-light) is a yellow flag."
+    ]
+  }
+}
+

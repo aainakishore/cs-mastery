@@ -1,0 +1,127 @@
+{
+  "id": "qps-capacity",
+  "unit": 3,
+  "order": 17,
+  "title": "QPS and Capacity Planning",
+  "summary": "Master QPS and Capacity Planning: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "load-balancing"
+  ],
+  "guide": "# QPS, Capacity Planning & Back-of-Envelope Estimation\n\n**Capacity planning** answers: how many servers, how much storage, how much bandwidth do we need? Back-of-envelope estimation is the interview skill of getting \"good enough\" answers quickly.\n\n## Key Numbers to Memorize\n\n```python\n# Latency hierarchy (rough order of magnitude)\nL1 cache:          0.5   ns\nL2 cache:          7     ns\nRAM:               100   ns\nSSD random read:   100   \u00b5s (0.1 ms)\nHDD random read:   10    ms\nNetwork (local):   0.5   ms\nNetwork (cross-DC): 20   ms\nNetwork (cross-continent): 150 ms\n\n# Throughput (rough)\nSSD:               500   MB/s read\nNetwork (1 Gbps):  125   MB/s\n1 char = 1 byte, 1 int = 4 bytes, 1 UUID = 16 bytes\n```\n\n## QPS Estimation Example \u2014 Twitter-like Feed\n\n```\nProblem: Design a Twitter-like system.\n  - 100M daily active users (DAU)\n  - User reads feed 5 times/day\n  - User sends 2 tweets/day\n\nRead QPS:\n  100M users \u00d7 5 reads/day \u00f7 86,400 sec/day\n  = 500M / 86,400 \u2248 5,787 QPS\n  Peak (10x): ~57,000 QPS\n\nWrite QPS:\n  100M \u00d7 2 tweets/day \u00f7 86,400\n  \u2248 2,315 QPS\n\nStorage (5 years):\n  2,315 QPS \u00d7 150 bytes/tweet \u00d7 86,400 sec/day \u00d7 365 days \u00d7 5 years\n  = 2,315 \u00d7 150 \u00d7 31.5M seconds \u2248 11 TB\n\nBandwidth (reads):\n  5,787 QPS \u00d7 500 bytes (tweet data) = ~2.9 MB/s\n  Media (add 10KB/request for 5% with media): huge \u2192 use CDN\n```\n\n## Single Server Estimates\n\n```\nA typical server can handle approximately:\n  CPU-bound task:    ~100-1,000 RPS\n  I/O-bound (reads): 10,000-100,000 RPS (if cached)\n  DB queries:        ~5,000 QPS (index, SSD)\n  Redis operations:  100,000+ ops/sec\n\nNumber of servers needed:\n  Peak QPS / server QPS = servers\n  57,000 reads / 10,000 RPS = 6 app servers\n  But add redundancy (n+1) and headroom (\u00d72) = 12-15 servers\n```\n\n## The Interview Framework\n\n```\n1. Clarify assumptions:\n   - Scale: DAU, messages/day, read:write ratio\n   - Data size: media, metadata only?\n   - SLA: p99 latency, availability?\n\n2. Estimate:\n   - QPS = events/day \u00f7 86,400, multiply 10x for peak\n   - Storage = QPS \u00d7 size \u00d7 seconds \u00d7 retention\n   - Bandwidth = QPS \u00d7 response size\n\n3. Derive architecture:\n   - High read QPS \u2192 caching layer (Redis)\n   - High write QPS \u2192 queue (Kafka) + async workers\n   - Large storage \u2192 blob storage (S3) + CDN\n   - Many servers \u2192 load balancer\n```\n\n## Common Pitfalls\n- **Forget peak vs average** \u2014 always estimate peak (10x daily average for social media, 3-5x for enterprise).\n- **Miss caching impact** \u2014 cached reads are 100-1000x cheaper than DB reads. Assume most reads are cached.\n- **Not accounting for replication** \u2014 3 replicas = 3x storage.\n",
+  "questions": [
+    {
+      "id": "qps-q1",
+      "type": "mcq",
+      "prompt": "100M DAU, 10 actions/user/day. Average QPS?",
+      "choices": [
+        "~11,600",
+        "~1,157",
+        "~100,000",
+        "~86,400"
+      ],
+      "answerIndex": 0,
+      "explanation": "100M \u00d7 10 / 86,400 = 1B / 86,400 \u2248 11,574 QPS. Memorize: 1M events/day \u2248 12 QPS. 1B/day \u2248 12,000 QPS.",
+      "tags": [
+        "capacity",
+        "QPS"
+      ]
+    },
+    {
+      "id": "qps-q2",
+      "type": "mcq",
+      "prompt": "Why multiply average QPS by 10 for peak capacity planning?",
+      "choices": [
+        "Industry standard",
+        "Traffic is bursty \u2014 peak occurs during business hours, events, trending topics. Planning for average means system is overwhelmed during peaks. Industry rule of thumb: provision for 10\u00d7 average",
+        "Peak is always lower",
+        "10\u00d7 is the minimum multiplier"
+      ],
+      "answerIndex": 1,
+      "explanation": "Average QPS at 2 AM is 100. Peak at noon on launch day: 1000. Design for peak \u2014 unhappy users during 2 AM outage cost less than unhappy users during the Super Bowl ad.",
+      "tags": [
+        "capacity",
+        "peak"
+      ]
+    },
+    {
+      "id": "qps-q3",
+      "type": "mcq",
+      "prompt": "Storage for 5B events/day, 100 bytes each, kept 5 years?",
+      "choices": [
+        "~83 TB",
+        "~2 TB",
+        "~830 GB",
+        "~83 PB"
+      ],
+      "answerIndex": 0,
+      "explanation": "5B \u00d7 100 bytes = 500 GB/day. 500 GB/day \u00d7 365 \u00d7 5 = ~913 TB \u2248 ~1 PB. (With 3 replicas = ~3 PB raw). Close to 83 TB per quarter.",
+      "tags": [
+        "capacity",
+        "storage"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "qps-fc1",
+      "front": "Quick QPS formula",
+      "back": "QPS = events_per_day / 86,400. Shortcut: 1M/day \u2248 12 QPS. 10M/day \u2248 120. 1B/day \u2248 11,600. Peak = average \u00d7 10.",
+      "tags": [
+        "capacity",
+        "QPS"
+      ]
+    },
+    {
+      "id": "qps-fc2",
+      "front": "Key latency numbers",
+      "back": "L1: 0.5ns. RAM: 100ns. SSD: 0.1ms. HDD: 10ms. Local network: 0.5ms. Cross-DC: 20ms. Cross-continent: 150ms. Memorize for system design.",
+      "tags": [
+        "capacity",
+        "latency"
+      ]
+    },
+    {
+      "id": "qps-fc3",
+      "front": "Estimation process",
+      "back": "1. Clarify: DAU, read:write, data size. 2. QPS: events/day \u00f7 86,400 \u00d7 10 for peak. 3. Storage: QPS \u00d7 size \u00d7 retention. 4. Derive: high read \u2192 cache, high write \u2192 queue, big data \u2192 object store.",
+      "tags": [
+        "capacity"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using QPS and Capacity Planning\n\nDesign a realistic production service with QPS and Capacity Planning at its core. No code required:\n\n1. Why QPS and Capacity Planning over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "qps-capacity-pc1",
+        "text": "Justified use of QPS and Capacity Planning for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "qps-capacity-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "qps-capacity-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "qps-capacity-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "qps-capacity-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does QPS and Capacity Planning remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

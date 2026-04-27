@@ -1,0 +1,469 @@
+{
+  "id": "llms",
+  "unit": 2,
+  "order": 8,
+  "title": "LLMs - How They Work",
+  "summary": "Master LLMs - How They Work: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "transformers"
+  ],
+  "guide": "# Large Language Models (LLMs)\n\nLLMs are neural networks trained on vast text corpora to predict the next token in a sequence. This simple objective produces emergent capabilities: reasoning, coding, translation, summarization.\n\n## How LLMs Work (High Level)\n\n```\nTraining:\n  Corpus (internet, books, code) → Tokenize → Train transformer\n  to predict next token.\n  GPT-4: ~1.8T tokens, ~1.7T parameters (est.)\n\nInference:\n  Tokens in → transformer attention layers → probability distribution → sample next token\n  Repeat until stop token or max length\n\nTokens ≈ word pieces:\n  \"Hello world\"  → [\"Hello\", \" world\"]\n  \"unhappiness\"  → [\"un\", \"happin\", \"ess\"]\n  1 token ≈ 0.75 words   |   4 tokens ≈ 1KB\n```\n\n## Key Concepts\n\n```\nTemperature:\n  0.0: deterministic (always highest probability token) — facts, code\n  0.7: balanced (default) — general use\n  1.0+: creative, random — brainstorming\n\nContext window:\n  Maximum tokens in (prompt) + out (completion) combined.\n  GPT-4: 128K tokens. Claude 3: 200K. Long context → higher cost + slower.\n\nPrompt:\n  System:  \"You are a helpful coding assistant.\"\n  User:    \"Explain recursion.\"\n  Assistant: [completion]\n\nSystem prompt sets behavior; persists across conversation turns.\n```\n\n## Token Counting and Cost\n\n```\nCost = tokens_in × price_in + tokens_out × price_out\n\nExample (GPT-4o as of 2024):\n  Input:  $2.50 per million tokens\n  Output: $10.00 per million tokens\n\n1M tokens ≈ 750,000 words ≈ 1,500 pages\nA typical chat message: ~100-500 tokens\nA full document summarization: ~5,000-20,000 tokens\n```\n\n## Common Architectures Using LLMs\n\n```\n1. Direct query:       User → LLM → Response\n2. RAG:                User → LLM + (retrieved docs) → Response\n3. Function calling:   LLM decides to call functions,\n                       returns JSON for app to execute\n4. Agents:             LLM + tools in a loop (ReAct pattern)\n5. Fine-tuned:         Base model + domain training data\n```\n\n## Function Calling\n\n```javascript\n// Tell LLM about available functions\nconst tools = [{\n  type: \"function\",\n  function: {\n    name: \"get_weather\",\n    description: \"Get current weather for a city\",\n    parameters: {\n      type: \"object\",\n      properties: {\n        city: { type: \"string\", description: \"City name\" }\n      },\n      required: [\"city\"]\n    }\n  }\n}];\n\nconst response = await openai.chat.completions.create({\n  model: \"gpt-4o\",\n  messages: [{ role: \"user\", content: \"What's the weather in London?\" }],\n  tools\n});\n\n// LLM decides to call get_weather with city=\"London\"\n// App executes: getWeather(\"London\") → returns actual weather data\n// App sends result back to LLM for final answer\n```\n\n## Common Pitfalls\n- **Hallucinations** — LLMs confidently state incorrect facts. Never trust LLM for factual queries without retrieval grounding (RAG).\n- **Prompt injection** — user input in prompt can override system instructions. Sanitize user input that goes into prompts.\n- **Ignoring cost at scale** — 10,000 users × 1,000 tokens/conversation = $25/day at GPT-4o rates. Model right-sizing matters.\n- **Non-determinism in production** — same input, slightly different output at temperature > 0. For deterministic outputs (code generation), use temperature=0.\n\n\n## Tokenization\n\n```\n\"Hello world!\" → [15496, 995, 0]  (GPT-2 BPE tokens)\n\nWhy it matters:\n  1 token ≈ 0.75 English words\n  Context window = token limit (not word limit)\n  Code/numbers tokenize inefficiently — \"1234567890\" = 10 tokens\n  Non-English languages use more tokens per word\n  Cost = input tokens + output tokens × price_per_token\n```\n\n## Attention Mechanism (simplified)\n\n```\nInput: \"The cat sat on the mat\"\nFor each word, attention computes:\n  Q (Query): what am I looking for?\n  K (Key):   what does each word offer?\n  V (Value): what information to pass forward?\n\nAttention(Q,K,V) = softmax(QK^T / √d_k) × V\n\nMulti-head: run N independent attention heads, concatenate\n→ Model attends to different positions for different reasons\n```\n\n## Sampling Parameters\n\n```\ntemperature=0:   deterministic (always top token) — use for code, structured output\ntemperature=1:   sample proportional to probability — creative writing\ntemperature>1:   less probable tokens amplified — unpredictable\n\ntop_p=0.9:  sample from the top-90% probability mass (nucleus sampling)\ntop_k=50:   sample from top-50 most probable tokens\n\nmax_tokens: output budget — set appropriately per use case\n```\n\n## Model Size Trade-offs\n\n```\n7B params:   laptop / single GPU. Fast. Good for classification, extraction.\n13B–30B:     2-4× A100. Better reasoning. Production on GPU instances.\n70B:         4-8× A100. Near-frontier for many tasks.\nGPT-4 class: ~1.8T params (rumoured MoE). API only. Best for complex reasoning.\n\nBigger ≠ always better — fine-tuned 7B often beats GPT-4 on narrow tasks.\n```\n\n## References & Further Learning\n- 📄 **Attention Is All You Need** — Vaswani et al. 2017 (arxiv.org/abs/1706.03762) — original transformer\n- 📄 **GPT-3 paper**: \"Language Models are Few-Shot Learners\" (arxiv.org/abs/2005.14165)\n- 🎥 **Andrej Karpathy** \"The spelled-out intro to neural networks and backpropagation\" (YouTube)\n- 🎥 **3Blue1Brown** \"But what is a neural network?\" series (YouTube)\n- 🎥 **Andrej Karpathy** \"Let's build GPT from scratch\" — ~2hr deep dive (YouTube)\n- 📖 HuggingFace NLP Course — huggingface.co/learn/nlp-course\n- 🖼️ **Diagram**: \"The Illustrated Transformer\" by Jay Alammar — jalammar.github.io/illustrated-transformer (must-read)\n- 🖼️ **Tokenizer visualizer**: platform.openai.com/tokenizer\n",
+  "questions": [
+    {
+      "id": "llm-q1",
+      "type": "mcq",
+      "prompt": "LLM temperature = 0 vs temperature = 1 — when to use each?",
+      "choices": [
+        "Same output",
+        "Temperature 0: deterministic, highest-probability token always chosen — use for factual, code, structured output. Temperature 1: more random, creative — use for brainstorming, creative writing",
+        "Higher temperature = faster",
+        "Temperature affects token count"
+      ],
+      "answerIndex": 1,
+      "explanation": "Temperature scales the probability distribution before sampling. Low temp → conservative (always picks most likely). High temp → diverse/creative (samples less likely tokens sometimes). For reliable code generation, use 0.",
+      "tags": [
+        "LLM",
+        "temperature"
+      ]
+    },
+    {
+      "id": "llm-q2",
+      "type": "mcq",
+      "prompt": "LLM function calling vs agents: key difference?",
+      "choices": [
+        "Same thing",
+        "Function calling: LLM decides which function to call and returns structured JSON (one turn). Agent: LLM iterates over multiple tool calls and observations (multi-turn reasoning loop)",
+        "Only OpenAI supports function calling",
+        "Agents don't use function calling"
+      ],
+      "answerIndex": 1,
+      "explanation": "Function calling: single LLM turn decides to call a function and returns the call spec. Agent: loop of function call → observe result → decide next action → repeat. Agents use function calling as a building block.",
+      "tags": [
+        "LLM",
+        "function-calling",
+        "agents"
+      ]
+    },
+    {
+      "id": "llm-q3",
+      "type": "mcq",
+      "prompt": "Why is RAG (Retrieval Augmented Generation) used instead of fine-tuning for factual Q&A?",
+      "choices": [
+        "RAG is newer",
+        "RAG provides facts at query time — current, transparent, updatable without retraining. Fine-tuning bakes knowledge into weights — stale, opaque, expensive to update. RAG = correct, cheap, up-to-date",
+        "Fine-tuning doesn't work for Q&A",
+        "RAG is always cheaper"
+      ],
+      "answerIndex": 1,
+      "explanation": "Facts change. Fine-tuning on Jan 2023 data won't know Jan 2024 events. RAG retrieves fresh documents and adds them to the prompt. Updated documents = updated answers without retraining.",
+      "tags": [
+        "LLM",
+        "RAG",
+        "fine-tuning"
+      ]
+    },
+    {
+      "id": "llm-q4",
+      "type": "mcq",
+      "prompt": "Why does temperature=0 produce deterministic outputs?",
+      "choices": [
+        "The model picks random tokens",
+        "At temperature=0, argmax is always taken — the single highest-probability token is always selected",
+        "Temperature disables sampling",
+        "Output is cached"
+      ],
+      "answerIndex": 1,
+      "explanation": "Temperature scales the logits before softmax. At 0, all probability mass collapses to the max-logit token. Always deterministic.",
+      "tags": [
+        "LLM",
+        "sampling"
+      ]
+    },
+    {
+      "id": "llm-q5",
+      "type": "mcq",
+      "prompt": "1 token ≈ how many English words?",
+      "choices": [
+        "1 word exactly",
+        "0.75 words — some words are 2-3 tokens",
+        "3 words",
+        "1 character"
+      ],
+      "answerIndex": 1,
+      "explanation": "English averages ~0.75 words/token with BPE. Short common words = 1 token. Rare/long words = 2+ tokens. Code symbols often 1 token each.",
+      "tags": [
+        "LLM",
+        "tokenization"
+      ]
+    },
+    {
+      "id": "llm-q6",
+      "type": "mcq",
+      "prompt": "Flash Attention (Dao et al.) primarily improves:",
+      "choices": [
+        "Model accuracy",
+        "Memory efficiency of attention — avoids materializing the full N×N attention matrix using tiled IO-aware computation",
+        "Tokenization speed",
+        "Training data quality"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standard attention requires O(N²) memory for the attention matrix. Flash Attention computes it in tiles, keeping data in fast SRAM — identical math result, ~3× faster.",
+      "tags": [
+        "LLM",
+        "attention"
+      ]
+    },
+    {
+      "id": "llm-q7",
+      "type": "mcq",
+      "prompt": "What is perplexity in language models?",
+      "choices": [
+        "Error rate",
+        "Measure of how surprised the model is by test text — lower = model fits data better. PP = exp(average negative log-likelihood)",
+        "Training loss at epoch 1",
+        "Hallucination rate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Perplexity = exp(H) where H = cross-entropy on test data. Lower perplexity = model assigns higher probability to actual text. Used to compare base model quality.",
+      "tags": [
+        "LLM",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "llm-q8",
+      "type": "mcq",
+      "prompt": "Mixture of Experts (MoE) in LLMs works by:",
+      "choices": [
+        "Combining multiple independent models via ensemble",
+        "Activating only a subset of model parameters (experts) per token — dense parameter count with sparse compute",
+        "Using multiple GPUs",
+        "Expert human review"
+      ],
+      "answerIndex": 1,
+      "explanation": "MoE: each forward pass activates k of N experts (FFN layers). Total params: large. Active compute: small. GPT-4 and Mixtral use this for scale with efficiency.",
+      "tags": [
+        "LLM",
+        "architecture"
+      ]
+    },
+    {
+      "id": "llm-q9",
+      "type": "mcq",
+      "prompt": "In-context learning (few-shot) works without:",
+      "choices": [
+        "A prompt",
+        "Any gradient updates — examples in the prompt shift model behavior at inference time only",
+        "A system prompt",
+        "A tokenizer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Few-shot: include (input, output) examples in the prompt. The model pattern-matches and follows the format. No weights are updated — pure inference.",
+      "tags": [
+        "LLM",
+        "prompting"
+      ]
+    },
+    {
+      "id": "llm-q10",
+      "type": "mcq",
+      "prompt": "The KV cache in transformer inference serves to:",
+      "choices": [
+        "Cache HTTP responses",
+        "Store precomputed Key/Value matrices for past tokens — avoids recomputing them at each new token generation step",
+        "Compress the model",
+        "Store embeddings on disk"
+      ],
+      "answerIndex": 1,
+      "explanation": "During autoregressive generation, past token K/V don't change. KV cache stores them, making each new token O(1) per past token instead of O(N). Critical for long contexts.",
+      "tags": [
+        "LLM",
+        "inference"
+      ]
+    },
+    {
+      "id": "llm-q11",
+      "type": "mcq",
+      "prompt": "Why does output at temperature > 1.0 become incoherent?",
+      "choices": [
+        "Model overheats",
+        "Logits are divided by temperature before softmax — high temperature flattens distribution, making low-probability (wrong) tokens nearly as likely as correct ones",
+        "High temperature truncates output",
+        "API rate limits",
+        ""
+      ],
+      "answerIndex": 1,
+      "explanation": "Temperature > 1 makes the probability distribution more uniform. Nonsensical tokens get artificially high probability, resulting in random-seeming text.",
+      "tags": [
+        "LLM",
+        "sampling"
+      ]
+    },
+    {
+      "id": "llm-q12",
+      "type": "mcq",
+      "prompt": "RLHF-trained models (ChatGPT-style) vs base models differ in:",
+      "choices": [
+        "Parameter count",
+        "Helpfulness and safety — RLHF aligns responses to human preferences. Base models predict next tokens from pretraining distribution (including junk)",
+        "Tokenizer",
+        "Context window"
+      ],
+      "answerIndex": 1,
+      "explanation": "Base models are raw next-token predictors. RLHF fine-tunes them to follow instructions, refuse harmful requests, maintain format — the 'assistant' behavior.",
+      "tags": [
+        "LLM",
+        "RLHF"
+      ]
+    },
+    {
+      "id": "llm-q13",
+      "type": "mcq",
+      "prompt": "What causes hallucination in LLMs?",
+      "choices": [
+        "Insufficient GPU memory",
+        "The model generates plausible-sounding text by pattern matching — it doesn't verify facts, has no world model, and optimizes fluency over accuracy",
+        "Tokenization errors",
+        "Temperature=0"
+      ],
+      "answerIndex": 1,
+      "explanation": "LLMs predict probable token sequences. Factual correctness is not directly optimized. The model will confidently complete a sentence pattern even if the facts are wrong.",
+      "tags": [
+        "LLM",
+        "hallucination"
+      ]
+    },
+    {
+      "id": "llm-q14",
+      "type": "mcq",
+      "prompt": "top_p=0.9 in nucleus sampling means:",
+      "choices": [
+        "Use top 90 tokens",
+        "Sample from smallest token set whose cumulative probability ≥ 0.9 — dynamically adaptive, ignores long tail of improbable tokens",
+        "90% of max tokens",
+        "Use 90% of context"
+      ],
+      "answerIndex": 1,
+      "explanation": "Nucleus sampling: sort tokens by probability, take minimally sufficient set summing to p. Avoids arbitrarily capping at k tokens (too many/few depending on distribution).",
+      "tags": [
+        "LLM",
+        "sampling"
+      ]
+    },
+    {
+      "id": "llm-q15",
+      "type": "mcq",
+      "prompt": "What is parameter-efficient fine-tuning (PEFT)?",
+      "choices": [
+        "Training only the last layer",
+        "Family of methods (LoRA, prefix tuning, adapters) that fine-tune < 1% of params while achieving competitive performance to full fine-tune",
+        "Reducing model size before training",
+        "Using FP8 training"
+      ],
+      "answerIndex": 1,
+      "explanation": "PEFT methods avoid updating all billions of params. LoRA (most popular) adds rank-decomposed matrices. Prefix tuning adds trainable tokens. Result: fine-tuning on consumer hardware.",
+      "tags": [
+        "LLM",
+        "PEFT"
+      ]
+    },
+    {
+      "id": "llm-q16",
+      "type": "multi",
+      "prompt": "Which contribute to LLM inference cost?",
+      "choices": [
+        "Input token count",
+        "Output token count",
+        "Model parameter count",
+        "Ambient temperature of the data center"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Cost = (input tokens + output tokens) × per-token price. Per-token price depends on model size. Output is typically 2-3× input price (autoregressive = slower).",
+      "tags": [
+        "LLM",
+        "cost"
+      ]
+    },
+    {
+      "id": "llm-q17",
+      "type": "mcq",
+      "prompt": "Context window of 128K tokens means:",
+      "choices": [
+        "Model trained on 128K documents",
+        "Model can process up to 128K tokens of input + output combined in one call",
+        "128K parameters",
+        "Model is 128× better"
+      ],
+      "answerIndex": 1,
+      "explanation": "Context window = total token budget per call. Input + output must fit. Longer context = more expensive (quadratic attention cost unless FlashAttention/alternatives used).",
+      "tags": [
+        "LLM",
+        "context"
+      ]
+    },
+    {
+      "id": "llm-q18",
+      "type": "mcq",
+      "prompt": "Why do LLMs struggle with arithmetic despite being 'smart'?",
+      "choices": [
+        "They don't know math",
+        "LLMs tokenize digits and do pattern-matching, not symbolic computation — '2+2' matches '4' by frequency, not understanding. Fails on novel multi-digit arithmetic.",
+        "Mathematical training was skipped",
+        "Context window too small"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arithmetic requires exact symbolic manipulation. LLMs approximate via training patterns. Use code interpreter tools for reliable arithmetic in production.",
+      "tags": [
+        "LLM",
+        "limitations"
+      ]
+    },
+    {
+      "id": "llm-q19",
+      "type": "mcq",
+      "prompt": "What is speculative decoding?",
+      "choices": [
+        "Model guesses the question",
+        "A smaller draft model generates N tokens, the large model verifies them in parallel — same quality, ~3× faster for long outputs",
+        "Training technique",
+        "Prompt optimization"
+      ],
+      "answerIndex": 1,
+      "explanation": "Speculative decoding: draft model (fast, small) proposes tokens; large model verifies/accepts in a single forward pass. Dramatically reduces latency for generation-heavy workloads.",
+      "tags": [
+        "LLM",
+        "inference"
+      ]
+    },
+    {
+      "id": "llm-q20",
+      "type": "mcq",
+      "prompt": "Grouped Query Attention (GQA) improves inference by:",
+      "choices": [
+        "Fewer model parameters",
+        "Multiple query heads share fewer K/V heads — reduces KV cache memory and bandwidth significantly without accuracy loss",
+        "Better tokenization",
+        "Faster training"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standard MHA: N query + N key + N value heads. GQA: N query heads, G groups of K/V (G<N). Llama 2/3 uses GQA. Reduces KV cache size proportional to G/N.",
+      "tags": [
+        "LLM",
+        "architecture"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "llm-fc1",
+      "front": "Temperature in LLMs",
+      "back": "Controls randomness. 0 = deterministic (code, facts). 0.7 = balanced (default). 1.0+ = creative (writing, brainstorming). Scales the softmax distribution before token sampling.",
+      "tags": [
+        "LLM"
+      ]
+    },
+    {
+      "id": "llm-fc2",
+      "front": "Tokens and cost",
+      "back": "~4 chars = 1 token. 1 page ≈ 700 tokens. Cost = (input tokens × rate) + (output tokens × rate). Output costs more. Long context windows → higher cost. Right-size the model for the task.",
+      "tags": [
+        "LLM",
+        "tokens",
+        "cost"
+      ]
+    },
+    {
+      "id": "llm-fc3",
+      "front": "Function calling",
+      "back": "Describe functions to LLM. LLM decides if/which to call + returns JSON args. App executes function, returns result to LLM for final answer. Foundation of agents and tool use.",
+      "tags": [
+        "LLM",
+        "function-calling"
+      ]
+    },
+    {
+      "id": "llm-fc4",
+      "front": "KV cache",
+      "back": "Stores precomputed Key/Value tensors for past tokens during autoregressive generation. Avoids redundant computation. Memory = batch × sequence_len × heads × head_dim × layers.",
+      "tags": [
+        "LLM",
+        "inference"
+      ]
+    },
+    {
+      "id": "llm-fc5",
+      "front": "Temperature parameter",
+      "back": "temperature=0: deterministic (argmax). =1: proportional sampling. >1: flattens distribution (incoherent). <1: sharpens (conservative). Set 0 for code/structured output, ~0.7 for creative writing.",
+      "tags": [
+        "LLM",
+        "sampling"
+      ]
+    },
+    {
+      "id": "llm-fc6",
+      "front": "Perplexity",
+      "back": "PP = exp(average -log P(token)). Lower = better fit to test distribution. Comparable only across same tokenizer. Used for base model benchmarking, not chat quality.",
+      "tags": [
+        "LLM",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "llm-fc7",
+      "front": "Mixture of Experts (MoE)",
+      "back": "N expert FFN layers, route each token to top-k. Total params large (scale), active compute small (efficiency). GPT-4, Mixtral-8x7B use MoE. Challenge: expert load balancing.",
+      "tags": [
+        "LLM",
+        "architecture"
+      ]
+    },
+    {
+      "id": "llm-fc8",
+      "front": "Speculative decoding",
+      "back": "Small draft model proposes N tokens → large model verifies all in 1 forward pass. Accepts matching prefix, rejects first mismatch. Same output distribution, ~3× speedup.",
+      "tags": [
+        "LLM",
+        "inference"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using LLMs - How They Work\n\nDesign a realistic production service with LLMs - How They Work at its core. No code required:\n\n1. Why LLMs - How They Work over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "llms-pc1",
+        "text": "Justified use of LLMs - How They Work for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "llms-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "llms-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "llms-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "llms-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does LLMs - How They Work remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

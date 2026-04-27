@@ -1,0 +1,435 @@
+{
+  "id": "dsa-java-stacks",
+  "unit": 9,
+  "order": 63,
+  "title": "Stacks in Java",
+  "summary": "Stack using arrays/LinkedList/ArrayDeque, monotonic stack, and expression parsing.",
+  "prereqs": [
+    "dsa-java-arrays",
+    "dsa-java-linked-lists"
+  ],
+  "guide": "# Stacks in Java\n\nA stack is a **LIFO** (Last In, First Out) container. Imagine a stack of plates: you can only add or remove from the **top**. The plate you placed last is always the first one you pick up.\n\n```\n     push(C)        pop()\n       \u2193              \u2191\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502   C   \u2502  \u2192   \u2502       \u2502\n   \u2502   B   \u2502      \u2502   B   \u2502\n   \u2502   A   \u2502      \u2502   A   \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n     top=C          top=B\n```\n\n## Java Implementation \u2014 prefer ArrayDeque over Stack\n\n```java\n// \u2717 java.util.Stack \u2014 synchronized (legacy), avoids\n// \u2713 ArrayDeque used as a stack\nDeque<Integer> stack = new ArrayDeque<>();\nstack.push(10);        // add to TOP \u2014 O(1)\nint top = stack.peek();  // view TOP without removing \u2014 O(1)\nint out = stack.pop();   // remove TOP \u2014 O(1)\nboolean empty = stack.isEmpty();\n```\n\n## Balanced Parentheses \u2014 matching open/close pairs\n\nThe stack remembers the most recent unmatched opener \u2014 perfect for LIFO matching.\n\n```\nInput: ( [ { } ] )\n\nPush (  \u2192 stack: [(]\nPush [  \u2192 stack: [(, []\nPush {  \u2192 stack: [(, [, {]\nSee }   \u2192 pop {, matches \u2192 stack: [(, []\nSee ]   \u2192 pop [, matches \u2192 stack: [(]\nSee )   \u2192 pop (, matches \u2192 stack: []\nStack empty \u2192 BALANCED \u2713\n\nInput: ( ]\nPush (  \u2192 stack: [(]\nSee ]   \u2192 pop (, mismatch! \u2192 NOT BALANCED \u2717\n```\n\n```java\nboolean isBalanced(String s) {\n    Deque<Character> stack = new ArrayDeque<>();\n    for (char c : s.toCharArray()) {\n        if (c == '(' || c == '[' || c == '{') stack.push(c);\n        else {\n            if (stack.isEmpty()) return false;\n            char top = stack.pop();\n            if ((c==')' && top!='(') || (c==']' && top!='[') || (c=='}' && top!='{'))\n                return false;\n        }\n    }\n    return stack.isEmpty();\n}\n```\n\n## Monotonic Stack \u2014 Next Greater Element\n\nMaintain a stack of **decreasing** candidates. The moment you see an element larger than the top, the top has found its 'next greater'.\n\n```\nnums:  [2, 1, 5, 3, 6, 4]\n                          answer for each index:\n\nIndex 0 (2): push 2    \u2192 stack: [2]\nIndex 1 (1): push 1    \u2192 stack: [2, 1]\nIndex 2 (5): 5 > 1 \u2192 pop 1, ans[1]=5; 5 > 2 \u2192 pop 2, ans[0]=5; push 5 \u2192 stack: [5]\nIndex 3 (3): push 3    \u2192 stack: [5, 3]\nIndex 4 (6): 6 > 3 \u2192 pop 3, ans[3]=6; 6 > 5 \u2192 pop 5, ans[2]=6; push 6 \u2192 stack: [6]\nIndex 5 (4): push 4    \u2192 stack: [6, 4]\nRemaining: ans[4]=-1, ans[5]=-1 (no next greater)\n\nFinal: [5, 5, 6, 6, -1, -1]\n```\n\n```java\nint[] nextGreater(int[] nums) {\n    int n = nums.length;\n    int[] ans = new int[n];\n    Arrays.fill(ans, -1);\n    Deque<Integer> stack = new ArrayDeque<>();  // stores indices\n    for (int i = 0; i < n; i++) {\n        while (!stack.isEmpty() && nums[stack.peek()] < nums[i])\n            ans[stack.pop()] = nums[i];\n        stack.push(i);\n    }\n    return ans;\n}\n```\n\n## Min Stack \u2014 O(1) getMin\n\nKeep a **parallel stack** that records the minimum at each depth level.\n\n```\nPush 5: main=[5],   minStack=[5]\nPush 3: main=[5,3], minStack=[5,3]\nPush 7: main=[5,3,7], minStack=[5,3,3]  \u2190 min stays 3\nPop:    main=[5,3], minStack=[5,3]       \u2190 getMin()=3 still correct\nPop:    main=[5],   minStack=[5]         \u2190 getMin()=5\n```\n\n## Largest Rectangle in Histogram\n\nUse indices (not values) in the stack \u2014 you need widths, not just heights.\n\n```\nheights: [2, 1, 5, 6, 2, 3]\n          0  1  2  3  4  5\n\nWhen you pop height h at index i because a shorter bar arrived:\n  width = current_index - stack.peek() - 1   (the left boundary)\n  area  = h \u00d7 width\n```\n\n## Call Stack \u2014 recursion visualised\n\nEvery function call pushes a **frame** containing local variables and return address:\n\n```\nfactorial(4)\n\u251c\u2500\u2500 frame: n=4, awaiting factorial(3)\n\u2502   \u251c\u2500\u2500 frame: n=3, awaiting factorial(2)\n\u2502   \u2502   \u251c\u2500\u2500 frame: n=2, awaiting factorial(1)\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 frame: n=1, returns 1         \u2190 BASE CASE\n\u2502   \u2502   \u2514\u2500\u2500 returns 2\n\u2502   \u2514\u2500\u2500 returns 6\n\u2514\u2500\u2500 returns 24\n```\nToo many frames \u2192 **StackOverflowError**. Fix: convert to iterative + explicit stack.\n\n## Complexity Cheatsheet\n\n| Operation | ArrayDeque Time |\n|---|---|\n| push | O(1) amortised |\n| pop | O(1) |\n| peek | O(1) |\n| isEmpty | O(1) |\n| Monotonic stack (n elements) | O(n) total \u2014 each element pushed and popped once |\n\n## Common Pitfalls\n- Calling `pop()` on empty stack \u2192 `NoSuchElementException` \u2014 always check `isEmpty()` first\n- Using `java.util.Stack` in interviews \u2014 slower (synchronized) and has legacy quirks\n- Monotonic stack: storing **values** when you need **indices** for distance/width calculations\n- Undo/redo needs **two** stacks \u2014 one for undo history, one for redo\n\n## Connections\n- **Recursion** \u2014 the call stack IS a stack; convert any recursion to iteration with an explicit stack\n- **Graphs** \u2014 iterative DFS uses an explicit stack\n- **Queues** \u2014 LIFO vs FIFO; two stacks can simulate a queue\n- **Monotonic Stack** \u2014 powers: next greater/smaller, histogram, stock span problems\n",
+  "questions": [
+    {
+      "id": "djst-q1",
+      "type": "mcq",
+      "prompt": "Stack removal order is:",
+      "choices": [
+        "FIFO",
+        "LIFO",
+        "Sorted",
+        "Random"
+      ],
+      "answerIndex": 1,
+      "explanation": "Last In, First Out.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-q2",
+      "type": "mcq",
+      "prompt": "Preferred Java stack implementation for most interviews:",
+      "choices": [
+        "Vector",
+        "ArrayDeque",
+        "TreeMap",
+        "PriorityQueue"
+      ],
+      "answerIndex": 1,
+      "explanation": "ArrayDeque is fast and implements Deque.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djst-q3",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "Deque<Integer> s = new ArrayDeque<>();\ns.push(1); s.push(2);\nSystem.out.println(s.pop());",
+      "choices": [
+        "1",
+        "2",
+        "null",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "2 was pushed last, so it pops first.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-q4",
+      "type": "mcq",
+      "prompt": "Monotonic stacks are useful for:",
+      "choices": [
+        "Next greater element",
+        "Binary search only",
+        "Hash collisions",
+        "String equality"
+      ],
+      "answerIndex": 0,
+      "explanation": "They maintain increasing/decreasing candidates.",
+      "tags": [
+        "monotonic-stack"
+      ]
+    },
+    {
+      "id": "djst-q5",
+      "type": "multi",
+      "prompt": "Which are stack applications?",
+      "choices": [
+        "Balanced parentheses",
+        "DFS",
+        "Undo history",
+        "Dijkstra relaxation order"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Dijkstra typically uses a priority queue, not a plain stack.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djst-q6",
+      "type": "mcq",
+      "prompt": "push/pop/peek on ArrayDeque are:",
+      "choices": [
+        "O(log n)",
+        "O(n)",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Array-backed deque does front/rear operations in amortized O(1).",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djst-q7",
+      "type": "mcq",
+      "prompt": "java.util.Stack vs ArrayDeque:",
+      "choices": [
+        "Stack is faster",
+        "ArrayDeque is faster \u2014 Stack is synchronized (legacy)",
+        "Both identical",
+        "Stack for production"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stack's synchronization overhead makes it slower for single-thread use.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djst-q8",
+      "type": "mcq",
+      "prompt": "Balanced parentheses uses a stack because:",
+      "choices": [
+        "Recursion is hard",
+        "Must match the most recent unmatched opening bracket",
+        "Less memory",
+        "Required by language spec"
+      ],
+      "answerIndex": 1,
+      "explanation": "LIFO ensures open brackets are matched in the correct order.",
+      "tags": [
+        "parentheses"
+      ]
+    },
+    {
+      "id": "djst-q9",
+      "type": "mcq",
+      "prompt": "Monotonic increasing stack pops when:",
+      "choices": [
+        "New element is larger",
+        "New element is smaller",
+        "Stack is full",
+        "Never"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pop smaller candidates to maintain increasing order.",
+      "tags": [
+        "monotonic"
+      ]
+    },
+    {
+      "id": "djst-q10",
+      "type": "mcq",
+      "prompt": "For next-greater-element, the stack stores:",
+      "choices": [
+        "Values only",
+        "Indices (to fill result array by position)",
+        "Both",
+        "Neither"
+      ],
+      "answerIndex": 1,
+      "explanation": "Indices are needed to assign answers in result[].",
+      "tags": [
+        "nge"
+      ]
+    },
+    {
+      "id": "djst-q11",
+      "type": "mcq",
+      "prompt": "Evaluate postfix '3 4 + 2 *':",
+      "choices": [
+        "14",
+        "11",
+        "10",
+        "Error"
+      ],
+      "answerIndex": 0,
+      "explanation": "(3+4)*2 = 14.",
+      "tags": [
+        "postfix"
+      ]
+    },
+    {
+      "id": "djst-q12",
+      "type": "mcq",
+      "prompt": "Min stack \u2014 O(1) getMin strategy:",
+      "choices": [
+        "Scan on every call",
+        "Keep a parallel stack of running minimums",
+        "Sort on push",
+        "Binary search"
+      ],
+      "answerIndex": 1,
+      "explanation": "Second stack tracks min at each push depth.",
+      "tags": [
+        "minstack"
+      ]
+    },
+    {
+      "id": "djst-q13",
+      "type": "mcq",
+      "prompt": "Largest rectangle in histogram optimal solution:",
+      "choices": [
+        "O(n^2) brute force",
+        "O(n) monotonic stack",
+        "O(n log n) segment tree",
+        "O(n) prefix sums"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stack tracks bars whose rectangles are still extending rightward.",
+      "tags": [
+        "histogram"
+      ]
+    },
+    {
+      "id": "djst-q14",
+      "type": "mcq",
+      "prompt": "Iterative DFS with explicit stack vs recursive DFS:",
+      "choices": [
+        "Different traversal order",
+        "Explicit stack mirrors the call stack \u2014 same logic",
+        "Explicit stack uses more memory",
+        "Recursive is always better"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both use LIFO; recursion uses the call stack implicitly.",
+      "tags": [
+        "dfs"
+      ]
+    },
+    {
+      "id": "djst-q15",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "Deque<Integer> s = new ArrayDeque<>();\ns.push(1); s.push(2); s.push(3);\ns.pop();\nSystem.out.println(s.peek());",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "null"
+      ],
+      "answerIndex": 1,
+      "explanation": "pop() removes 3; peek() sees 2.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-q16",
+      "type": "mcq",
+      "prompt": "Infix-to-postfix conversion uses a stack to:",
+      "choices": [
+        "Store operands",
+        "Manage operator precedence and associativity",
+        "Sort tokens",
+        "Detect syntax errors"
+      ],
+      "answerIndex": 1,
+      "explanation": "Higher-precedence operators are flushed before lower ones.",
+      "tags": [
+        "infix"
+      ]
+    },
+    {
+      "id": "djst-q17",
+      "type": "mcq",
+      "prompt": "Stack overflow from recursion happens because:",
+      "choices": [
+        "Array is too small",
+        "Each call frame is pushed \u2014 deep recursion exhausts call stack memory",
+        "Stack is unsorted",
+        "pop() is missing"
+      ],
+      "answerIndex": 1,
+      "explanation": "JVM default stack is usually ~512 KB\u20131 MB.",
+      "tags": [
+        "overflow"
+      ]
+    },
+    {
+      "id": "djst-q18",
+      "type": "mcq",
+      "prompt": "Undo/redo in a text editor is modelled by:",
+      "choices": [
+        "One queue",
+        "One stack",
+        "Two stacks \u2014 undo stack and redo stack",
+        "Doubly linked list"
+      ],
+      "answerIndex": 2,
+      "explanation": "Undo pops from undo stack and pushes to redo stack.",
+      "tags": [
+        "undo"
+      ]
+    },
+    {
+      "id": "djst-q19",
+      "type": "mcq",
+      "prompt": "Stock span problem (days since last higher price) uses:",
+      "choices": [
+        "Prefix sums",
+        "Monotonic stack",
+        "Sorting",
+        "Segment tree"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stack stores indices of bars with descending prices.",
+      "tags": [
+        "span"
+      ]
+    },
+    {
+      "id": "djst-q20",
+      "type": "mcq",
+      "prompt": "Call stack in Java grows when:",
+      "choices": [
+        "A variable is declared",
+        "A method is invoked",
+        "An array is accessed",
+        "A loop iterates"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each method call pushes a new frame onto the call stack.",
+      "tags": [
+        "call-stack"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djst-fc1",
+      "front": "LIFO",
+      "back": "Last In, First Out.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc2",
+      "front": "push",
+      "back": "Add to top.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc3",
+      "front": "pop",
+      "back": "Remove top.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc4",
+      "front": "peek",
+      "back": "Read top without removing.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc5",
+      "front": "Monotonic stack stores",
+      "back": "Candidates in sorted order, often indices.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc6",
+      "front": "Min stack trick",
+      "back": "Keep parallel stack of minimums.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc7",
+      "front": "ArrayDeque for stack",
+      "back": "Faster than java.util.Stack.",
+      "tags": [
+        "stack"
+      ]
+    },
+    {
+      "id": "djst-fc8",
+      "front": "DFS uses",
+      "back": "Stack (explicit or recursion call stack).",
+      "tags": [
+        "stack"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Build StackProblems.java with validParentheses, nextGreaterElement, minStack, and largestRectangleHistogram.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Uses ArrayDeque",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Checks empty before pop",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Uses indices for histogram widths",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Includes tests for duplicates",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "For MinStack, keep a second stack of minimums.",
+      "Add a sentinel 0 height to flush histograms."
+    ]
+  }
+}

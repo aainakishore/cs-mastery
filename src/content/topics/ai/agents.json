@@ -1,0 +1,470 @@
+{
+  "id": "agents",
+  "unit": 6,
+  "order": 33,
+  "title": "AI Agents",
+  "summary": "Master AI Agents: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "prompting-fundamentals"
+  ],
+  "guide": "# AI Agents\n\nAn AI agent is an LLM-powered system that can **autonomously take actions** in an environment to achieve goals — not just by generating text, but by using tools, making decisions, and iterating until a task is complete.\n\n## Agent vs LLM Chat\n\n```\nLLM Chat (passive):\n  User: \"How do I search the web?\"\n  LLM: \"Here are the steps: 1. Open a browser...\"\n\nAgent (active):\n  User: \"Research the top 5 AI papers this week\"\n  Agent:\n    → [tool: web_search(\"top AI papers this week\")]\n    → [read results]\n    → [tool: web_search(\"details on paper X\")]\n    → [tool: summarize 5 papers]\n    → Returns: formatted summary\n  Agent decided WHAT to do and executed it autonomously.\n```\n\n## ReAct Pattern (Reason + Act)\n\n```\nThe standard agent loop:\n  Thought: What do I need to do? I need to find current papers.\n  Action: web_search(\"AI papers October 2024\")\n  Observation: [search results...]\n  Thought: Found 10 results. Let me look at the top 3 more closely.\n  Action: fetch_page(\"https://arxiv.org/paper1\")\n  Observation: [page content...]\n  Thought: I have enough information to answer.\n  Final Answer: The top AI papers this week are...\n```\n\n## Agent Components\n\n```\nLLM Backbone:     GPT-4, Claude, Gemini — the \"brain\"\nTools/Actions:    web_search, code_executor, file_read, API_call, calculator\nMemory:\n  Short-term: conversation context (limited by context window)\n  Long-term:  vector database, key-value store\nPlanning:\n  Simple:     one-shot (decide and execute)\n  Complex:    multi-step plan → execute each step → revise\n```\n\n## LangChain Example (Simplified)\n\n```javascript\nconst { ChatOpenAI } = require('@langchain/openai');\nconst { AgentExecutor, createReactAgent } = require('langchain/agents');\nconst { TavilySearchResults } = require('@langchain/community/tools/tavily_search');\n\nconst tools = [new TavilySearchResults({ maxResults: 3 })];\nconst llm = new ChatOpenAI({ model: 'gpt-4o' });\n\nconst agent = await createReactAgent({ llm, tools, prompt });\nconst executor = new AgentExecutor({ agent, tools, maxIterations: 10 });\n\nconst result = await executor.invoke({\n  input: \"What are the most cited AI papers in the last week?\"\n});\nconsole.log(result.output);\n```\n\n## Multi-Agent Systems\n\n```\nOrchestrator ─→ Research Agent (web + arxiv tools)\n            └──→ Summarizer Agent (text processing tools)\n            └──→ Validator Agent (fact-checking tools)\n\nBenefits: parallel workstreams, specialised agents, error checking\nChallenges: coordination overhead, error propagation, debugging\n```\n\n## Common Pitfalls\n- **Infinite loops** — set `maxIterations`. Agents can loop calling the same tools.\n- **Tool errors not handled** — agent should receive error messages as observations and adjust, not crash.\n- **No human-in-the-loop for sensitive actions** — irreversible (delete file, send email) actions should pause for confirmation.\n- **Context window overflow** — long-running agents accumulate context. Summarize periodically.\n\n\n## Tool Design Principles\n\n```\nGood tool design:\n  ✓ Deterministic inputs/outputs the LLM can predict\n  ✓ Returns structured data (JSON > prose)\n  ✓ Named parameters that match natural language\n  ✓ Includes error messages the agent can reason about\n\nBad tool design:\n  ✗ Side-effectful without confirmation (send_email, delete_file)\n  ✗ Returns 10,000 token HTML pages\n  ✗ Ambiguous parameter names\n```\n\n## Agent Memory Architecture\n\n```\nContext window (ephemeral)\n  ├── System prompt (agent persona, tools list)\n  ├── Conversation history\n  ├── Tool call results\n  └── Working scratch (Thought/Action/Observation)\n\nExternal memory (persistent)\n  ├── Vector DB → semantic search (episodic memory)\n  ├── Key-value store → exact lookup (facts, user prefs)\n  └── Structured DB → relational queries\n```\n\n## Error Handling Pattern\n\n```python\ntry:\n    result = tool.run(inputs)\n    observation = f\"Tool succeeded: {result}\"\nexcept ToolException as e:\n    observation = f\"Tool failed with: {e}. Try a different approach.\"\n# Feed observation back to LLM — agent adapts\n```\n\n## References & Further Learning\n- 📄 **ReAct paper**: \"ReAct: Synergizing Reasoning and Acting in Language Models\" — Yao et al., 2022 (arxiv.org/abs/2210.03629)\n- 📄 **HuggingGPT**: \"HuggingGPT: Solving AI Tasks with ChatGPT and its Friends\" — demonstrates multi-tool orchestration\n- 🎥 **Andrej Karpathy** \"Intro to LLM Agents\" (YouTube)\n- 🎥 **LangChain** official YouTube channel — agent tutorials\n- 📖 **LangChain docs** — conceptual guide on agents: python.langchain.com/docs/modules/agents\n- 📖 **AutoGen docs** — multi-agent framework: microsoft.github.io/autogen\n- 🖼️ **Diagram**: ReAct loop flowchart — search \"ReAct agent loop diagram\"\n",
+  "questions": [
+    {
+      "id": "agent-q1",
+      "type": "mcq",
+      "prompt": "What distinguishes an AI agent from a standard LLM chat?",
+      "choices": [
+        "Agents use a different model",
+        "Agents autonomously decide and execute actions (tool use, multi-step planning) to complete tasks. Chat LLMs only generate text responses",
+        "Agents use reinforcement learning only",
+        "Agents don't use LLMs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Core distinction: agency and autonomy. An agent plans a task, selects tools, executes them, observes results, adjusts, and repeats. A chat interface waits for the user to decide next steps.",
+      "tags": [
+        "agents",
+        "LLM"
+      ]
+    },
+    {
+      "id": "agent-q2",
+      "type": "mcq",
+      "prompt": "ReAct pattern stands for:",
+      "choices": [
+        "React framework integration",
+        "Reason + Act: agent alternates between thinking (Thought), taking action (Action), and observing results (Observation) iteratively until task completion",
+        "Reactive programming",
+        "Random Execution + Correction Testing"
+      ],
+      "answerIndex": 1,
+      "explanation": "ReAct is the dominant agent loop: explicit reasoning traces (Thought) + actions (Action) + feedback (Observation). This interleaving improves reliability vs pure chain-of-thought or pure action.",
+      "tags": [
+        "agents",
+        "ReAct"
+      ]
+    },
+    {
+      "id": "agent-q3",
+      "type": "mcq",
+      "prompt": "Why set maxIterations on an agent?",
+      "choices": [
+        "To save API costs",
+        "Agents can enter infinite loops — calling the same tool repeatedly, reformulating the same search without progress. maxIterations is a safety limit that terminates the loop",
+        "Required by the framework",
+        "Limits output length"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without limits, a confused agent can call web_search 100 times incrementally reformulating the same query. maxIterations + a fallback response prevent runaway API costs and hangs.",
+      "tags": [
+        "agents",
+        "safety"
+      ]
+    },
+    {
+      "id": "agent-q4",
+      "type": "mcq",
+      "prompt": "Which component decides WHAT tool to call next in an agent?",
+      "choices": [
+        "The tool registry",
+        "The LLM backbone — it generates the next Action based on Thought",
+        "The orchestration framework",
+        "The memory module"
+      ],
+      "answerIndex": 1,
+      "explanation": "The LLM generates the next action. The framework executes it and feeds the Observation back. The LLM is the decision-maker.",
+      "tags": [
+        "agents",
+        "LLM"
+      ]
+    },
+    {
+      "id": "agent-q5",
+      "type": "mcq",
+      "prompt": "What is 'tool hallucination' in an agent context?",
+      "choices": [
+        "Agent uses a tool that doesn't exist — calls undefined tool names",
+        "Agent generates incorrect text",
+        "Tool returns wrong data",
+        "Memory overflow"
+      ],
+      "answerIndex": 0,
+      "explanation": "LLMs may invent tool names not in the registered list. Tool schemas must list exact names; robust parsers should catch unknown tool names gracefully.",
+      "tags": [
+        "agents",
+        "hallucination"
+      ]
+    },
+    {
+      "id": "agent-q6",
+      "type": "mcq",
+      "prompt": "Why should irreversible actions (send email, delete file) pause for human confirmation?",
+      "choices": [
+        "Performance reasons",
+        "Agents can hallucinate or misinterpret intent — human-in-the-loop prevents real-world mistakes that can't be undone",
+        "Tool latency",
+        "API rate limits"
+      ],
+      "answerIndex": 1,
+      "explanation": "Agents combine reasoning errors with execution power. Irreversible ops need a confirmation step before execution. Reversible ops (web search, read file) can be automated safely.",
+      "tags": [
+        "agents",
+        "safety"
+      ]
+    },
+    {
+      "id": "agent-q7",
+      "type": "mcq",
+      "prompt": "An agent uses a vector DB as 'long-term memory'. What does it store?",
+      "choices": [
+        "The model weights",
+        "Embeddings of past interactions/documents for semantic retrieval",
+        "SQL query cache",
+        "Tool execution logs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Vector DB stores embedded representations of past context. At runtime, the agent queries by similarity to retrieve relevant past information into the context window.",
+      "tags": [
+        "agents",
+        "memory"
+      ]
+    },
+    {
+      "id": "agent-q8",
+      "type": "mcq",
+      "prompt": "What is the main benefit of structured tool outputs (JSON) vs prose?",
+      "choices": [
+        "Smaller token count",
+        "LLM can reliably parse fields — names, values, types — without natural-language ambiguity",
+        "JSON is faster to generate",
+        "Prose causes loops"
+      ],
+      "answerIndex": 1,
+      "explanation": "LLMs can extract structured data from JSON predictably. Prose responses require the LLM to parse natural language which introduces errors.",
+      "tags": [
+        "agents",
+        "tools"
+      ]
+    },
+    {
+      "id": "agent-q9",
+      "type": "multi",
+      "prompt": "Which are valid agent memory types?",
+      "choices": [
+        "Context window (short-term)",
+        "Vector database (semantic search)",
+        "SQL relational DB (structured queries)",
+        "Hardcoded if-else in code"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Agents use context window (ephemeral), vector DB (semantic long-term), and structured DB. Hardcoded logic is not agent memory.",
+      "tags": [
+        "agents",
+        "memory"
+      ]
+    },
+    {
+      "id": "agent-q10",
+      "type": "mcq",
+      "prompt": "In a multi-agent system, the 'orchestrator' role is:",
+      "choices": [
+        "Executes tool calls",
+        "Stores memory",
+        "Delegates sub-tasks to specialised agents and aggregates results",
+        "Validates outputs"
+      ],
+      "answerIndex": 2,
+      "explanation": "Orchestrator = the top-level planner. It breaks a task into sub-tasks and routes each to a specialised agent (researcher, coder, reviewer).",
+      "tags": [
+        "agents",
+        "multi-agent"
+      ]
+    },
+    {
+      "id": "agent-q11",
+      "type": "codeOutput",
+      "prompt": "What does maxIterations=3 do in this agent call?",
+      "code": "executor.invoke({'input': 'research 10 topics'}, config={'max_iterations': 3})",
+      "choices": [
+        "Returns 3 results",
+        "Allows at most 3 tool calls before forcing a final answer",
+        "Times out after 3 seconds",
+        "Limits output to 3 paragraphs"
+      ],
+      "answerIndex": 1,
+      "explanation": "maxIterations caps the Thought/Action/Observation loop. After 3 iterations, the agent returns whatever it has. Prevents infinite loops.",
+      "tags": [
+        "agents",
+        "safety"
+      ]
+    },
+    {
+      "id": "agent-q12",
+      "type": "mcq",
+      "prompt": "Context window overflow is a risk for long-running agents because:",
+      "choices": [
+        "The LLM gets confused by long conversations",
+        "Tool calls stop working",
+        "Each Observation adds tokens — eventually exceeding the model's context limit causing truncation of earlier reasoning",
+        "The agent slows down"
+      ],
+      "answerIndex": 2,
+      "explanation": "Every tool result is appended to context. A long agent run can fill the context window, causing the LLM to lose earlier reasoning steps. Solution: periodic summarization or external memory.",
+      "tags": [
+        "agents",
+        "context"
+      ]
+    },
+    {
+      "id": "agent-q13",
+      "type": "mcq",
+      "prompt": "What distinguishes Plan-and-Execute from ReAct?",
+      "choices": [
+        "Plan-and-Execute has no tools",
+        "Plan-and-Execute creates a full plan upfront, then executes each step — ReAct interleaves planning and acting",
+        "They are identical",
+        "Plan-and-Execute is always better"
+      ],
+      "answerIndex": 1,
+      "explanation": "ReAct: think-act-observe-repeat (dynamic, adaptive). Plan-and-Execute: generate full plan first, execute steps with sub-agents. P&E is better for predictable tasks; ReAct for exploratory ones.",
+      "tags": [
+        "agents",
+        "ReAct"
+      ]
+    },
+    {
+      "id": "agent-q14",
+      "type": "mcq",
+      "prompt": "Tool descriptions in the system prompt should be:",
+      "choices": [
+        "Minimal to save tokens",
+        "Precise: name, purpose, parameters, return format — so the LLM knows exactly when and how to call them",
+        "Examples only",
+        "Omitted — LLM knows all tools"
+      ],
+      "answerIndex": 1,
+      "explanation": "The LLM selects tools based solely on the description in its context. Vague descriptions cause wrong tool selection or hallucinated parameters.",
+      "tags": [
+        "agents",
+        "tools"
+      ]
+    },
+    {
+      "id": "agent-q15",
+      "type": "mcq",
+      "prompt": "'Function calling' in GPT-4 / Claude differs from plain text ReAct because:",
+      "choices": [
+        "No difference",
+        "The model outputs a structured JSON action instead of free-text — the framework reliably parses it without regex",
+        "Function calling is slower",
+        "Function calling requires Python"
+      ],
+      "answerIndex": 1,
+      "explanation": "Native function calling produces validated JSON tool calls. Plain ReAct requires regex/parsing of text like 'Action: tool_name(args)' which is error-prone.",
+      "tags": [
+        "agents",
+        "function-calling"
+      ]
+    },
+    {
+      "id": "agent-q16",
+      "type": "multi",
+      "prompt": "Challenges unique to multi-agent systems vs single agent?",
+      "choices": [
+        "Error propagation between agents",
+        "Inter-agent communication overhead",
+        "Harder debugging — which agent made the mistake?",
+        "Agents can't use tools"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Multi-agent adds: cascading failures, communication cost, and debugging complexity. Each agent can introduce errors that propagate downstream.",
+      "tags": [
+        "agents",
+        "multi-agent"
+      ]
+    },
+    {
+      "id": "agent-q17",
+      "type": "mcq",
+      "prompt": "Why should agents return partial results if maxIterations is hit?",
+      "choices": [
+        "The framework requires it",
+        "Better than an error — partial information is still useful; caller can retry or use what's available",
+        "Saves API cost",
+        "Improves accuracy"
+      ],
+      "answerIndex": 1,
+      "explanation": "A graceful degradation answer (even incomplete) is more useful than a hard failure to the end user. Design agents to return best-effort results on cutoff.",
+      "tags": [
+        "agents",
+        "safety"
+      ]
+    },
+    {
+      "id": "agent-q18",
+      "type": "mcq",
+      "prompt": "In LangGraph, why use a state machine for agents vs simple loops?",
+      "choices": [
+        "State machines are faster",
+        "State machine makes agent flow explicit — nodes=actions, edges=transitions — enabling branching, retries, checkpoints",
+        "Required for tool use",
+        "LangGraph doesn't support loops"
+      ],
+      "answerIndex": 1,
+      "explanation": "A DAG/state-machine approach makes control flow inspectable and serializable. You can pause, resume, branch on tool errors, and replay — not possible in a hidden while-loop.",
+      "tags": [
+        "agents",
+        "LangGraph"
+      ]
+    },
+    {
+      "id": "agent-q19",
+      "type": "mcq",
+      "prompt": "What is 'grounding' in agent context?",
+      "choices": [
+        "Connecting agent to electricity",
+        "Anchoring agent outputs to verified real-world data (search results, DB queries) to reduce hallucination",
+        "Training technique",
+        "Memory compression"
+      ],
+      "answerIndex": 1,
+      "explanation": "Grounding = tying the LLM's reasoning to factual external data sources. A grounded agent retrieves before it claims, reducing confabulation.",
+      "tags": [
+        "agents",
+        "hallucination"
+      ]
+    },
+    {
+      "id": "agent-q20",
+      "type": "mcq",
+      "prompt": "Which evaluation metric matters most for production agents?",
+      "choices": [
+        "Token count",
+        "Task completion rate — did the agent accomplish the goal correctly within budget?",
+        "Response length",
+        "Model perplexity"
+      ],
+      "answerIndex": 1,
+      "explanation": "Task completion rate (did it succeed?) + efficiency (how many tool calls / tokens?) are the production metrics. Perplexity measures language model quality, not task success.",
+      "tags": [
+        "agents",
+        "evaluation"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "agent-fc1",
+      "front": "ReAct loop",
+      "back": "Thought → Action (tool call) → Observation (tool result) → Thought → ... → Final Answer. Iterative reasoning + acting. Explicit thought traces improve accuracy and debuggability.",
+      "tags": [
+        "agents",
+        "ReAct"
+      ]
+    },
+    {
+      "id": "agent-fc2",
+      "front": "Agent components",
+      "back": "LLM (brain), Tools (web search, code exec, APIs), Memory (context window + vector DB), Planning (single-step or tree of thoughts). Optional: orchestrator for multi-agent.",
+      "tags": [
+        "agents"
+      ]
+    },
+    {
+      "id": "agent-fc3",
+      "front": "Agent safety guardrails",
+      "back": "maxIterations (prevent loops). Tool error handling (crash-proof). Human-in-the-loop for irreversible actions. Context summarization (prevent window overflow). Rate limiting on tool calls.",
+      "tags": [
+        "agents",
+        "safety"
+      ]
+    },
+    {
+      "id": "agent-fc4",
+      "front": "Tool hallucination",
+      "back": "Agent calls a tool name not in its registry. Prevent by: strict JSON schema validation, listing only real tool names in system prompt, catching parse errors and re-prompting.",
+      "tags": [
+        "agents",
+        "hallucination"
+      ]
+    },
+    {
+      "id": "agent-fc5",
+      "front": "Plan-and-Execute vs ReAct",
+      "back": "ReAct: interleave Thought/Action/Observation dynamically. Plan-and-Execute: create full plan upfront → sub-agents execute. P&E = predictable tasks; ReAct = exploratory.",
+      "tags": [
+        "agents",
+        "planning"
+      ]
+    },
+    {
+      "id": "agent-fc6",
+      "front": "Agent memory layers",
+      "back": "Context window (ephemeral, token-limited) → Vector DB (semantic retrieval, persistent) → Structured DB (relational queries). Use all three for production agents.",
+      "tags": [
+        "agents",
+        "memory"
+      ]
+    },
+    {
+      "id": "agent-fc7",
+      "front": "Human-in-the-loop",
+      "back": "Pause before irreversible actions (delete, send, pay). Use a ConfirmationTool that requires human approval. Automate only reversible ops (read, search, compute).",
+      "tags": [
+        "agents",
+        "safety"
+      ]
+    },
+    {
+      "id": "agent-fc8",
+      "front": "Function calling vs text ReAct",
+      "back": "Function calling: model outputs structured JSON tool call — reliable parsing. Text ReAct: model writes 'Action: tool(args)' — requires fragile regex. Use native function calling in production.",
+      "tags": [
+        "agents",
+        "function-calling"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using AI Agents\n\nDesign a realistic production service with AI Agents at its core. No code required:\n\n1. Why AI Agents over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "agents-pc1",
+        "text": "Justified use of AI Agents for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "agents-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "agents-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "agents-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "agents-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does AI Agents remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

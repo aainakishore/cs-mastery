@@ -1,0 +1,139 @@
+{
+  "id": "websockets",
+  "unit": 3,
+  "order": 14,
+  "title": "WebSockets",
+  "summary": "Full-duplex communication, handshake, use cases vs HTTP, and real-time app patterns.",
+  "prereqs": [
+    "rpc"
+  ],
+  "guide": "# WebSockets\n\nWebSockets provide a **persistent, full-duplex TCP-based channel** between client and server over a single connection. Unlike HTTP's request-response cycle, either party can send messages at any time.\n\n## The HTTP vs WebSocket Contrast\n\n```\nHTTP (request-response):           WebSocket (persistent):\nClient \u2192 GET /data \u2192 Server        Client \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 Server\nServer \u2190 200 OK \u2190 Server           Client \u2190\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 Server\n                                    (open bidirectional pipe)\n```\n\n## WebSocket Handshake (HTTP Upgrade)\n\n```\nClient sends HTTP request:\n  GET /chat HTTP/1.1\n  Host: example.com\n  Upgrade: websocket\n  Connection: Upgrade\n  Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n  Sec-WebSocket-Version: 13\n\nServer responds:\n  HTTP/1.1 101 Switching Protocols\n  Upgrade: websocket\n  Connection: Upgrade\n  Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\n\nAfter this, TCP connection stays open for WebSocket frames.\n```\n\n## Frame Structure\n\n```\nEach WebSocket message = one or more frames:\n  \u250c\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 FIN \u2502 Opcode \u2502 Payload length \u2502 [Masking key] \u2502 Payload \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nOpcodes: 0x0=continuation, 0x1=text, 0x2=binary, 0x8=close, 0x9=ping, 0xA=pong\nClient \u2192 Server: frames are masked (required by spec)\nServer \u2192 Client: frames are unmasked\n```\n\n## JavaScript API\n\n```javascript\nconst ws = new WebSocket('wss://chat.example.com/ws');\n\nws.onopen    = () => ws.send(JSON.stringify({ type: 'join', room: 'general' }));\nws.onmessage = (event) => console.log('Received:', JSON.parse(event.data));\nws.onerror   = (error) => console.error('WS error:', error);\nws.onclose   = (event) => console.log('Closed:', event.code, event.reason);\n\n// Send types:\nws.send('text string');\nws.send(new Blob([...]) );\nws.send(new ArrayBuffer(8));\n\n// Close gracefully:\nws.close(1000, 'Normal closure');\n```\n\n## Server-Side (Node.js Example)\n\n```javascript\nconst { WebSocketServer } = require('ws');\nconst wss = new WebSocketServer({ port: 8080 });\n\nwss.on('connection', (ws, req) => {\n  console.log('Client connected:', req.socket.remoteAddress);\n\n  ws.on('message', (data) => {\n    // Broadcast to all connected clients\n    wss.clients.forEach(client => {\n      if (client.readyState === WebSocket.OPEN) {\n        client.send(data.toString());\n      }\n    });\n  });\n\n  ws.on('close', (code, reason) => console.log(`Closed: ${code} ${reason}`));\n  ws.on('error', (err) => console.error('WS error:', err));\n\n  // Keep-alive heartbeat\n  const interval = setInterval(() => ws.ping(), 30000);\n  ws.on('close', () => clearInterval(interval));\n});\n```\n\n## When to Use WebSockets\n\n| Use WebSocket | Use HTTP/SSE instead |\n|---|---|\n| Real-time chat | One-way server push (news feed) |\n| Multiplayer games | Simple notifications |\n| Collaborative editing | Large file downloads |\n| Live trading data | Infrequent updates |\n| IoT sensor streams | CRUD APIs |\n\n## Common Pitfalls\n- **Not handling reconnection** \u2014 WebSockets don't auto-reconnect. Implement exponential backoff on `onclose`.\n- **Missing heartbeat/ping-pong** \u2014 idle connections dropped by proxies. Send ping frames every 30s.\n- **Memory leaks from unclosed connections** \u2014 always clean up intervals and listeners on close.\n- **Scaling without sticky sessions** \u2014 WS connections are stateful; a load balancer needs to route the same client to the same server, or use a message bus (Redis pub/sub) to broadcast across nodes.\n- **Sending before open** \u2014 check `ws.readyState === WebSocket.OPEN` before sending.\n\n## Connections\n- **SSE** \u2014 simpler alternative for one-way server push (no client\u2192server messages needed)\n- **HTTP/3 QUIC** \u2014 faster initial connection but different model\n- **Load balancing** \u2014 sticky sessions or shared pub/sub required for horizontal scaling\n",
+  "questions": [
+    {
+      "id": "ws-q1",
+      "type": "mcq",
+      "prompt": "WebSocket vs HTTP: the key architectural difference?",
+      "choices": [
+        "WebSocket is faster",
+        "WebSocket creates a persistent bidirectional TCP connection \u2014 either party can send at any time without a new request",
+        "WebSocket only works over SSL",
+        "WebSocket is for file transfers"
+      ],
+      "answerIndex": 1,
+      "explanation": "HTTP is request-response (client always initiates). WebSocket upgrades to a persistent connection where both sides push data freely.",
+      "tags": [
+        "websockets"
+      ]
+    },
+    {
+      "id": "ws-q2",
+      "type": "mcq",
+      "prompt": "How does a WebSocket connection start?",
+      "choices": [
+        "Via TCP handshake directly",
+        "Via an HTTP Upgrade request \u2014 client asks server to switch from HTTP to WebSocket protocol",
+        "Via UDP",
+        "Via WebRTC signaling"
+      ],
+      "answerIndex": 1,
+      "explanation": "WebSocket starts with an HTTP GET with 'Upgrade: websocket' header. Server responds 101 Switching Protocols, then TCP is repurposed for WS frames.",
+      "tags": [
+        "websockets",
+        "handshake"
+      ]
+    },
+    {
+      "id": "ws-q3",
+      "type": "mcq",
+      "prompt": "Why do WebSockets require sticky sessions or a message bus for horizontal scaling?",
+      "choices": [
+        "WS only works on single servers",
+        "WS connections are stateful \u2014 a client connects to ONE server instance. Messages sent to a different instance won't reach that client unless shared via a bus (Redis pub/sub)",
+        "WS uses too much bandwidth",
+        "Load balancers can't handle WebSockets"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each WebSocket connection is stateful \u2014 maintained on the specific server. To broadcast to all clients across multiple servers, use Redis pub/sub or a message queue as a shared channel.",
+      "tags": [
+        "websockets",
+        "scaling"
+      ]
+    },
+    {
+      "id": "ws-q4",
+      "type": "mcq",
+      "prompt": "What happens if you don't send ping/pong heartbeats on an idle WebSocket?",
+      "choices": [
+        "Nothing \u2014 connections stay open indefinitely",
+        "Proxies and firewalls may close idle connections after a timeout (typically 60-300s) \u2014 heartbeats keep the connection alive",
+        "The server closes it after 10s",
+        "ping/pong is optional and rarely needed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Many proxies, load balancers, and firewalls close seemingly-idle TCP connections. Ping frames (opcode 0x9) and pong responses confirm the connection is alive.",
+      "tags": [
+        "websockets",
+        "heartbeat"
+      ]
+    },
+    {
+      "id": "ws-q5",
+      "type": "mcq",
+      "prompt": "When is HTTP Server-Sent Events (SSE) a better choice than WebSocket?",
+      "choices": [
+        "SSE is always better",
+        "When you only need server \u2192 client messages (news feed, notifications) \u2014 SSE is simpler, works over HTTP/2, auto-reconnects",
+        "SSE has higher throughput",
+        "SSE supports binary data better"
+      ],
+      "answerIndex": 1,
+      "explanation": "SSE is one-directional (server\u2192client only) but simpler: uses regular HTTP, auto-reconnects, works through proxies without upgrade. WebSocket adds complexity only justified when the client also sends frequent messages.",
+      "tags": [
+        "websockets",
+        "SSE",
+        "comparison"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ws-fc1",
+      "front": "WebSocket handshake",
+      "back": "HTTP GET with Upgrade: websocket header. Server responds 101 Switching Protocols. Same TCP connection then carries WS frames \u2014 no new connections per message.",
+      "tags": [
+        "websockets"
+      ]
+    },
+    {
+      "id": "ws-fc2",
+      "front": "WebSocket scaling challenge",
+      "back": "Connections are stateful \u2014 tied to one server instance. Horizontal scaling needs: sticky sessions (route same client to same server) OR message bus (Redis pub/sub) to broadcast across instances.",
+      "tags": [
+        "websockets",
+        "scaling"
+      ]
+    },
+    {
+      "id": "ws-fc3",
+      "front": "Heartbeat / ping-pong",
+      "back": "Proxies drop idle connections. Send ws.ping() every 30s. Server pongs back automatically. Client detects close if pong not received within timeout. Essential for production WS.",
+      "tags": [
+        "websockets"
+      ]
+    },
+    {
+      "id": "ws-fc4",
+      "front": "WebSocket vs SSE",
+      "back": "WebSocket: bidirectional, binary capable, requires upgrade. SSE: server\u2192client only, plain HTTP/2, auto-reconnect. Choose SSE for one-way push; WebSocket when client also sends data.",
+      "tags": [
+        "websockets",
+        "SSE"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "TODO: author project brief for WebSockets",
+    "checklist": [],
+    "hints": []
+  }
+}

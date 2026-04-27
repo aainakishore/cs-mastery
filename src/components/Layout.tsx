@@ -4,6 +4,7 @@ import { Settings } from 'lucide-react'
 import { XPBar } from './XPBar'
 import { StreakFlame } from './StreakFlame'
 import { HeartsBar } from './HeartsBar'
+import { NudgeBanner } from './NudgeBanner'
 
 const ACTIVE_KEY = 'csm:activeMs'
 const BREAK_INTERVAL_MS = 20 * 60 * 1000
@@ -96,6 +97,7 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
       </div>
 
       {/* ── Page content ── */}
+      <NudgeBanner />
       <div className="flex-1 pb-20">
         {children}
       </div>

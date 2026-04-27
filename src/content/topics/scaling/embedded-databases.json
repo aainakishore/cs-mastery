@@ -1,0 +1,129 @@
+{
+  "id": "embedded-databases",
+  "unit": 1,
+  "order": 4,
+  "title": "Embedded Databases",
+  "summary": "Master Embedded Databases: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "relational-databases"
+  ],
+  "guide": "# Embedded Databases (SQLite)\n\nAn embedded database runs **within the application process** \u2014 no server, no network, no authentication. SQLite is the most deployed database engine in the world (every smartphone, browser, desktop app).\n\n## SQLite Architecture\n\n```\nTraditional DB:           Embedded DB (SQLite):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510          \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502   Your App   \u2502          \u2502   Your App + SQLite Library       \u2502\n\u2502      \u2195 TCP   \u2502          \u2502                                   \u2502\n\u2502  DB Server   \u2502          \u2502   myapp.db  \u2190 single file         \u2502\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500          \u2502   No server, no auth, no network  \u2502\n                           \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nDeployment: zero-config, copy the .db file = full backup\n```\n\n## When to Use SQLite\n\n```\nIdeal use cases:\n\u2713 Local embedded apps (notes, desktop apps, offline-first)\n\u2713 Mobile apps (iOS/Android use SQLite natively)\n\u2713 Device-local caching (browser Cache API uses SQLite)\n\u2713 Single-user applications\n\u2713 Development and testing (swap prod DB \u2192 SQLite test)\n\u2713 Edge computing (Cloudflare D1 uses SQLite)\n\u2713 CLI tools and scripts with structured data\n\nNot ideal:\n\u2717 High concurrent writes (SQLite locks the file on write)\n\u2717 Multi-server applications (can't share a file across servers)\n\u2717 Very large datasets (100GB+ starts showing limitations)\n\u2717 Network access (no client/server model)\n```\n\n## SQLite in Node.js (better-sqlite3)\n\n```javascript\nconst Database = require('better-sqlite3');\nconst db = new Database('myapp.db');\n\n// Schema\ndb.exec(`\n  CREATE TABLE IF NOT EXISTS users (\n    id    INTEGER PRIMARY KEY AUTOINCREMENT,\n    email TEXT UNIQUE NOT NULL,\n    name  TEXT NOT NULL,\n    created_at DATETIME DEFAULT (datetime('now'))\n  )\n`);\n\n// Prepared statements (safe against SQL injection)\nconst insert = db.prepare('INSERT INTO users (email, name) VALUES (?, ?)');\nconst findByEmail = db.prepare('SELECT * FROM users WHERE email = ?');\n\n// Better-sqlite3 is SYNCHRONOUS (unlike most Node DB libs)\ninsert.run('alice@example.com', 'Alice');\nconst user = findByEmail.get('alice@example.com');  // returns row or undefined\n\n// Transaction\nconst transfer = db.transaction((from, to, amount) => {\n  db.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').run(amount, from);\n  db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').run(amount, to);\n});\ntransfer(1, 2, 100);   // atomic\n```\n\n## WAL Mode (Write-Ahead Logging)\n\n```sql\nPRAGMA journal_mode=WAL;\n-- WAL allows concurrent reads + ONE writer simultaneously\n-- Default mode: writer blocks all readers\n-- WAL: dramatically better for read-heavy workloads with occasional writes\n```\n\n## Common Pitfalls\n- **Concurrent writes from multiple processes** \u2014 SQLite allows only one writer at a time (file lock). Use WAL mode + pooling for concurrent scenarios.\n- **Not using WAL mode** \u2014 default journal mode locks out readers during writes. Almost always enable WAL.\n- **Not using prepared statements** \u2014 string interpolation in queries = SQL injection risk.\n- **Storing large blobs in DB** \u2014 store file paths/references, keep files on disk. Large blobs slow down the DB file.\n",
+  "questions": [
+    {
+      "id": "edb-q1",
+      "type": "mcq",
+      "prompt": "When should you choose SQLite over PostgreSQL?",
+      "choices": [
+        "When you need transactions",
+        "For applications running on a single device (mobile, desktop, embedded, offline-first) where simplicity, zero-config, and a self-contained .db file are more valuable than multi-user concurrent writes",
+        "SQLite is always better",
+        "SQLite has no ACID"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite excels: mobile apps, desktop tools, CLIs, development, offline-first, edge computing. PostgreSQL wins: multi-server concurrent writes, high concurrency, extensions, advanced features.",
+      "tags": [
+        "SQLite",
+        "embedded-db"
+      ]
+    },
+    {
+      "id": "edb-q2",
+      "type": "mcq",
+      "prompt": "SQLite concurrent write limitation and its solution?",
+      "choices": [
+        "No limitation",
+        "SQLite allows only ONE writer at a time (file lock). Solution: WAL (Write-Ahead Logging) mode \u2014 allows one writer + concurrent readers simultaneously. Still single-writer, but readers aren't blocked",
+        "SQLite doesn't support concurrent access",
+        "Connection pooling solves it"
+      ],
+      "answerIndex": 1,
+      "explanation": "WAL mode: reads happen from the old snapshot while write is in the WAL file. PRAGMA journal_mode=WAL. Concurrent readers never block. Still fundamentally single-writer.",
+      "tags": [
+        "SQLite",
+        "WAL",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "edb-q3",
+      "type": "mcq",
+      "prompt": "Why use prepared statements in SQLite (or any DB)?",
+      "choices": [
+        "Faster syntax",
+        "Prepared statements separate SQL code from data \u2014 values are bound as parameters, never interpolated into the SQL string. This prevents SQL injection: user input can't manipulate the query structure",
+        "Required for transactions",
+        "LIMIT optimisation"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQL injection: db.query('SELECT * FROM users WHERE id = ' + userId) where userId = '1 OR 1=1' dumps all users. Prepared: db.prepare('SELECT * FROM users WHERE id = ?').get(userId) \u2014 the ? is always a value, never SQL.",
+      "tags": [
+        "SQLite",
+        "security",
+        "prepared-statements"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "edb-fc1",
+      "front": "SQLite vs Client-Server DB",
+      "back": "SQLite: in-process, single file, zero-config, sync API. Ideal: mobile, desktop, offline, dev/test, edge. Not ideal: multi-server concurrent writes, network access, >100GB.",
+      "tags": [
+        "SQLite"
+      ]
+    },
+    {
+      "id": "edb-fc2",
+      "front": "WAL mode",
+      "back": "PRAGMA journal_mode=WAL. Allows concurrent reads while one writer operates. Default mode blocks readers during writes. Enable WAL in almost all production SQLite apps.",
+      "tags": [
+        "SQLite",
+        "WAL"
+      ]
+    },
+    {
+      "id": "edb-fc3",
+      "front": "SQLite prepared statements (better-sqlite3)",
+      "back": "const stmt = db.prepare('SELECT * FROM t WHERE id = ?'); stmt.get(id). Synchronous, safe (parameterized), cacheable. Never interpolate user input into SQL strings.",
+      "tags": [
+        "SQLite",
+        "prepared-statements"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Embedded Databases\n\nDesign a realistic production service with Embedded Databases at its core. No code required:\n\n1. Why Embedded Databases over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "embedded-databases-pc1",
+        "text": "Justified use of Embedded Databases for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "embedded-databases-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "embedded-databases-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "embedded-databases-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "embedded-databases-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Embedded Databases remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

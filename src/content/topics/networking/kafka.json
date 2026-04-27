@@ -1,0 +1,127 @@
+{
+  "id": "kafka",
+  "unit": 4,
+  "order": 22,
+  "title": "Kafka",
+  "summary": "Master Kafka: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "sharding"
+  ],
+  "guide": "# Apache Kafka \u2014 Event Streaming Platform\n\nKafka is a **distributed, durable, high-throughput event streaming platform**. Unlike traditional message queues, Kafka retains messages for days/weeks \u2014 consumers can replay events from any point.\n\n## Kafka Architecture\n\n```\nProducer \u2500\u2500\u2192 Topic (partitioned) \u2500\u2500\u2192 Consumer Groups\n\nTopic: logical stream of events\n  Partition 0: [event1, event3, event5...]  \u2190 ordered within partition\n  Partition 1: [event2, event4, event6...]\n  Partition 2: [...]\n\nEach partition is an append-only log stored on disk.\nRetention: events kept for configurable time (7 days default) regardless of read.\n```\n\n## Partitions and Consumer Groups\n\n```\nConsumer Group \"order-service\" (3 consumers, 3 partitions):\n  Consumer A \u2190 Partition 0  (exclusive assignment)\n  Consumer B \u2190 Partition 1\n  Consumer C \u2190 Partition 2\n\nNew consumer joins (4 consumers, 3 partitions):\n  Consumer A \u2190 Partition 0\n  Consumer B \u2190 Partition 1\n  Consumer D \u2190 Partition 2\n  Consumer C \u2190 idle (no partition \u2014 more consumers than partitions is wasteful)\n\nDifferent group \"analytics-service\" reads the SAME topic independently:\n  Doesn't affect order-service offsets/position\n  Can read from beginning or latest  \u2190 Kafka's key advantage over RabbitMQ\n```\n\n## Producer (Node.js with kafkajs)\n\n```javascript\nconst { Kafka } = require('kafkajs');\nconst kafka = new Kafka({ brokers: ['localhost:9092'] });\nconst producer = kafka.producer();\n\nawait producer.connect();\nawait producer.send({\n  topic: 'orders',\n  messages: [\n    { key: String(order.userId), value: JSON.stringify(order) }\n    //       \u2191 same key \u2192 same partition \u2192 ordering per user\n  ]\n});\n```\n\n## Consumer\n\n```javascript\nconst consumer = kafka.consumer({ groupId: 'order-processor' });\nawait consumer.connect();\nawait consumer.subscribe({ topic: 'orders', fromBeginning: false });\n\nawait consumer.run({\n  eachMessage: async ({ topic, partition, message }) => {\n    const order = JSON.parse(message.value.toString());\n    await processOrder(order);\n    // Offset committed automatically (or manually for at-least-once)\n  }\n});\n```\n\n## Kafka vs RabbitMQ\n\n| Aspect | Kafka | RabbitMQ |\n|---|---|---|\n| Message retention | Days/weeks (configurable) | Until consumed (or TTL) |\n| Replay | Yes \u2014 seek to any offset | No |\n| Ordering | Per partition | Per queue |\n| Throughput | Very high (millions/sec) | Lower |\n| Consumer model | Pull-based | Push-based |\n| Best for | Event sourcing, analytics, log aggregation | Task queues, RPC patterns |\n\n## Common Pitfalls\n- **More consumers than partitions** \u2014 extra consumers are idle. Scale partitions first, then consumers (must match or exceed).\n- **Unordered messages** \u2014 ordering is per-partition only. Use the same key for events that must be ordered (all orders for user X get the same partition).\n- **Large messages** \u2014 Kafka is optimized for small-to-medium messages. Large blobs should be stored externally (S3) with Kafka carrying the reference.\n- **Not monitoring consumer lag** \u2014 if consumers fall behind, lag grows. Alert on consumer group lag > threshold.\n",
+  "questions": [
+    {
+      "id": "kfk-q1",
+      "type": "mcq",
+      "prompt": "How does Kafka handle multiple consumer groups reading the same topic?",
+      "choices": [
+        "Only one group can read at a time",
+        "Each consumer group has its own offset pointer \u2014 they read independently. Adding a new consumer group doesn't affect existing groups' positions. All groups see all events",
+        "Second group gets remaining messages",
+        "Groups share an offset"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kafka's offset model: each consumer group tracks its own position. A new analytics service can read from the beginning of a topic without affecting the order-processing service. This is the key architectural advantage over traditional queues.",
+      "tags": [
+        "kafka",
+        "consumer-groups"
+      ]
+    },
+    {
+      "id": "kfk-q2",
+      "type": "mcq",
+      "prompt": "Why should events for the same user always use the same Kafka partition key?",
+      "choices": [
+        "For encryption",
+        "Kafka only guarantees ordering WITHIN a partition. Assigning the same key (e.g., userId) to all of a user's events ensures they land in the same partition \u2014 maintaining order for that user",
+        "Keys are for auth",
+        "Random distribution is better"
+      ],
+      "answerIndex": 1,
+      "explanation": "Key-based partitioning: hash(key) % numPartitions determines the partition. Same key = same partition = guaranteed ordering. Different users (different keys) may go to different partitions \u2014 parallelism without sacrificing per-user order.",
+      "tags": [
+        "kafka",
+        "partitioning",
+        "ordering"
+      ]
+    },
+    {
+      "id": "kfk-q3",
+      "type": "mcq",
+      "prompt": "Kafka advantage over RabbitMQ for event replay?",
+      "choices": [
+        "Kafka is faster",
+        "Kafka retains messages for configurable duration (days/weeks) regardless of consumption. A new service can read historical events from the beginning of the topic. RabbitMQ deletes messages after consumption \u2014 no replay possible",
+        "Replay is a disadvantage",
+        "RabbitMQ also supports replay"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kafka's disk-based log with retention policies enables replay. A new fraud detection service can process all historical orders from week 1. Event sourcing, audit logs, and analytics depend on this. RabbitMQ is a go, RabbitMQ-consume = gone.",
+      "tags": [
+        "kafka",
+        "event-replay"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "kfk-fc1",
+      "front": "Kafka topic partitions",
+      "back": "Each partition is an ordered append-only log. Ordering guaranteed within partition only. Same key \u2192 same partition (ensures ordering per entity). More partitions = more parallelism.",
+      "tags": [
+        "kafka"
+      ]
+    },
+    {
+      "id": "kfk-fc2",
+      "front": "Consumer groups",
+      "back": "Each group tracks its own offset independently. Multiple groups can read the same topic simultaneously without interfering. More consumers than partitions = idle consumers.",
+      "tags": [
+        "kafka"
+      ]
+    },
+    {
+      "id": "kfk-fc3",
+      "front": "Kafka vs RabbitMQ choice",
+      "back": "Kafka: replay, event sourcing, high throughput, analytics pipelines, multiple independent consumers. RabbitMQ: task queues, complex routing, RPC-style patterns, at-most-once-processed semantics.",
+      "tags": [
+        "kafka",
+        "comparison"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Kafka\n\nDesign a realistic production service with Kafka at its core. No code required:\n\n1. Why Kafka over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "kafka-pc1",
+        "text": "Justified use of Kafka for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "kafka-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "kafka-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "kafka-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "kafka-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Kafka remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

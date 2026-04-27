@@ -1,0 +1,420 @@
+{
+  "id": "angular-forms",
+  "unit": 10,
+  "order": 103,
+  "title": "Angular Forms",
+  "summary": "Template-driven vs reactive forms, FormControl, FormGroup, FormArray, validators, and form patterns.",
+  "prereqs": [
+    "angular-data-binding",
+    "angular-rxjs"
+  ],
+  "guide": "# Angular Forms\n\nTwo approaches: **template-driven** (model in template) and **reactive** (model in TypeScript). Think of template-driven as the form *directing* Angular — you bind `[(ngModel)]` in HTML and Angular infers the model. Reactive is the reverse: you build the model in TypeScript and the template *mirrors* it.\n\n```\nTemplate-driven                  Reactive\n──────────────────────────────   ──────────────────────────────\nSource of truth: DOM             Source of truth: FormGroup\nSync: no (async model update)    Sync: yes\nTest: harder (DOM needed)        Test: easy (plain TS)\nDynamic forms: clunky            Dynamic forms: FormArray = 1st class\n```\n\n## Reactive Forms with FormBuilder\n```typescript\nform = this.fb.group({\n  email:    ['', [Validators.required, Validators.email]],\n  password: ['', [Validators.required, Validators.minLength(8)]]\n});\n\n// Submit:\nif (this.form.valid) { this.http.post('/auth', this.form.getRawValue()); }\n```\n\n## FormArray — Dynamic Fields\n```typescript\nget skills() { return this.form.get('skills') as FormArray; }\naddSkill()            { this.skills.push(this.fb.control('')); }\nremoveSkill(i:number) { this.skills.removeAt(i); }\n```\n\n```\nFormGroup\n  ├── email:    FormControl\n  ├── password: FormControl\n  └── skills:   FormArray\n        ├── [0]: FormControl  ← dynamic\n        ├── [1]: FormControl\n        └── [2]: FormControl\n```\n\n## Custom Validators\n```typescript\n// Sync\nfunction noSpaces(ctrl:AbstractControl): ValidationErrors | null {\n  return ctrl.value?.includes(' ') ? { noSpaces: true } : null;\n}\n// Cross-field (on FormGroup)\nfunction passwordMatch(group:AbstractControl): ValidationErrors | null {\n  return group.get('password')?.value === group.get('confirm')?.value\n    ? null : { mismatch: true };\n}\n```\n\n## Async Validator\n```typescript\nfunction emailAvailable(svc: UserService): AsyncValidatorFn {\n  return (ctrl: AbstractControl): Observable<ValidationErrors | null> =>\n    svc.checkEmail(ctrl.value).pipe(\n      map(taken => taken ? { emailTaken: true } : null),\n      catchError(() => of(null))  // network errors = valid\n    );\n}\n// Usage: ['', [Validators.email], [emailAvailable(userSvc)]]\n// Only fires after ALL sync validators pass\n```\n\n## State Flags\n| Flag       | Meaning                          |\n|-----------|----------------------------------|\n| touched   | user focused + blurred           |\n| dirty     | user changed the value           |\n| valid     | all validators pass              |\n| pending   | async validator running          |\n\nShow error: `*ngIf=\"ctrl.invalid && ctrl.touched\"`\n\n```\nUser lands on page\n  → all fields: pristine, untouched, invalid\nUser types in email field\n  → email: dirty, touched, pending (async fires)\nUser tabs away\n  → email: touched, valid OR invalid\nUser clicks Submit → form.markAllAsTouched()\n  → ALL fields: touched → errors visible everywhere\n```\n\n## Common Pitfalls\n- `form.value` excludes disabled controls; `form.getRawValue()` includes all.\n- `patchValue` updates a subset; `setValue` requires all fields.\n- Cast FormArray: `this.form.get('skills') as FormArray`.\n- `ReactiveFormsModule` required for `[formGroup]` / `formControlName`.\n- Async validators only fire after all sync validators pass.\n- Returning `{ valid: true }` instead of `null` marks the control as INVALID (any truthy object = error).\n- Non-nullable FormControl: `new FormControl<string>('', { nonNullable: true })` — reset returns '' not null.\n",
+  "questions": [
+    {
+      "id": "arf-q1",
+      "type": "mcq",
+      "prompt": "Key difference: template-driven vs reactive forms?",
+      "choices": [
+        "Template-driven is newer",
+        "Source of truth: DOM for template-driven, TypeScript class for reactive. Reactive is synchronous, testable",
+        "Reactive requires backend",
+        "Template-driven has no validation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Reactive forms hold FormGroup in TypeScript \u2014 synchronous, predictable, unit-testable.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q2",
+      "type": "mcq",
+      "prompt": "Why guard error display with `touched` or `dirty`?",
+      "choices": [
+        "Angola skips validation until touched",
+        "Showing 'required' before user interacts is bad UX \u2014 blank forms with red errors are confusing",
+        "Validators don't run",
+        "Only touched fields validate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fields are invalid but untouched on load. Guard with touched/dirty to show errors only after interaction.",
+      "tags": [
+        "forms",
+        "UX"
+      ]
+    },
+    {
+      "id": "arf-q3",
+      "type": "codeOutput",
+      "prompt": "form.value after patchValue?",
+      "code": "const f = new FormGroup({ name: new FormControl('Alice'), city: new FormControl('London') });\nf.patchValue({ name: 'Bob' });",
+      "choices": [
+        "{name:'Bob'}",
+        "{name:'Bob',city:'London'}",
+        "Error",
+        "city:null"
+      ],
+      "answerIndex": 1,
+      "explanation": "patchValue only updates provided fields. city stays 'London'.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q4",
+      "type": "mcq",
+      "prompt": "Custom validator return when valid?",
+      "choices": [
+        "true",
+        "{ valid:true }",
+        "null",
+        "{}"
+      ],
+      "answerIndex": 2,
+      "explanation": "null = no error. { key: data } = error. control.errors is null when valid.",
+      "tags": [
+        "forms",
+        "validation"
+      ]
+    },
+    {
+      "id": "arf-q5",
+      "type": "mcq",
+      "prompt": "Why use getRawValue() for submission?",
+      "choices": [
+        "Faster",
+        "form.value excludes disabled controls; getRawValue includes them",
+        "Same",
+        "Resolves async validators"
+      ],
+      "answerIndex": 1,
+      "explanation": "Disabled fields excluded from form.value. Always use getRawValue() to get complete data.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q6",
+      "type": "mcq",
+      "prompt": "Module for `[formGroup]` and `formControlName`?",
+      "choices": [
+        "FormsModule",
+        "CommonModule",
+        "ReactiveFormsModule",
+        "HttpClientModule"
+      ],
+      "answerIndex": 2,
+      "explanation": "ReactiveFormsModule provides reactive directive bindings.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q7",
+      "type": "mcq",
+      "prompt": "When do async validators fire?",
+      "choices": [
+        "Before sync",
+        "Simultaneously",
+        "Only after ALL sync validators pass",
+        "After 1 second"
+      ],
+      "answerIndex": 2,
+      "explanation": "Angular short-circuits \u2014 no async HTTP calls if sync validation already fails.",
+      "tags": [
+        "forms",
+        "async-validators"
+      ]
+    },
+    {
+      "id": "arf-q8",
+      "type": "multi",
+      "prompt": "Flags indicating user interaction?",
+      "choices": [
+        "dirty",
+        "touched",
+        "valid",
+        "pristine"
+      ],
+      "answerIndexes": [
+        0,
+        1
+      ],
+      "explanation": "dirty: changed value. touched: focused+blurred.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q9",
+      "type": "mcq",
+      "prompt": "Cross-field validator placement?",
+      "choices": [
+        "Each control",
+        "FormGroup containing both fields",
+        "Submit handler",
+        "Async only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cross-field validators receive the group \u2014 apply at FormGroup level.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q10",
+      "type": "mcq",
+      "prompt": "Show ALL validation errors at once on submit?",
+      "choices": [
+        "form.validate()",
+        "form.markAllAsTouched()",
+        "form.showErrors()",
+        "form.submit()"
+      ],
+      "answerIndex": 1,
+      "explanation": "markAllAsTouched() marks every control touched, triggering error display via touched guards.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-q11",
+      "type": "mcq",
+      "prompt": "A custom validator returns `{ valid: true }` when input is correct. What is control.valid?",
+      "choices": [
+        "true — the validator returned an object named valid",
+        "false — any truthy object returned is treated as an error",
+        "null",
+        "throws TypeError"
+      ],
+      "answerIndex": 1,
+      "explanation": "Angular treats any non-null return as an error object. Return null for valid. { valid: true } adds a 'valid' error key.",
+      "tags": ["forms", "validation"]
+    },
+    {
+      "id": "arf-q12",
+      "type": "codeOutput",
+      "prompt": "What is form.value after this code?",
+      "code": "const form = new FormGroup({\n  name: new FormControl('Alice'),\n  age:  new FormControl({ value: 30, disabled: true })\n});\nconsole.log(form.value);",
+      "choices": [
+        "{ name: 'Alice', age: 30 }",
+        "{ name: 'Alice' }",
+        "Error — disabled controls crash",
+        "{ name: 'Alice', age: null }"
+      ],
+      "answerIndex": 1,
+      "explanation": "form.value excludes disabled controls. Use form.getRawValue() to get { name: 'Alice', age: 30 }.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "arf-q13",
+      "type": "mcq",
+      "prompt": "When does an async validator's Observable get subscribed to by Angular?",
+      "choices": [
+        "Immediately on control creation",
+        "After user focuses the field",
+        "After all synchronous validators pass with no errors",
+        "On form submit only"
+      ],
+      "answerIndex": 2,
+      "explanation": "Angular short-circuits: if sync validators return errors, async validators are never called, saving unnecessary HTTP requests.",
+      "tags": ["forms", "async-validators"]
+    },
+    {
+      "id": "arf-q14",
+      "type": "mcq",
+      "prompt": "What is the correct template syntax to bind a FormArray named 'items'?",
+      "choices": [
+        "[formArray]=\"items\"",
+        "formArrayName=\"items\" with *ngFor over form.controls",
+        "[(ngModel)]=\"items\"",
+        "formGroupName=\"items\""
+      ],
+      "answerIndex": 1,
+      "explanation": "Use formArrayName='items' on the container, then *ngFor='let ctrl of items.controls; let i=index' with [formGroupName]='i' or [formControl]='ctrl'.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "arf-q15",
+      "type": "mcq",
+      "prompt": "nonNullable: true in FormControl changes which behavior?",
+      "choices": [
+        "Prevents null values from being set",
+        "reset() restores to initial value instead of null",
+        "addValidators(Validators.required) automatically",
+        "Makes type T instead of T | null"
+      ],
+      "answerIndex": 1,
+      "explanation": "By default reset() sets value to null. nonNullable: true makes reset() return to the initial value passed in the constructor instead.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "arf-q16",
+      "type": "multi",
+      "prompt": "Which are valid ways to add validators after control creation?",
+      "choices": [
+        "ctrl.addValidators([Validators.required])",
+        "ctrl.setValidators([Validators.required])",
+        "ctrl.validators.push(Validators.required)",
+        "ctrl.updateValueAndValidity() after setValidators"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "addValidators appends; setValidators replaces. Both need updateValueAndValidity() to retrigger. You cannot push into validators — it's not an array you own.",
+      "tags": ["forms", "validation"]
+    },
+    {
+      "id": "arf-q17",
+      "type": "codeOutput",
+      "prompt": "What is the value after setValue on this form?",
+      "code": "const f = new FormGroup({\n  a: new FormControl('x'),\n  b: new FormControl('y')\n});\ntry { f.setValue({ a: 'z' }); } catch(e) { console.log('ERROR'); }\nconsole.log(f.value);",
+      "choices": [
+        "{ a: 'z', b: 'y' }",
+        "ERROR then { a: 'x', b: 'y' }",
+        "ERROR then { a: 'z', b: 'y' }",
+        "{ a: 'z' }"
+      ],
+      "answerIndex": 1,
+      "explanation": "setValue throws if not all fields are provided. The throw happens before any mutation, so form stays at original values.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "arf-q18",
+      "type": "mcq",
+      "prompt": "A control is `pristine`. What does that mean?",
+      "choices": [
+        "User has not changed its value since creation or last reset",
+        "Control has no validators",
+        "Control is valid",
+        "User has not focused the control"
+      ],
+      "answerIndex": 0,
+      "explanation": "pristine = opposite of dirty. pristine is false once the user changes the value. touched/untouched tracks focus, not value change.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "arf-q19",
+      "type": "mcq",
+      "prompt": "Template-driven forms require which module?",
+      "choices": [
+        "ReactiveFormsModule",
+        "FormsModule",
+        "BrowserModule",
+        "CommonModule"
+      ],
+      "answerIndex": 1,
+      "explanation": "FormsModule provides ngModel, ngForm directives for template-driven. ReactiveFormsModule provides formGroup/formControlName for reactive.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "arf-q20",
+      "type": "mcq",
+      "prompt": "When using `FormBuilder.group`, how do you apply a cross-field validator?",
+      "choices": [
+        "As the third argument to fb.group()",
+        "As the second argument: fb.group({...}, { validators: matchFn })",
+        "On the individual FormControl",
+        "In ngOnInit after group creation"
+      ],
+      "answerIndex": 1,
+      "explanation": "fb.group(controls, { validators: [...], asyncValidators: [...] }) — second arg is AbstractControlOptions. The validator receives the group as AbstractControl.",
+      "tags": ["forms", "validation"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "arf-fc1",
+      "front": "Validator return contract",
+      "back": "null = valid. { errorKey: data } = invalid. control.errors is null when valid. control.hasError('required') checks key.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-fc2",
+      "front": "patchValue vs setValue",
+      "back": "setValue: all fields required, throws if missing. patchValue: subset only, others unchanged.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-fc3",
+      "front": "getRawValue()",
+      "back": "Includes disabled controls; form.value excludes them. Use getRawValue() for form submission.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-fc4",
+      "front": "FormArray ops",
+      "back": "push(ctrl), removeAt(i), at(i), .controls array. Cast: form.get('items') as FormArray.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-fc5",
+      "front": "touched vs dirty",
+      "back": "touched: focused+blurred. dirty: changed. Show: ctrl.invalid && (ctrl.dirty || ctrl.touched). Call markAllAsTouched() on submit.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-fc6",
+      "front": "Cross-field validator",
+      "back": "new FormGroup({...}, { validators: matchFn }). matchFn receives group as AbstractControl. Return null (valid) or { key: true }.",
+      "tags": [
+        "forms"
+      ]
+    },
+    {
+      "id": "arf-fc7",
+      "front": "Async validator signature",
+      "back": "AsyncValidatorFn = (ctrl: AbstractControl) => Observable<ValidationErrors | null>. Return of(null) on error. Only fires after all sync validators pass.",
+      "tags": ["forms", "async-validators"]
+    },
+    {
+      "id": "arf-fc8",
+      "front": "nonNullable FormControl",
+      "back": "new FormControl<string>('', { nonNullable: true }). reset() returns to initial value not null. Type is string not string|null.",
+      "tags": ["forms"]
+    }
+  ],
+  "project": {
+    "brief": "Build a registration form: Account step (email with async availability check, password + confirm with cross-field match). Profile step (name, bio, dynamic skills FormArray). Design: async validator, cross-field validator, FormArray, error display, submit.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Async email validator returns Observable<ValidationErrors|null>, fires only after sync pass",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "passwordMatch validator applied at FormGroup level",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Skills FormArray with push() and removeAt(i), formArrayName in template",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Errors guarded by touched; markAllAsTouched() on submit",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Submit uses form.getRawValue()",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "Async validator only fires after Validators.email passes \u2014 add it as sync validator to avoid wasted HTTP.",
+      "skills: get skills() { return this.form.get('skills') as FormArray; }",
+      "Template: formArrayName='skills', inner div with [formGroupName]='i'"
+    ]
+  }
+}

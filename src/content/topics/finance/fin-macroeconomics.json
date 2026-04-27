@@ -1,0 +1,117 @@
+{
+  "id": "fin-macroeconomics",
+  "unit": 8,
+  "order": 56,
+  "title": "Macroeconomics for Investors",
+  "summary": "GDP, inflation, interest rates, currency, and how macro trends influence markets.",
+  "prereqs": [
+	"fin-stock-market-basics"
+  ],
+  "guide": "# Macroeconomics for Investors\n\nMacroeconomics studies the whole economy: growth, prices, jobs, money, credit, and trade. Investors track macro conditions because they influence company earnings, valuation multiples, and risk appetite.\n\n## Core Indicators\n- **GDP growth**: broad output and income growth.\n- **Inflation**: general price increases; high inflation reduces purchasing power.\n- **Interest rates**: the price of borrowing money.\n- **Unemployment**: labor-market health.\n- **Currency movement**: affects importers, exporters, and foreign investors.\n\n## Interest Rates and Markets\nWhen central banks raise rates, borrowing becomes costlier and future cash flows are discounted more heavily. This often pressures high-valuation stocks. When rates fall, credit becomes easier and risk assets may benefit.\n\n## Inflation\nModerate inflation can signal demand, but very high inflation hurts consumers and margins. Businesses with pricing power can pass costs to customers better than commodity-like businesses.\n\n## Practical Investor Checklist\n1. Identify whether growth is accelerating or slowing.\n2. Check whether inflation is above or below the central bank target.\n3. Watch central-bank guidance for rate direction.\n4. Connect macro trends to sectors, not just the overall index.\n\n## Common Pitfalls\n- Treating one data point as a trend.\n- Assuming macro forecasts are precise.\n- Ignoring company fundamentals because of macro headlines.\n- Forgetting that markets often price expectations before data arrives.\n\n## Connections\n- **Stock Market Basics** — indices react to growth and rate expectations.\n- **Fundamental Analysis** — discount rates affect valuation.\n- **Mutual Funds** — asset allocation changes with the macro cycle.",
+  "questions": [
+	{
+	  "id": "fm-q1",
+	  "type": "mcq",
+	  "prompt": "GDP is primarily a measure of:",
+	  "choices": [
+		"Total economic output",
+		"One company's profit",
+		"A stock's daily volume",
+		"A bond coupon"
+	  ],
+	  "answerIndex": 0,
+	  "explanation": "GDP measures the value of goods and services produced in an economy.",
+	  "tags": [
+		"gdp",
+		"macro"
+	  ]
+	},
+	{
+	  "id": "fm-q2",
+	  "type": "mcq",
+	  "prompt": "Rising interest rates usually make borrowing:",
+	  "choices": [
+		"Cheaper",
+		"Costlier",
+		"Free",
+		"Unrelated to cost"
+	  ],
+	  "answerIndex": 1,
+	  "explanation": "Higher rates increase the cost of loans and raise discount rates.",
+	  "tags": [
+		"interest-rates"
+	  ]
+	},
+	{
+	  "id": "fm-q3",
+	  "type": "multi",
+	  "prompt": "Which are macroeconomic indicators?",
+	  "choices": [
+		"Inflation",
+		"GDP growth",
+		"Unemployment",
+		"A single candlestick pattern"
+	  ],
+	  "answerIndexes": [
+		0,
+		1,
+		2
+	  ],
+	  "explanation": "Inflation, GDP, and unemployment describe broad economic conditions.",
+	  "tags": [
+		"macro-indicators"
+	  ]
+	}
+  ],
+  "flashcards": [
+	{
+	  "id": "fm-fc1",
+	  "front": "GDP",
+	  "back": "A measure of broad economic output.",
+	  "tags": [
+		"macro"
+	  ]
+	},
+	{
+	  "id": "fm-fc2",
+	  "front": "Inflation",
+	  "back": "A general rise in prices that reduces purchasing power.",
+	  "tags": [
+		"macro"
+	  ]
+	},
+	{
+	  "id": "fm-fc3",
+	  "front": "Higher rates usually do what to borrowing?",
+	  "back": "They make borrowing costlier.",
+	  "tags": [
+		"interest-rates"
+	  ]
+	}
+  ],
+  "project": {
+	"brief": "Build a one-page macro dashboard explaining GDP, inflation, rates, and likely sector impact.",
+	"checklist": [
+	  {
+		"id": "c1",
+		"text": "Explains at least four macro indicators",
+		"weight": 1
+	  },
+	  {
+		"id": "c2",
+		"text": "Connects interest rates to market valuation",
+		"weight": 1
+	  },
+	  {
+		"id": "c3",
+		"text": "Lists risks of over-relying on macro forecasts",
+		"weight": 1
+	  }
+	],
+	"hints": [
+	  "Separate facts from forecasts.",
+	  "Think in sector impacts: banks, exporters, real estate, and consumer companies react differently."
+	]
+  }
+}
+

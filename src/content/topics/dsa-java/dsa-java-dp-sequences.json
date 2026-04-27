@@ -1,0 +1,444 @@
+{
+  "id": "dsa-java-dp-sequences",
+  "unit": 9,
+  "order": 74,
+  "title": "DP on Sequences in Java",
+  "summary": "Longest Common Subsequence (LCS), Longest Increasing Subsequence (LIS), Edit Distance \u2014 2D DP table intuition and space optimisation.",
+  "prereqs": [
+    "dsa-java-dp-intro",
+    "dsa-java-strings"
+  ],
+  "guide": "# DP on Sequences in Java\n\nSequence DP problems ask about relationships *between* two strings or *within* one sequence. The key mental shift from 1D DP: you now build a **2D table** where rows represent one sequence and columns represent another, and each cell answers a sub-question about prefixes of both.\n\n## LCS \u2014 Longest Common Subsequence\n```java\n// A subsequence keeps relative order but skips characters.\n// 'ACE' is a subsequence of 'ABCDE'.\n//\n// dp[i][j] = LCS length of s1[0..i-1] and s2[0..j-1]\n//\n// Visualise the table for s1='ABCD', s2='ACBD':\n//       ''  A  C  B  D\n//  ''  [ 0  0  0  0  0 ]\n//   A  [ 0  1  1  1  1 ]\n//   B  [ 0  1  1  2  2 ]\n//   C  [ 0  1  2  2  2 ]\n//   D  [ 0  1  2  2  3 ]  \u2190 LCS = 3\n//\nint lcs(String s1, String s2) {\n    int m = s1.length(), n = s2.length();\n    int[][] dp = new int[m+1][n+1];\n    for (int i = 1; i <= m; i++)\n        for (int j = 1; j <= n; j++)\n            if (s1.charAt(i-1) == s2.charAt(j-1))\n                dp[i][j] = 1 + dp[i-1][j-1];  // chars match: extend diagonal\n            else\n                dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);  // skip one char\n    return dp[m][n];\n}\n```\n\n## LIS \u2014 Longest Increasing Subsequence\n```java\n// Within ONE array, find the longest subsequence where each element is STRICTLY larger.\n// [1, 3, 2, 4] \u2192 LIS = [1, 2, 4] or [1, 3, 4], length 3.\n//\n// O(n\u00b2) DP approach:\n// dp[i] = length of LIS ending at index i\n//\n//  nums: [1, 3, 2, 4]\n//  dp:   [1, 2, 2, 3]   \u2190 dp[3]=3 because 4 extends either [1,3] or [1,2]\nint lisN2(int[] nums) {\n    int n = nums.length, max = 1;\n    int[] dp = new int[n];\n    Arrays.fill(dp, 1);\n    for (int i = 1; i < n; i++)\n        for (int j = 0; j < i; j++)\n            if (nums[j] < nums[i]) { dp[i] = Math.max(dp[i], dp[j]+1); max = Math.max(max, dp[i]); }\n    return max;\n}\n\n// O(n log n) via patience sorting (binary search on 'tails' array)\nint lisNLogN(int[] nums) {\n    List<Integer> tails = new ArrayList<>();\n    for (int n : nums) {\n        int pos = Collections.binarySearch(tails, n);\n        if (pos < 0) pos = -(pos + 1);\n        if (pos == tails.size()) tails.add(n);\n        else tails.set(pos, n);\n    }\n    return tails.size();\n}\n```\n\n## Edit Distance (Levenshtein)\n```java\n// Minimum operations (insert / delete / replace) to transform word1 into word2.\n//\n// dp[i][j] = edit distance between word1[0..i-1] and word2[0..j-1]\n//\n// Visualise 'horse' \u2192 'ros':\n//       ''  r  o  s\n//  ''  [ 0  1  2  3 ]\n//   h  [ 1  1  2  3 ]\n//   o  [ 2  2  1  2 ]\n//   r  [ 3  2  2  2 ]\n//   s  [ 4  3  3  2 ]\n//   e  [ 5  4  4  3 ]  \u2190 edit distance = 3\n//\nint editDistance(String w1, String w2) {\n    int m = w1.length(), n = w2.length();\n    int[][] dp = new int[m+1][n+1];\n    for (int i = 0; i <= m; i++) dp[i][0] = i;  // delete all of w1\n    for (int j = 0; j <= n; j++) dp[0][j] = j;  // insert all of w2\n    for (int i = 1; i <= m; i++)\n        for (int j = 1; j <= n; j++)\n            if (w1.charAt(i-1) == w2.charAt(j-1))\n                dp[i][j] = dp[i-1][j-1];          // no operation needed\n            else\n                dp[i][j] = 1 + Math.min(dp[i-1][j-1],   // replace\n                                Math.min(dp[i-1][j],      // delete from w1\n                                         dp[i][j-1]));   // insert into w1\n    return dp[m][n];\n}\n```\n\n## Space optimisation \u2014 rolling row\n```java\n// LCS and edit distance only look at the previous row.\n// Replace dp[m+1][n+1] with two 1D arrays: prev[] and curr[].\nint lcsSpaceOptimised(String s1, String s2) {\n    int m = s1.length(), n = s2.length();\n    int[] prev = new int[n+1], curr = new int[n+1];\n    for (int i = 1; i <= m; i++) {\n        for (int j = 1; j <= n; j++)\n            curr[j] = s1.charAt(i-1) == s2.charAt(j-1)\n                ? 1 + prev[j-1]\n                : Math.max(prev[j], curr[j-1]);\n        int[] tmp = prev; prev = curr; curr = tmp;  // swap\n        Arrays.fill(curr, 0);\n    }\n    return prev[n];\n}\n// Space: O(n) instead of O(m*n)\n```\n\n## Common Pitfalls\n- Confusing subsequence (order preserved, can skip) with substring (must be contiguous)\n- LCS: forgetting that dp[i][j] uses 1-indexed characters \u2014 dp[i][j] corresponds to s1[i-1] and s2[j-1]\n- LIS O(n\u00b2): not initialising dp[i]=1 (every element is an LIS of length 1 by itself)\n- Edit distance: forgetting base cases dp[i][0]=i and dp[0][j]=j (cost of deleting/inserting everything)\n- Space optimisation: swapping prev and curr incorrectly \u2014 forgetting to clear the new curr after swapping\n\n## Connections\n- **DP Intro**: 2D sequences DP is a direct extension of 1D tabulation \u2014 same fill-table logic\n- **Strings**: LCS and edit distance operate on characters \u2014 s.charAt(i-1) is the standard accessor\n- **Binary Search**: LIS O(n log n) uses binary search on the 'patience sorting' tails array\n- **Recursion**: the recursive formulation is always easier to derive first, then convert to tabulation",
+  "questions": [
+    {
+      "id": "djds-q1",
+      "type": "mcq",
+      "prompt": "A subsequence differs from a substring in that:",
+      "choices": [
+        "It must be contiguous",
+        "It preserves relative order but may skip characters",
+        "It must have the same length",
+        "It only works on sorted arrays"
+      ],
+      "answerIndex": 1,
+      "explanation": "'ACE' is a subsequence of 'ABCDE' (skips B and D). 'ABC' is both a subsequence AND a substring.",
+      "tags": [
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "djds-q2",
+      "type": "mcq",
+      "prompt": "LCS dp[i][j] when s1[i-1] == s2[j-1]:",
+      "choices": [
+        "dp[i][j] = dp[i-1][j] + 1",
+        "dp[i][j] = 1 + dp[i-1][j-1]",
+        "dp[i][j] = dp[i][j-1]",
+        "dp[i][j] = dp[i-1][j-1]"
+      ],
+      "answerIndex": 1,
+      "explanation": "Characters match \u2014 extend the LCS of both prefixes by 1. The diagonal cell represents the shared common prefix.",
+      "tags": [
+        "lcs"
+      ]
+    },
+    {
+      "id": "djds-q3",
+      "type": "mcq",
+      "prompt": "LCS dp[i][j] when s1[i-1] != s2[j-1]:",
+      "choices": [
+        "dp[i][j] = 0",
+        "dp[i][j] = dp[i-1][j-1]",
+        "dp[i][j] = max(dp[i-1][j], dp[i][j-1])",
+        "dp[i][j] = min(dp[i-1][j], dp[i][j-1])"
+      ],
+      "answerIndex": 2,
+      "explanation": "Characters don't match \u2014 the LCS is the best we can do by skipping one character from either string.",
+      "tags": [
+        "lcs"
+      ]
+    },
+    {
+      "id": "djds-q4",
+      "type": "codeOutput",
+      "prompt": "LCS of 'AB' and 'AB':",
+      "code": "// dp table (2x2 + borders)\n// chars match at every position",
+      "choices": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "answerIndex": 2,
+      "explanation": "Both strings are identical \u2014 LCS = full length = 2.",
+      "tags": [
+        "lcs",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djds-q5",
+      "type": "mcq",
+      "prompt": "LCS of 'ABC' and 'DEF' is:",
+      "choices": [
+        "3",
+        "1",
+        "0",
+        "6"
+      ],
+      "answerIndex": 2,
+      "explanation": "No characters in common \u2014 LCS = 0.",
+      "tags": [
+        "lcs"
+      ]
+    },
+    {
+      "id": "djds-q6",
+      "type": "mcq",
+      "prompt": "LIS dp[i] (O(n\u00b2) approach) is initialised to:",
+      "choices": [
+        "0 for all i",
+        "1 for all i \u2014 every element is an LIS of length 1 on its own",
+        "nums[i] for all i",
+        "-1 as sentinel"
+      ],
+      "answerIndex": 1,
+      "explanation": "The minimum valid LIS ending at any index is just the element itself \u2014 length 1.",
+      "tags": [
+        "lis"
+      ]
+    },
+    {
+      "id": "djds-q7",
+      "type": "codeOutput",
+      "prompt": "LIS length of [3, 1, 2, 4]:",
+      "code": "// LIS could be [1,2,4] or [3,4]\n// longest increasing subsequence",
+      "choices": [
+        "2",
+        "3",
+        "4",
+        "1"
+      ],
+      "answerIndex": 1,
+      "explanation": "[1,2,4] has length 3. [3,4] has length 2. LIS = 3.",
+      "tags": [
+        "lis",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djds-q8",
+      "type": "mcq",
+      "prompt": "LIS O(n log n) (patience sorting) replaces the inner O(n) loop with:",
+      "choices": [
+        "Hashing",
+        "Binary search on a 'tails' array to find insertion position",
+        "Sorting the array first",
+        "A priority queue"
+      ],
+      "answerIndex": 1,
+      "explanation": "tails[i] = smallest tail element of all increasing subsequences of length i+1. Binary search finds where to place each element.",
+      "tags": [
+        "lis"
+      ]
+    },
+    {
+      "id": "djds-q9",
+      "type": "mcq",
+      "prompt": "Edit distance base case dp[i][0] = i means:",
+      "choices": [
+        "i characters match",
+        "Cost of converting first i characters of w1 to empty string = delete all i",
+        "No operations needed",
+        "Insert i characters"
+      ],
+      "answerIndex": 1,
+      "explanation": "Transforming a prefix of length i to an empty string requires i deletions.",
+      "tags": [
+        "edit-distance"
+      ]
+    },
+    {
+      "id": "djds-q10",
+      "type": "mcq",
+      "prompt": "Edit distance when w1[i-1] == w2[j-1]:",
+      "choices": [
+        "dp[i][j] = dp[i-1][j-1] + 1",
+        "dp[i][j] = dp[i-1][j-1]  (no operation needed)",
+        "dp[i][j] = 0",
+        "dp[i][j] = min of three options"
+      ],
+      "answerIndex": 1,
+      "explanation": "Characters already match \u2014 no operation needed. Inherit from the diagonal.",
+      "tags": [
+        "edit-distance"
+      ]
+    },
+    {
+      "id": "djds-q11",
+      "type": "mcq",
+      "prompt": "Edit distance operations mapped to table directions:",
+      "choices": [
+        "Left = insert, Up = delete, Diagonal = replace/match",
+        "Left = delete, Up = insert, Diagonal = replace/match",
+        "All three directions = replace",
+        "Diagonal only for equal chars"
+      ],
+      "answerIndex": 0,
+      "explanation": "dp[i][j-1]+1 = insert into w1 (move right in w2). dp[i-1][j]+1 = delete from w1 (move down in w1). dp[i-1][j-1]+1 = replace.",
+      "tags": [
+        "edit-distance"
+      ]
+    },
+    {
+      "id": "djds-q12",
+      "type": "codeOutput",
+      "prompt": "Edit distance between 'ab' and 'ab':",
+      "code": "// identical strings",
+      "choices": [
+        "0",
+        "1",
+        "2",
+        "4"
+      ],
+      "answerIndex": 0,
+      "explanation": "Identical strings need 0 operations.",
+      "tags": [
+        "edit-distance"
+      ]
+    },
+    {
+      "id": "djds-q13",
+      "type": "mcq",
+      "prompt": "Edit distance between 'a' and 'b':",
+      "choices": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "answerIndex": 1,
+      "explanation": "One replace operation transforms 'a' to 'b'.",
+      "tags": [
+        "edit-distance"
+      ]
+    },
+    {
+      "id": "djds-q14",
+      "type": "mcq",
+      "prompt": "Space complexity of 2D DP table for strings of length m and n:",
+      "choices": [
+        "O(m + n)",
+        "O(m \u00d7 n)",
+        "O(max(m,n))",
+        "O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Full 2D table has (m+1)\u00d7(n+1) cells.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djds-q15",
+      "type": "mcq",
+      "prompt": "Space-optimised LCS/edit-distance uses two 1D arrays because:",
+      "choices": [
+        "The problem is 1D",
+        "Each cell dp[i][j] only depends on dp[i-1][j-1], dp[i-1][j], dp[i][j-1] \u2014 only the previous row needed",
+        "Java doesn't allow large 2D arrays",
+        "The strings are short"
+      ],
+      "answerIndex": 1,
+      "explanation": "Previous row = prev[], current row = curr[]. After each outer loop iteration, swap them.",
+      "tags": [
+        "space-optimisation"
+      ]
+    },
+    {
+      "id": "djds-q16",
+      "type": "mcq",
+      "prompt": "LCS length also equals:",
+      "choices": [
+        "Length of shorter string",
+        "len(s1) + len(s2) - edit_distance_with_only_insert_delete",
+        "LIS length of merged array",
+        "Number of matching characters at same positions"
+      ],
+      "answerIndex": 1,
+      "explanation": "This relationship (LCS = (m+n-editDist)/2 when only inserts/deletes) connects the two problems.",
+      "tags": [
+        "insight"
+      ]
+    },
+    {
+      "id": "djds-q17",
+      "type": "multi",
+      "prompt": "Which are 2D DP problems?",
+      "choices": [
+        "LCS",
+        "Coin change",
+        "Edit distance",
+        "0/1 Knapsack"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Coin change is 1D DP (amount is the only state dimension). The others use two state dimensions.",
+      "tags": [
+        "patterns"
+      ]
+    },
+    {
+      "id": "djds-q18",
+      "type": "mcq",
+      "prompt": "Shortest Common Supersequence (SCS) length of s1 and s2:",
+      "choices": [
+        "len(s1) + len(s2)",
+        "len(s1) + len(s2) - LCS(s1,s2)",
+        "LCS(s1,s2)",
+        "edit_distance(s1,s2)"
+      ],
+      "answerIndex": 1,
+      "explanation": "SCS includes all characters of both strings. Characters in LCS appear once (not twice), so subtract LCS.",
+      "tags": [
+        "scs"
+      ]
+    },
+    {
+      "id": "djds-q19",
+      "type": "mcq",
+      "prompt": "LIS on a strictly decreasing array [5,4,3,2,1]:",
+      "choices": [
+        "5",
+        "0",
+        "1",
+        "3"
+      ],
+      "answerIndex": 2,
+      "explanation": "No two elements satisfy nums[i] < nums[j]. Every LIS has length 1.",
+      "tags": [
+        "lis"
+      ]
+    },
+    {
+      "id": "djds-q20",
+      "type": "mcq",
+      "prompt": "To reconstruct the actual LCS string (not just length):",
+      "choices": [
+        "Re-run the algorithm with extra memory",
+        "Trace back through the dp table from dp[m][n] to dp[0][0]: diagonal means match, left/up means skip",
+        "Sort both strings and find common chars",
+        "Use a HashMap"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backtrack: if s1[i]==s2[j] \u2192 include char, go diagonal. Else go in direction of larger neighbour.",
+      "tags": [
+        "reconstruction"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djds-fc1",
+      "front": "Subsequence vs substring",
+      "back": "Subsequence: skip chars, keep order. Substring: contiguous block.",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc2",
+      "front": "LCS recurrence",
+      "back": "Match: dp[i][j]=1+dp[i-1][j-1]. No match: dp[i][j]=max(dp[i-1][j], dp[i][j-1]).",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc3",
+      "front": "LIS O(n\u00b2)",
+      "back": "dp[i]=1 initially. For j<i: if nums[j]<nums[i], dp[i]=max(dp[i], dp[j]+1).",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc4",
+      "front": "LIS O(n log n)",
+      "back": "Patience sorting: binary search on tails[] to place each element. Length = tails.size().",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc5",
+      "front": "Edit distance recurrence",
+      "back": "Match: dp[i][j]=dp[i-1][j-1]. Else: 1+min(replace diagonal, delete up, insert left).",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc6",
+      "front": "Edit distance base cases",
+      "back": "dp[i][0]=i (delete i chars). dp[0][j]=j (insert j chars).",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc7",
+      "front": "Space optimisation",
+      "back": "2D table \u2192 two 1D arrays (prev, curr). Swap after each row. O(n) space.",
+      "tags": [
+        "dp-sequences"
+      ]
+    },
+    {
+      "id": "djds-fc8",
+      "front": "Backtracking 2D DP",
+      "back": "To reconstruct answer: trace from dp[m][n] backward following the recurrence decisions.",
+      "tags": [
+        "dp-sequences"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write DPSequencesLab.java with:\n1. lcs(String s1, String s2) \u2192 int\n2. lcsString(String s1, String s2) \u2192 String  (reconstruct actual LCS)\n3. lis(int[] nums) \u2192 int  (O(n\u00b2) DP)\n4. lisNLogN(int[] nums) \u2192 int  (O(n log n) patience sort)\n5. editDistance(String w1, String w2) \u2192 int\nInclude main() tests: empty strings, identical strings, fully different strings, decreasing array for LIS.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "lcs returns 0 for empty strings or completely different strings",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "lcsString correctly backtracks through dp table to build the LCS",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "lis initialises dp[i]=1 for all i before the nested loops",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "lisNLogN uses Collections.binarySearch returning negative insertion point",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "editDistance handles empty strings via base case initialisation",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "lcsString: start at dp[m][n], if chars match add to front of result and go diagonal, else go in direction of larger cell.",
+      "lisNLogN: Collections.binarySearch returns -(insertion_point)-1 for missing elements; pos = -(pos+1) converts it.",
+      "editDistance: fill dp[i][0]=i and dp[0][j]=j before the main double loop."
+    ]
+  }
+}

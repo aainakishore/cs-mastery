@@ -1,0 +1,127 @@
+{
+  "id": "serverless-patterns",
+  "unit": 5,
+  "order": 30,
+  "title": "Serverless Patterns",
+  "summary": "Master Serverless Patterns: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "aws-mastery"
+  ],
+  "guide": "# Serverless Patterns\n\nServerless computing abstracts away server management \u2014 you deploy functions that auto-scale, run on demand, and charge only for execution time.\n\n## What Is Serverless\n\n```\nTraditional:                   Serverless:\n  You provision servers          Provider provisions and scales\n  Pay 24/7 regardless of load    Pay per invocation (milliseconds)\n  Manual scaling                 Auto-scale to zero and to millions\n  OS patches your problem        No OS, no runtime management\n\nExamples:\n  AWS Lambda: 15-min functions, 10GB RAM, pay per GB-second\n  Cloudflare Workers: edge, <128MB, pay per million requests\n  Vercel Functions: HTTP endpoints at the edge\n  Azure Functions, GCP Cloud Functions\n```\n\n## Common Serverless Patterns\n\n```\n1. HTTP API Backend (most common):\n   API Gateway \u2192 Lambda \u2192 DynamoDB\n   REST CRUD with zero-server deployment.\n\n2. Event-Driven Processing:\n   S3 upload \u2192 Lambda \u2192 compress image \u2192 save\n   SNS/EventBridge \u2192 Lambda \u2192 process event\n\n3. Fan-Out:\n   One event \u2192 multiple parallel Lambdas\n   e.g., new order \u2192 notify Lambda + inventory Lambda + analytics Lambda\n\n4. Step Functions (orchestration):\n   Sequence of Lambdas with retries, parallelism, state\n   Define workflow as state machine JSON\n   Better than chaining Lambda \u2192 Lambda directly\n\n5. Scheduled tasks (cron):\n   EventBridge rule \u2192 Lambda (every hour, every day)\n   Replace cron servers with Lambda + schedule rule\n\n6. Stream processing:\n   Kinesis/SQS \u2192 Lambda (event source mapping)\n   auto-polls stream, batches records, invokes Lambda\n```\n\n## Cold Start Problem\n\n```\nCold start: Lambda hasn't been invoked recently \u2192 container must start\n  JS Lambda: 200-500ms cold start\n  JVM Lambda: 1-5 seconds cold start (huge JVM startup)\n  Python: 100-300ms\n\nMitigations:\n  Provisioned concurrency: keep N Lambda instances warm (pay extra)\n  Lambda Snapstart (Java): restore from snapshot (~100ms)\n  Use lightweight runtimes: Node.js, Python > Java for latency-sensitive\n  Smaller deployment packages: faster container initialization\n```\n\n## AWS Lambda Example\n\n```javascript\n// handler.js\nexports.handler = async (event, context) => {\n  console.log('Event:', JSON.stringify(event));\n\n  // HTTP API: event.body contains request body\n  const body = JSON.parse(event.body || '{}');\n\n  try {\n    const result = await processRequest(body);\n    return {\n      statusCode: 200,\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(result)\n    };\n  } catch (err) {\n    return {\n      statusCode: 500,\n      body: JSON.stringify({ error: err.message })\n    };\n  }\n};\n```\n\n## Common Pitfalls\n- **Lambda cold starts in user-facing APIs** \u2014 use provisioned concurrency or lightweight runtimes to eliminate cold starts.\n- **Timeouts for long operations** \u2014 Lambda max timeout is 15 min. For longer: use Step Functions or offload to ECS.\n- **Shared state between invocations** \u2014 Lambda can reuse containers (execution context) but treat each invocation as stateless. Store state in DynamoDB, S3, or ElastiCache.\n- **Missing DLQ for event-driven Lambda** \u2014 failed processing \u2192 event lost. Configure Dead Letter Queue (SQS or SNS) on Lambda.\n",
+  "questions": [
+    {
+      "id": "sls-q1",
+      "type": "mcq",
+      "prompt": "What is the Lambda cold start problem and when is it most impactful?",
+      "choices": [
+        "Lambda restarts every invocation",
+        "First invocation after idle period: provider starts a new container for the function (300ms-5s delay). Most impactful for user-facing APIs (user perceives the latency), negligible for background batch jobs or async processing",
+        "Cold start only affects Java",
+        "Cold start is unavoidable and unfixable"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cold start = container init time. Background jobs: 2s cold start = fine. User-facing API: 2s cold start = terrible UX. Mitigations: provisioned concurrency (keep containers warm), lightweight runtimes (Node.js/Python vs JVM), smaller packages.",
+      "tags": [
+        "serverless",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "sls-q2",
+      "type": "mcq",
+      "prompt": "AWS Step Functions vs chaining Lambda A \u2192 Lambda B \u2014 why prefer Step Functions?",
+      "choices": [
+        "Step Functions are faster",
+        "Direct Lambda chaining: A calls B synchronously \u2014 A consumes execution time (and cost) waiting for B. If B fails, no retry without custom code. Step Functions: orchestrates lambdas with retries, timeouts, parallel execution, and state persistence \u2014 managed, visible, cheaper for complex workflows",
+        "Step Functions are newer",
+        "Lambda chaining is deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda A waiting for Lambda B pays for both simultaneously. Step Functions: A completes, state saved, B starts when A's output is ready. Plus: visual workflow, built-in retries, catch/error handling, parallel branches.",
+      "tags": [
+        "serverless",
+        "step-functions"
+      ]
+    },
+    {
+      "id": "sls-q3",
+      "type": "mcq",
+      "prompt": "Should a Lambda function store temporary state in a global variable between invocations?",
+      "choices": [
+        "Yes, for performance",
+        "No \u2014 Lambda may reuse containers (caching is fine) but you must treat each invocation as stateless. The same container might not be reused; a new container won't have the variable. Store persistent state in DynamoDB, S3, or ElastiCache",
+        "Global variables are forbidden",
+        "Only for read-only config"
+      ],
+      "answerIndex": 1,
+      "explanation": "Container reuse is opportunistic. Lambda may reuse the container (reading the global is fine as a cache), or may start fresh (global not set). Write business logic assuming stateless. Use DynamoDB for session state, ElastiCache for shared cache.",
+      "tags": [
+        "serverless",
+        "state"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "sls-fc1",
+      "front": "Serverless characteristics",
+      "back": "Zero server management. Pay per invocation (GB-second). Auto-scale to zero. Cold start latency. 15 min max execution. Stateless by design. Good for: event-driven, bursty, variable traffic, API backends.",
+      "tags": [
+        "serverless"
+      ]
+    },
+    {
+      "id": "sls-fc2",
+      "front": "Cold start mitigation",
+      "back": "Provisioned concurrency: keep N warm instances ($$). Lambda SnapStart (Java): restore snapshot. Lightweight runtimes: Node.js/Python over JVM. Smaller deployment packages: faster init.",
+      "tags": [
+        "serverless",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "sls-fc3",
+      "front": "Common Lambda patterns",
+      "back": "HTTP API: API GW \u2192 Lambda \u2192 DB. Event processing: S3/SQS \u2192 Lambda. Fan-out: EventBridge \u2192 N Lambdas. Scheduled: cron \u2192 Lambda. Stream: Kinesis/SQS event source mapping.",
+      "tags": [
+        "serverless",
+        "patterns"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Serverless Patterns\n\nDesign a realistic production service with Serverless Patterns at its core. No code required:\n\n1. Why Serverless Patterns over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "serverless-patterns-pc1",
+        "text": "Justified use of Serverless Patterns for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "serverless-patterns-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "serverless-patterns-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "serverless-patterns-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "serverless-patterns-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Serverless Patterns remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

@@ -1,0 +1,364 @@
+{
+  "id": "ts-utility-types",
+  "unit": 10,
+  "order": 83,
+  "title": "TypeScript Utility Types",
+  "summary": "Partial, Required, Readonly, Pick, Omit, Record, Exclude, Extract, ReturnType and NonNullable — the standard library of type transformations.",
+  "prereqs": ["ts-generics"],
+  "guide": "# TypeScript Utility Types\n\nUtility types are **pre-built generic type transformers** in the TypeScript standard library. The mental model: they are functions at the type level. You pass a type in, you get a modified type out — without writing any runtime code.\n\n```\nValue-level function:          Type-level utility:\n\nfunction omit(obj, keys) {     type Omit<T, K> = ...\n  ...                            ↑\n}                           TypeScript evaluates this\n                            at compile time, not runtime\nomit(user, ['password'])    Omit<User, 'password'>\n  → runtime object            → compile-time type\n```\n\n## Partial and Required\n\n```ts\ninterface User {\n  name: string;\n  age: number;\n  email: string;\n}\n\n// Partial<T> — makes every property optional\ntype UserDraft = Partial<User>;\n// { name?: string; age?: number; email?: string }\n\n// Use case: update/patch functions — you only need the changed fields\nfunction updateUser(id: string, changes: Partial<User>): void {\n  // 'changes' can have any subset of User fields\n}\n\n// Required<T> — makes every property required (removes ?)\ninterface Config { host?: string; port?: number; }\ntype FullConfig = Required<Config>;\n// { host: string; port: number } — no more optionals\n```\n\n## Readonly\n\n```ts\n// Readonly<T> — makes every property readonly\ntype ImmutableUser = Readonly<User>;\n// { readonly name: string; readonly age: number; readonly email: string }\n\nconst u: ImmutableUser = { name: 'Alice', age: 30, email: 'a@b.com' };\nu.name = 'Bob';  // ✗ Error — cannot assign to readonly property\n\n// Commonly used with arrays:\ntype ReadonlyArr = ReadonlyArray<number>;\nconst arr: ReadonlyArr = [1, 2, 3];\narr.push(4);     // ✗ Error — no mutating methods on ReadonlyArray\narr[0] = 99;     // ✗ Error — index assignment disallowed\n```\n\n## Pick and Omit\n\n```ts\ninterface User {\n  id: string;\n  name: string;\n  email: string;\n  password: string;\n  createdAt: Date;\n}\n\n// Pick<T, K> — keep only the listed keys\ntype PublicUser = Pick<User, 'id' | 'name' | 'email'>;\n// { id: string; name: string; email: string }\n\n// Omit<T, K> — keep everything EXCEPT the listed keys\ntype SafeUser = Omit<User, 'password'>;\n// { id: string; name: string; email: string; createdAt: Date }\n\n// Mental model:\n// Pick = whitelist (say what you WANT)\n// Omit = blacklist (say what you DON'T WANT)\n```\n\n```\nPick vs Omit visual:\n\n  User = { id, name, email, password, createdAt }\n\n  Pick<User, 'id' | 'name'>       Omit<User, 'password'>\n  ┌──────────────────────────┐   ┌──────────────────────────┐\n  │  id     ✓  keep          │   │  id        ✓  keep       │\n  │  name   ✓  keep          │   │  name      ✓  keep       │\n  │  email     discard       │   │  email     ✓  keep       │\n  │  password  discard       │   │  password  ✗  remove     │\n  │  createdAt discard       │   │  createdAt ✓  keep       │\n  └──────────────────────────┘   └──────────────────────────┘\n```\n\n## Record\n\n```ts\n// Record<K, V> — create an object type mapping keys K to values V\ntype Status = 'idle' | 'loading' | 'success' | 'error';\ntype StatusConfig = Record<Status, { label: string; color: string }>;\n\nconst statusMap: StatusConfig = {\n  idle:    { label: 'Idle',    color: 'grey'   },\n  loading: { label: 'Loading', color: 'blue'   },\n  success: { label: 'Done',    color: 'green'  },\n  error:   { label: 'Failed',  color: 'red'    },\n  // TypeScript enforces ALL four keys are present\n};\n\n// Record with string keys:\ntype Cache = Record<string, unknown>;  // any string key → unknown value\n```\n\n## Exclude and Extract (union operators)\n\n```ts\ntype T = 'a' | 'b' | 'c' | 'd';\n\n// Exclude<T, U> — remove from T the members assignable to U\ntype WithoutAB = Exclude<T, 'a' | 'b'>;  // 'c' | 'd'\n\n// Extract<T, U> — keep ONLY the members assignable to U\ntype JustAB = Extract<T, 'a' | 'b'>;     // 'a' | 'b'\n\n// Practical use — filter a union by category:\ntype Event = MouseEvent | KeyboardEvent | FocusEvent;\ntype PointerEvents = Extract<Event, MouseEvent>;  // MouseEvent\n```\n\n## NonNullable\n\n```ts\n// NonNullable<T> — removes null and undefined from T\ntype MaybeString = string | null | undefined;\ntype DefiniteString = NonNullable<MaybeString>;  // string\n\n// Useful when you've already null-checked and want TypeScript to know:\nfunction process<T>(val: T | null): NonNullable<T> {\n  if (val === null) throw new Error();\n  return val as NonNullable<T>;  // safe after the guard\n}\n```\n\n## ReturnType and Parameters\n\n```ts\n// ReturnType<F> — extract what a function returns\nfunction getUser() {\n  return { id: '1', name: 'Alice', age: 30 };\n}\ntype UserReturnType = ReturnType<typeof getUser>;\n// { id: string; name: string; age: number }\n\n// Parameters<F> — extract the parameter types as a tuple\nfunction add(a: number, b: number): number { return a + b; }\ntype AddParams = Parameters<typeof add>;\n// [a: number, b: number]\n\n// These are vital for typing wrappers without re-declaring signatures:\nfunction logged<T extends (...args: any[]) => any>(\n  fn: T\n): (...args: Parameters<T>) => ReturnType<T> {\n  return (...args) => {\n    console.log('calling with', args);\n    return fn(...args);\n  };\n}\n```\n\n## Utility Types Cheatsheet\n\n```\n┌────────────────────────────────────────────────────────┐\n│ Utility Type       │ What it does                      │\n├────────────────────┼───────────────────────────────────┤\n│ Partial<T>         │ All props optional                │\n│ Required<T>        │ All props required                │\n│ Readonly<T>        │ All props readonly                │\n│ Pick<T, K>         │ Keep only keys K                  │\n│ Omit<T, K>         │ Remove keys K                     │\n│ Record<K, V>       │ Object with keys K, values V      │\n│ Exclude<T, U>      │ Remove union members in U         │\n│ Extract<T, U>      │ Keep union members in U           │\n│ NonNullable<T>     │ Remove null and undefined         │\n│ ReturnType<F>      │ Return type of function F         │\n│ Parameters<F>      │ Params of function F as tuple     │\n│ InstanceType<C>    │ Instance type of class C          │\n│ Awaited<T>         │ Unwrap Promise<T> recursively     │\n└────────────────────────────────────────────────────────┘\n```\n\n## Common Pitfalls\n- `Partial<T>` is shallow — nested object props remain required. Use a recursive DeepPartial for truly optional deep objects\n- `Readonly<T>` is also shallow — nested arrays can still be mutated\n- `Pick` and `Omit` don't work on union types the way you'd expect — use `Extract`/`Exclude` for unions\n- `ReturnType<typeof fn>` requires `typeof` — `ReturnType<fn>` is an error (fn is a value, not a type)\n- `Record<string, T>` makes TypeScript believe every string key exists — use `Record<string, T | undefined>` or an index signature with undefined to be honest\n\n## Connections\n- **ts-generics** — all utility types are generic; understanding generics is prerequisite\n- **ts-advanced-types** — utility types are implemented as mapped types and conditional types\n- **ts-interfaces-types** — Pick/Omit operate on interface shapes\n- **react-hooks** — Partial<State> is the classic pattern for setState with partial updates",
+  "questions": [
+    {
+      "id": "tsut-q1",
+      "type": "mcq",
+      "prompt": "What does `Partial<User>` produce if `User = { name: string; age: number }`?",
+      "choices": [
+        "{ name: string; age: number }  — unchanged",
+        "{ name?: string; age?: number }  — all properties optional",
+        "{ name: string | undefined; age: number | undefined }",
+        "Partial is not a valid TypeScript type"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Partial<T>` adds `?` to every property — making them optional. This is not the same as `| undefined`, though `?` does include undefined in practice. The key difference: `?` means the key can be absent entirely.",
+      "tags": ["partial", "utility-types"]
+    },
+    {
+      "id": "tsut-q2",
+      "type": "mcq",
+      "prompt": "Why is `Partial<T>` commonly used for update/patch function parameters?",
+      "choices": [
+        "Because you can't pass a full object to a function",
+        "Because a patch only contains the fields that changed — you shouldn't need to provide every field",
+        "Partial is faster at runtime",
+        "TypeScript requires Partial for any function that mutates"
+      ],
+      "answerIndex": 1,
+      "explanation": "An update operation like PATCH in REST only sends changed fields. `Partial<User>` lets you pass `{ age: 31 }` without providing `name` and `email`. Without Partial, you'd need to provide all fields even when only one changed.",
+      "tags": ["partial", "utility-types", "patterns"]
+    },
+    {
+      "id": "tsut-q3",
+      "type": "codeOutput",
+      "prompt": "Does this compile?",
+      "code": "type ImmUser = Readonly<{ name: string; scores: number[] }>;\nconst u: ImmUser = { name: 'Alice', scores: [1, 2, 3] };\nu.scores.push(4);",
+      "choices": [
+        "Error — Readonly prevents all mutation",
+        "Compiles — Readonly is shallow; it prevents reassigning scores but not mutating the array",
+        "Error — you cannot call push on Readonly arrays",
+        "Compiles and has no effect"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Readonly<T>` is shallow. `u.scores = []` is an error (reassignment blocked). But `u.scores.push(4)` mutates the existing array through its reference — Readonly doesn't protect nested objects. Use `ReadonlyArray<number>` for the array itself.",
+      "tags": ["readonly", "utility-types", "shallow-immutability"]
+    },
+    {
+      "id": "tsut-q4",
+      "type": "mcq",
+      "prompt": "Pick<User, 'name' | 'email'> with User = { id, name, email, password } produces:",
+      "choices": [
+        "{ id: string; name: string; email: string; password: string }",
+        "{ name: string; email: string }",
+        "{ id: string; password: string }",
+        "Error — cannot Pick more than one key"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pick keeps only the listed keys. `'name' | 'email'` means only those two survive. All other properties (`id`, `password`) are dropped from the resulting type.",
+      "tags": ["pick", "utility-types"]
+    },
+    {
+      "id": "tsut-q5",
+      "type": "mcq",
+      "prompt": "Omit<User, 'password'> differs from Pick in that:",
+      "choices": [
+        "Omit is faster",
+        "Omit specifies what to REMOVE (blacklist), Pick specifies what to KEEP (whitelist)",
+        "Omit only works with single keys",
+        "They are identical — just different names"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pick = whitelist: list what you want. Omit = blacklist: list what you don't want. With many fields, Omit can be cleaner when you just want to hide one field (like password). Pick is cleaner when you want only a few of many fields.",
+      "tags": ["omit", "pick", "utility-types"]
+    },
+    {
+      "id": "tsut-q6",
+      "type": "codeOutput",
+      "prompt": "What type is `statusMap` forced to contain?",
+      "code": "type Status = 'idle' | 'loading' | 'error';\ntype Config = Record<Status, string>;\nconst statusMap: Config = { idle: 'grey', loading: 'blue' };",
+      "choices": [
+        "Compiles — partial records are fine",
+        "Error — 'error' key is missing; Record requires all keys in the union",
+        "Compiles — Config is just Record<string, string>",
+        "Error — Status cannot be used as a Record key"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Record<Status, string>` creates `{ idle: string; loading: string; error: string }`. All three keys are required. Missing `error` is a compile error. This is Record's superpower — it enforces at compile time that every case is handled.",
+      "tags": ["record", "utility-types"]
+    },
+    {
+      "id": "tsut-q7",
+      "type": "mcq",
+      "prompt": "Exclude<'a' | 'b' | 'c', 'a'> produces:",
+      "choices": [
+        "'a'",
+        "'b' | 'c'",
+        "'a' | 'b' | 'c'",
+        "never"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Exclude<T, U>` removes from T the members assignable to U. Removing `'a'` from `'a' | 'b' | 'c'` leaves `'b' | 'c'`.",
+      "tags": ["exclude", "utility-types", "union"]
+    },
+    {
+      "id": "tsut-q8",
+      "type": "mcq",
+      "prompt": "Extract<MouseEvent | KeyboardEvent | FocusEvent, MouseEvent> produces:",
+      "choices": [
+        "KeyboardEvent | FocusEvent",
+        "MouseEvent | KeyboardEvent | FocusEvent",
+        "MouseEvent",
+        "never"
+      ],
+      "answerIndex": 2,
+      "explanation": "`Extract<T, U>` keeps ONLY the members of T assignable to U. `MouseEvent` is assignable to `MouseEvent`, so only it survives. The others are excluded.",
+      "tags": ["extract", "utility-types", "union"]
+    },
+    {
+      "id": "tsut-q9",
+      "type": "codeOutput",
+      "prompt": "What is the type of `clean`?",
+      "code": "type MaybeString = string | null | undefined;\ntype clean = NonNullable<MaybeString>;",
+      "choices": [
+        "string | null | undefined",
+        "string | undefined",
+        "string",
+        "never"
+      ],
+      "answerIndex": 2,
+      "explanation": "`NonNullable<T>` removes `null` and `undefined` from T. `MaybeString = string | null | undefined` → after NonNullable: `string`.",
+      "tags": ["nonnullable", "utility-types"]
+    },
+    {
+      "id": "tsut-q10",
+      "type": "mcq",
+      "prompt": "ReturnType<typeof getUser> extracts:",
+      "choices": [
+        "The parameter types of getUser",
+        "The return type of the getUser function",
+        "The type of the getUser variable",
+        "ReturnType requires a generic argument, not typeof"
+      ],
+      "answerIndex": 1,
+      "explanation": "`ReturnType<F>` takes a function type F and extracts what it returns. `typeof getUser` converts the value `getUser` to its type before passing to `ReturnType`. This avoids re-declaring the return type manually.",
+      "tags": ["returntype", "utility-types"]
+    },
+    {
+      "id": "tsut-q11",
+      "type": "codeOutput",
+      "prompt": "What is `AddParams`?",
+      "code": "function add(a: number, b: number): number { return a + b; }\ntype AddParams = Parameters<typeof add>;",
+      "choices": [
+        "number[]",
+        "[number, number]",
+        "{ a: number; b: number }",
+        "Parameters<add> would be correct; typeof is wrong"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Parameters<F>` extracts parameter types as a labeled tuple. `add(a: number, b: number)` → `[a: number, b: number]`. This is a tuple, not an array — order and count are fixed.",
+      "tags": ["parameters", "utility-types", "tuples"]
+    },
+    {
+      "id": "tsut-q12",
+      "type": "multi",
+      "prompt": "Which utility types operate on union types (not object shapes)?",
+      "choices": [
+        "Exclude<T, U>",
+        "Extract<T, U>",
+        "Partial<T>",
+        "NonNullable<T>"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`Exclude`, `Extract`, and `NonNullable` all filter union type members. `Partial` transforms object shape properties — it doesn't make sense on a union.",
+      "tags": ["utility-types", "union", "comparison"]
+    },
+    {
+      "id": "tsut-q13",
+      "type": "mcq",
+      "prompt": "A colleague writes `Record<string, User>` for a user cache. What hidden assumption does this make?",
+      "choices": [
+        "All users have the same id",
+        "Every possible string key maps to a full User — accessing any key appears valid to TypeScript, even if it doesn't exist",
+        "The cache is immutable",
+        "Users are sorted alphabetically"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Record<string, User>` tells TypeScript every string key exists and has type `User`. No `undefined` in the value type. Accessing `cache['nonexistent']` returns `User` to TypeScript — but `undefined` at runtime. Fix: `Record<string, User | undefined>` or enable `noUncheckedIndexedAccess`.",
+      "tags": ["record", "utility-types", "pitfalls"]
+    },
+    {
+      "id": "tsut-q14",
+      "type": "mcq",
+      "prompt": "What does `Awaited<Promise<Promise<string>>>` produce?",
+      "choices": [
+        "Promise<string>",
+        "Promise<Promise<string>>",
+        "string",
+        "unknown"
+      ],
+      "answerIndex": 2,
+      "explanation": "`Awaited<T>` recursively unwraps nested Promises. `Awaited<Promise<Promise<string>>>` → `Awaited<Promise<string>>` → `string`. This is how TypeScript infers the resolved value of chained or nested async operations.",
+      "tags": ["awaited", "utility-types", "async"]
+    },
+    {
+      "id": "tsut-q15",
+      "type": "codeOutput",
+      "prompt": "What type does context have here?",
+      "code": "interface DB {\n  query: (sql: string) => Promise<unknown[]>;\n  connect: (host: string, port: number) => void;\n}\ntype ConnectParams = Parameters<DB['connect']>;",
+      "choices": [
+        "[sql: string]",
+        "[host: string, port: number]",
+        "(host: string, port: number) => void",
+        "Error — Parameters requires typeof"
+      ],
+      "answerIndex": 1,
+      "explanation": "`DB['connect']` is an indexed access type — it gets the type of the `connect` property, which is `(host: string, port: number) => void`. `Parameters` of that function type is `[host: string, port: number]`.",
+      "tags": ["parameters", "indexed-access", "utility-types"]
+    },
+    {
+      "id": "tsut-q16",
+      "type": "mcq",
+      "prompt": "DeepPartial is NOT a built-in because:",
+      "choices": [
+        "TypeScript doesn't support recursive types",
+        "Partial<T> is always deep",
+        "The standard Partial<T> is intentionally shallow — deep versions require custom recursive type aliases",
+        "DeepPartial is in TypeScript 6"
+      ],
+      "answerIndex": 2,
+      "explanation": "`Partial<T>` only makes the top-level properties optional. Nested objects remain fully required. A recursive `DeepPartial<T>` must be written manually using conditional/mapped types. It's not built-in because deep mutability semantics are complex.",
+      "tags": ["partial", "utility-types", "deep", "pitfalls"]
+    },
+    {
+      "id": "tsut-q17",
+      "type": "mcq",
+      "prompt": "Which utility type would you use to model all the possible state keys for a status reducer (where the same enum drives both the type and the config)?",
+      "choices": [
+        "Partial<Status>",
+        "Record<Status, StateConfig> — enforces every status has a config entry",
+        "Pick<Status, 'idle'>",
+        "Exclude<Status, never>"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Record<Status, StateConfig>` creates an object type where each member of the Status union is a required key. TypeScript flags missing cases at compile time — if you add a new status and forget its config, it's an immediate error.",
+      "tags": ["record", "utility-types", "patterns"]
+    },
+    {
+      "id": "tsut-q18",
+      "type": "multi",
+      "prompt": "Which utility types require `typeof fn` (not just `fn`) when applied to a function?",
+      "choices": [
+        "ReturnType",
+        "Parameters",
+        "Partial",
+        "InstanceType"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`ReturnType<F>`, `Parameters<F>`, and `InstanceType<C>` take type arguments. `fn` is a value — you need `typeof fn` to get its type. `Partial` takes an object type, not a function type.",
+      "tags": ["returntype", "parameters", "typeof", "utility-types"]
+    },
+    {
+      "id": "tsut-q19",
+      "type": "codeOutput",
+      "prompt": "What is the type of `safeUser`?",
+      "code": "interface User { id: string; name: string; password: string; createdAt: Date; }\ntype SafeUser = Omit<User, 'password' | 'createdAt'>; \ndeclare const safeUser: SafeUser;",
+      "choices": [
+        "{ id: string; name: string }",
+        "{ password: string; createdAt: Date }",
+        "{ id: string; name: string; password: string; createdAt: Date }",
+        "Partial<User>"
+      ],
+      "answerIndex": 0,
+      "explanation": "`Omit<User, 'password' | 'createdAt'>` removes both `password` and `createdAt`. What remains is `{ id: string; name: string }`. This is the canonical 'safe for serialization' pattern — strip sensitive fields before sending to the client.",
+      "tags": ["omit", "utility-types"]
+    },
+    {
+      "id": "tsut-q20",
+      "type": "mcq",
+      "prompt": "You receive a function `fn: (a: number, b: string) => boolean`. How do you type a wrapper that has identical signature without manually redeclaring it?",
+      "choices": [
+        "Infer the types manually and redeclare",
+        "Use Parameters<typeof fn> for args and ReturnType<typeof fn> for return type",
+        "Use Partial<typeof fn>",
+        "TypeScript cannot type wrappers generically"
+      ],
+      "answerIndex": 1,
+      "explanation": "`(...args: Parameters<typeof fn>) => ReturnType<typeof fn>` creates a perfectly matching wrapper signature. If `fn` is updated, the wrapper's type updates automatically — no manual sync needed. This is the standard pattern for decorators, logging wrappers, and memoization.",
+      "tags": ["parameters", "returntype", "utility-types", "patterns"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "tsut-fc1",
+      "front": "Partial<T>",
+      "back": "Makes ALL properties optional. Shallow only — nested objects stay required. Use for update/patch function params where caller provides only changed fields.",
+      "tags": ["utility-types", "partial"]
+    },
+    {
+      "id": "tsut-fc2",
+      "front": "Pick vs Omit",
+      "back": "Pick<T, K> = whitelist: keep only K. Omit<T, K> = blacklist: keep everything except K. Use Pick for 'I want a few fields', Omit for 'I want to hide one field'.",
+      "tags": ["utility-types", "pick", "omit"]
+    },
+    {
+      "id": "tsut-fc3",
+      "front": "Record<K, V>",
+      "back": "Creates `{ [key in K]: V }`. Enforces ALL keys in K are present. Use for exhaustive mappings like `Record<Status, Config>` — adding a new Status causes a compile error.",
+      "tags": ["utility-types", "record"]
+    },
+    {
+      "id": "tsut-fc4",
+      "front": "Exclude vs Extract",
+      "back": "Both filter union members. Exclude<T, U> REMOVES members assignable to U. Extract<T, U> KEEPS members assignable to U. Mnemonic: extract = pull out what you want.",
+      "tags": ["utility-types", "exclude", "extract"]
+    },
+    {
+      "id": "tsut-fc5",
+      "front": "ReturnType<typeof fn>",
+      "back": "Extracts the return type of a function. Requires `typeof fn` (value → type). Use in wrappers to avoid manually syncing return type declarations.",
+      "tags": ["utility-types", "returntype"]
+    },
+    {
+      "id": "tsut-fc6",
+      "front": "Readonly<T> — what it doesn't protect",
+      "back": "Shallow immutability only. `Readonly<{ arr: number[] }>` prevents re-assigning `arr`, but NOT `arr.push()`. Use `ReadonlyArray<number>` for array contents.",
+      "tags": ["utility-types", "readonly", "shallow"]
+    },
+    {
+      "id": "tsut-fc7",
+      "front": "NonNullable<T>",
+      "back": "Removes `null` and `undefined` from T. `NonNullable<string | null | undefined>` = `string`. Use after null-checks when you know the value exists.",
+      "tags": ["utility-types", "nonnullable"]
+    },
+    {
+      "id": "tsut-fc8",
+      "front": "Awaited<T>",
+      "back": "Recursively unwraps nested Promises. `Awaited<Promise<Promise<string>>>` = `string`. Essential for typing async utility functions and middleware chains.",
+      "tags": ["utility-types", "async", "awaited"]
+    }
+  ],
+  "project": {
+    "brief": "You are building a user API with a `User` interface: `{ id: string; name: string; email: string; password: string; createdAt: Date; role: 'admin' | 'user' | 'guest' }`. Design the TypeScript types for four API operations using only utility types (no inline object types): 1) GET /users/:id — returns a user safe for the client (no password). 2) POST /users — accepts all fields except id and createdAt (those are server-generated). 3) PATCH /users/:id — accepts any subset of fields except id and createdAt. 4) A role-config map where each role must have a `{ label: string; permissions: string[] }` entry — adding a new role must be a compile error if this map isn't updated. For each, write the type alias and the utility type expression that creates it.",
+    "checklist": [
+      { "id": "c1", "text": "GET response: Omit<User, 'password'> or Pick with the safe fields", "weight": 1 },
+      { "id": "c2", "text": "POST body: Omit<User, 'id' | 'createdAt'>", "weight": 1 },
+      { "id": "c3", "text": "PATCH body: Partial<Omit<User, 'id' | 'createdAt'>> — nested utility types", "weight": 1 },
+      { "id": "c4", "text": "Role config: Record<User['role'], { label: string; permissions: string[] }>", "weight": 1 },
+      { "id": "c5", "text": "Explains that Record<User['role'], ...> auto-updates when role union changes", "weight": 1 }
+    ],
+    "hints": [
+      "GET: Omit<User, 'password'> removes the password. The id and timestamps are safe to expose.",
+      "POST: server generates id and createdAt — Omit<User, 'id' | 'createdAt'>.",
+      "PATCH: combine Omit and Partial — Partial<Omit<User, 'id' | 'createdAt'>>.",
+      "Record key: `User['role']` is an indexed access type that extracts `'admin' | 'user' | 'guest'` — so adding 'moderator' to the role union immediately flags the Record as incomplete."
+    ]
+  }
+}
+

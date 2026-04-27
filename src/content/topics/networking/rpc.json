@@ -1,0 +1,130 @@
+{
+  "id": "rpc",
+  "unit": 3,
+  "order": 13,
+  "title": "RPC - Remote Procedure Calls",
+  "summary": "Master RPC - Remote Procedure Calls: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "websockets"
+  ],
+  "guide": "# RPC \u2014 Remote Procedure Call\n\nRPC is a communication paradigm where a program calls a function on a **remote machine** as if it were a local function call. The network communication is abstracted away.\n\n## RPC Concept\n\n```\nWithout RPC:                        With RPC:\n  fetch('/api/users/123')              const user = userService.getUser(123);\n  .then(r => r.json())                 // Looks like a local function call\n  .then(user => ...)                   // Network call is hidden by stub\n\ngRPC Stub:\n  // Generated from .proto \u2014 looks local but makes HTTP/2 calls\n  const user = await userClient.GetUser({ id: 123 });\n```\n\n## gRPC \u2014 Modern RPC\n\ngRPC uses **Protocol Buffers** (protobuf) for serialization and **HTTP/2** for transport.\n\n```protobuf\n// user.proto\nsyntax = \"proto3\";\n\nservice UserService {\n  rpc GetUser (UserRequest) returns (User);\n  rpc ListUsers (ListUsersRequest) returns (stream User); // server streaming\n  rpc UpdateUser (stream UserUpdate) returns (UserSummary); // client streaming\n  rpc Chat (stream Message) returns (stream Message); // bidirectional\n}\n\nmessage UserRequest { int32 id = 1; }\nmessage User { int32 id = 1; string name = 2; string email = 3; }\n```\n\n```javascript\n// Client (Node.js)\nconst { UserServiceClient } = require('./user_grpc_pb');\nconst client = new UserServiceClient('localhost:50051', grpc.credentials.createInsecure());\n\n// Unary RPC\nconst request = new UserRequest();\nrequest.setId(123);\nclient.getUser(request, (err, response) => {\n  console.log(response.getName());\n});\n```\n\n## gRPC vs REST\n\n| Aspect | gRPC | REST/JSON |\n|---|---|---|\n| Protocol | HTTP/2 | HTTP/1.1 or HTTP/2 |\n| Serialization | Protobuf (binary, ~10x smaller) | JSON (text) |\n| Interface definition | Strict .proto contract | OpenAPI/Swagger (optional) |\n| Streaming | Bidirectional streaming | Limited (SSE for server push) |\n| Browser support | Limited (needs gRPC-web proxy) | Excellent |\n| Code generation | First-class | Optional |\n| Best for | Internal microservices | Public APIs, browsers |\n\n## Service Mesh and gRPC\n\nIn microservices, gRPC services communicate via a service mesh (Envoy/Istio):\n```\nServiceA \u2500\u2500gRPC\u2500\u2500\u2192 Envoy Sidecar \u2500\u2500gRPC\u2500\u2500\u2192 Envoy Sidecar \u2500\u2500\u2192 ServiceB\n                   (mTLS, tracing, lb)\n```\n\n## Common Pitfalls\n- **Browser usage** \u2014 gRPC uses HTTP/2 trailers which browsers don't support directly. Requires gRPC-web proxy (Envoy) to translate. REST is simpler for browser clients.\n- **Versioning** \u2014 protobuf field numbers must never change. Add new fields; never reuse or remove field numbers.\n- **Error propagation** \u2014 gRPC has its own status codes (OK, NOT_FOUND, UNAVAILABLE). Don't confuse with HTTP codes.\n",
+  "questions": [
+    {
+      "id": "rpc-q1",
+      "type": "mcq",
+      "prompt": "Main performance advantage of gRPC over REST/JSON?",
+      "choices": [
+        "gRPC uses UDP",
+        "Protobuf binary serialization is ~10x smaller than JSON + HTTP/2 multiplexing eliminates head-of-line blocking \u2014 significantly faster for internal service communication",
+        "gRPC has no overhead",
+        "gRPC compresses JSON"
+      ],
+      "answerIndex": 1,
+      "explanation": "Two advantages: (1) Protobuf binary is far smaller than JSON text (no field names, binary encoding). (2) HTTP/2 allows request multiplexing \u2014 multiple concurrent RPC calls on a single connection without blocking.",
+      "tags": [
+        "gRPC",
+        "protobuf",
+        "performance"
+      ]
+    },
+    {
+      "id": "rpc-q2",
+      "type": "mcq",
+      "prompt": "When should you prefer REST over gRPC?",
+      "choices": [
+        "Always prefer REST",
+        "For public APIs or browser clients \u2014 gRPC doesn't work natively in browsers (needs proxy), harder to explore (no curl/postman natively), and JSON is more human-readable for public consumption",
+        "gRPC is deprecated",
+        "REST has better streaming"
+      ],
+      "answerIndex": 1,
+      "explanation": "gRPC excels at internal microservice communication. Public APIs (used by browsers without proxy, mobile teams, third parties) benefit from REST's universality and JSON's human readability.",
+      "tags": [
+        "gRPC",
+        "REST",
+        "comparison"
+      ]
+    },
+    {
+      "id": "rpc-q3",
+      "type": "mcq",
+      "prompt": "In protobuf, what rule is critical for backward compatibility?",
+      "choices": [
+        "Field names must be unique",
+        "Field numbers must never be reused or removed \u2014 they identify fields in the binary format. Add new fields with new numbers; never recycle an old number",
+        "Always use proto2",
+        "Messages can't be nested"
+      ],
+      "answerIndex": 1,
+      "explanation": "Protobuf serializes by field numbers, not names. If you remove field 3 and later add a new field with number 3, old clients reading new data (or vice versa) will misinterpret the field. Field numbers are permanent.",
+      "tags": [
+        "gRPC",
+        "protobuf",
+        "versioning"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rpc-fc1",
+      "front": "gRPC stack",
+      "back": "Interface: .proto file (service + message definitions). Serialization: Protobuf binary (~10x smaller than JSON). Transport: HTTP/2 (multiplexing, header compression). Code generation: client/server stubs in any language.",
+      "tags": [
+        "gRPC"
+      ]
+    },
+    {
+      "id": "rpc-fc2",
+      "front": "gRPC streaming types",
+      "back": "Unary: 1 req \u2192 1 resp. Server streaming: 1 req \u2192 stream of responses. Client streaming: stream \u2192 1 resp. Bidirectional: stream \u2192 stream. Defined in .proto with stream keyword.",
+      "tags": [
+        "gRPC",
+        "streaming"
+      ]
+    },
+    {
+      "id": "rpc-fc3",
+      "front": "gRPC vs REST choice",
+      "back": "gRPC: internal microservices, performance-critical, bidirectional streaming, polyglot teams. REST: public APIs, browser clients, human-readable, less tooling setup.",
+      "tags": [
+        "gRPC",
+        "REST"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using RPC - Remote Procedure Calls\n\nDesign a realistic production service with RPC - Remote Procedure Calls at its core. No code required:\n\n1. Why RPC - Remote Procedure Calls over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "rpc-pc1",
+        "text": "Justified use of RPC - Remote Procedure Calls for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "rpc-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "rpc-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "rpc-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "rpc-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does RPC - Remote Procedure Calls remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

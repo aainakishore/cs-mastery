@@ -1,0 +1,126 @@
+{
+  "id": "long-polling",
+  "unit": 3,
+  "order": 15,
+  "title": "Long Polling vs Short Polling",
+  "summary": "Master Long Polling vs Short Polling: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "websockets"
+  ],
+  "guide": "# Long Polling and HTTP Push Techniques\n\nWhen real-time server\u2192client updates are needed, several patterns exist without WebSockets.\n\n## The Polling Problem\n\n```\nShort Polling (bad):\n  Client: GET /events \u2192 Server: 200 (no new events)  \u2190 wasted request\n  (repeat every N seconds)\n  Cost: many requests, high latency, wasted bandwidth\n\nLong Polling (better):\n  Client: GET /events \u2192 Server: [HOLDS response until event]\n  Server: 200 { event: \"message\" }  \u2190 returns when event available\n  Client: immediately sends new GET /events\n```\n\n## Long Polling Mechanics\n\n```\n1. Client sends request to /events\n2. Server checks for new events:\n   - If events available: respond immediately with 200\n   - If no events: hold connection open (wait up to 30s)\n3. When event occurs OR timeout: respond to client\n4. Client processes response and immediately opens new request\n5. Server also includes a timeout/empty response so client retries\n\nThis creates the impression of \"push\" \u2014 latency = time to event\n```\n\n## Server-Sent Events (SSE) \u2014 Modern Alternative\n\n```\nGET /events HTTP/1.1\nAccept: text/event-stream\n\nHTTP/1.1 200 OK\nContent-Type: text/event-stream\nCache-Control: no-cache\n\ndata: { \"type\": \"message\", \"text\": \"Hello\" }\n\ndata: { \"type\": \"update\", \"count\": 42 }\n                                    \u2190 connection stays open; server can push any time\n\nid: 123                             \u2190 client can resume from this ID if reconnected\nevent: custom-type                  \u2190 named event types\n```\n\n**SSE advantages:**\n- Standard HTTP \u2014 no special server setup\n- Auto-reconnect built into browser EventSource API\n- Works over HTTP/2 with multiplexing\n- Simpler than WebSocket for one-way push\n\n## JavaScript Examples\n\n```javascript\n// Long polling\nasync function longPoll() {\n  try {\n    const res = await fetch('/events?lastId=' + lastId, { signal: controller.signal });\n    const data = await res.json();\n    process(data);\n  } catch(e) {\n    await sleep(2000);  // backoff on error\n  }\n  longPoll();  // immediately re-poll\n}\n\n// SSE\nconst source = new EventSource('/events');\nsource.onmessage = (e) => console.log(JSON.parse(e.data));\nsource.onerror   = (e) => console.error('SSE error', e);\n// Auto-reconnects on disconnect\n```\n\n## Comparison Table\n\n| Technique | Latency | Complexity | Direction | Protocol |\n|---|---|---|---|---|\n| Short Poll | High | Low | Any | HTTP |\n| Long Poll | Low-med | Med | Any | HTTP |\n| SSE | Low | Low | Server\u2192Client | HTTP |\n| WebSocket | Very Low | High | Bidirectional | WS |\n\n## Common Pitfalls\n- **Long polling server resource exhaustion** \u2014 holding many open connections ties up threads/memory. Use an event-loop server (Node.js, async Python).\n- **Not handling SSE reconnection with last event ID** \u2014 include `id:` field so client can use `Last-Event-ID` header on reconnect to avoid missed events.\n- **SSE over HTTP/1.1 browser limits** \u2014 browsers allow max 6 connections per domain over HTTP/1.1. Multiple SSE tabs saturate this. HTTP/2 multiplexes everything on one connection.\n",
+  "questions": [
+    {
+      "id": "lp-q1",
+      "type": "mcq",
+      "prompt": "How does long polling differ from short polling?",
+      "choices": [
+        "Long polling uses WebSocket under the hood",
+        "Long polling: server holds the request open until data is available (then responds). Short polling: server responds immediately whether or not there's data \u2014 resulting in many empty responses",
+        "Long polling uses UDP",
+        "Long polling requires server push support"
+      ],
+      "answerIndex": 1,
+      "explanation": "Short polling: constant empty responses waste bandwidth. Long polling: server delays the response until an event occurs or a timeout. Client immediately re-requests \u2014 net effect is near-real-time with fewer wasted requests.",
+      "tags": [
+        "long-polling"
+      ]
+    },
+    {
+      "id": "lp-q2",
+      "type": "mcq",
+      "prompt": "SSE vs WebSocket for a stock ticker (server pushes prices, no client messages needed)?",
+      "choices": [
+        "WebSocket always",
+        "SSE \u2014 simpler, HTTP-based, built-in auto-reconnect, sufficient for one-way server\u2192client push",
+        "They are equivalent",
+        "Long polling"
+      ],
+      "answerIndex": 1,
+      "explanation": "If clients only receive data (no sending), SSE is simpler: plain HTTP, auto-reconnect via EventSource, no protocol upgrade, works over HTTP/2. WebSocket adds complexity that's only justified when clients also send data frequently.",
+      "tags": [
+        "long-polling",
+        "SSE",
+        "comparison"
+      ]
+    },
+    {
+      "id": "lp-q3",
+      "type": "mcq",
+      "prompt": "Why does SSE have a connection limit problem over HTTP/1.1?",
+      "choices": [
+        "SSE doesn't support HTTP/1.1",
+        "Browsers allow max 6 connections per domain over HTTP/1.1. Each SSE stream uses one connection. Multiple tabs with SSE hit this limit. HTTP/2 multiplexes all streams on a single connection",
+        "SSE uses 2 connections per stream",
+        "HTTP/1.1 doesn't support streaming"
+      ],
+      "answerIndex": 1,
+      "explanation": "HTTP/1.1 browser limit: 6 connections/domain. 6 tabs with SSE = all connections used. HTTP/2 solves this \u2014 all SSE streams share one multiplexed TCP connection.",
+      "tags": [
+        "SSE",
+        "HTTP/2"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "lp-fc1",
+      "front": "Long polling pattern",
+      "back": "Client requests \u2192 server HOLDS until event/timeout \u2192 responds \u2192 client immediately re-requests. Near-real-time with HTTP. Resource-intensive (holding connections). Use event-loop servers (Node.js).",
+      "tags": [
+        "long-polling"
+      ]
+    },
+    {
+      "id": "lp-fc2",
+      "front": "SSE (Server-Sent Events)",
+      "back": "Content-Type: text/event-stream. Server pushes 'data: ...\\n\\n' lines. Auto-reconnects via EventSource. Resumable via id + Last-Event-ID. One-way server\u2192client. Simple, HTTP-native.",
+      "tags": [
+        "SSE"
+      ]
+    },
+    {
+      "id": "lp-fc3",
+      "front": "Choosing push mechanism",
+      "back": "Short poll: simple/rare. Long poll: legacy, broad compat. SSE: server\u2192client push, simple, HTTP/2 friendly. WebSocket: bidirectional, real-time, gaming/chat.",
+      "tags": [
+        "long-polling",
+        "SSE"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Long Polling vs Short Polling\n\nDesign a realistic production service with Long Polling vs Short Polling at its core. No code required:\n\n1. Why Long Polling vs Short Polling over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "long-polling-pc1",
+        "text": "Justified use of Long Polling vs Short Polling for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "long-polling-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "long-polling-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "long-polling-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "long-polling-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Long Polling vs Short Polling remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

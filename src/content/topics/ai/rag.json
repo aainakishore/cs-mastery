@@ -1,0 +1,467 @@
+{
+  "id": "rag",
+  "unit": 6,
+  "order": 34,
+  "title": "RAG - Retrieval-Augmented Generation",
+  "summary": "Master RAG - Retrieval-Augmented Generation: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "llms"
+  ],
+  "guide": "# RAG — Retrieval-Augmented Generation\n\nRAG combines an LLM's reasoning with a **retrieval step** that finds relevant documents before generating an answer. It grounds LLM responses in real, up-to-date information.\n\n## The RAG Pipeline\n\n```\nUser question\n    ↓\n1. Embed question → vector (e.g., \"What is our refund policy?\")\n    ↓\n2. Search vector database for similar document chunks\n    k-nearest neighbors search returns top-5 chunks\n    ↓\n3. Inject retrieved chunks into LLM prompt:\n   System: \"Answer using only these documents: [chunk1] [chunk2]...\"\n   User:   \"What is our refund policy?\"\n    ↓\n4. LLM generates grounded answer\n    ↓\n5. (Optional) Return source citations\n```\n\n## Building the Knowledge Base\n\n```python\nfrom langchain.text_splitter import RecursiveCharacterTextSplitter\nfrom langchain_openai import OpenAIEmbeddings\nfrom langchain_community.vectorstores import FAISS\n\n# 1. Load documents\ndocuments = load_pdfs(\"knowledge_base/\")\n\n# 2. Chunk (overlap preserves context across boundaries)\nsplitter = RecursiveCharacterTextSplitter(\n    chunk_size=500,       # characters per chunk\n    chunk_overlap=50,     # overlap between chunks\n)\nchunks = splitter.split_documents(documents)\n\n# 3. Embed and store in vector DB\nembeddings = OpenAIEmbeddings(model=\"text-embedding-3-small\")\nvectorstore = FAISS.from_documents(chunks, embeddings)\nvectorstore.save_local(\"faiss_index\")\n```\n\n## Retrieval + Generation\n\n```python\nfrom langchain_openai import ChatOpenAI\nfrom langchain.chains import RetrievalQA\n\nvectorstore = FAISS.load_local(\"faiss_index\", embeddings)\nretriever = vectorstore.as_retriever(search_kwargs={\"k\": 5})\n\nllm = ChatOpenAI(model=\"gpt-4o\", temperature=0)\n\nqa_chain = RetrievalQA.from_chain_type(\n    llm=llm,\n    retriever=retriever,\n    return_source_documents=True\n)\n\nresult = qa_chain.invoke({\"query\": \"What is the refund policy?\"})\nprint(result[\"result\"])      # LLM answer\nprint(result[\"source_documents\"])  # Which chunks were used\n```\n\n## Vector Search and Embeddings\n\n```\nText embedding:\n  \"The quick brown fox\" → [0.23, -0.15, 0.87, ...]  (1536-dim vector for text-embedding-3-small)\n\nSemantic similarity:\n  \"dog\" and \"canine\" → similar vectors (high cosine similarity)\n  \"dog\" and \"galaxy\" → dissimilar vectors (low cosine similarity)\n\nVector databases: FAISS (local), Pinecone, Weaviate, pgvector (PostgreSQL)\n```\n\n## RAG vs Fine-Tuning\n\n```\nRAG:\n  ✓ Knowledge updatable without retraining (add docs to vector DB)\n  ✓ Transparent (can show source citations)\n  ✓ Handles fresh/real-time data\n  ✗ Requires retrieval infrastructure\n  ✗ Answer quality limited by retrieval quality\n\nFine-tuning:\n  ✓ Bakes domain knowledge into model weights\n  ✓ No runtime retrieval step\n  ✗ Expensive to update (retrain)\n  ✗ Opaque (no citations)\n  ✗ Knowledge becomes stale\n```\n\n## Common Pitfalls\n- **Wrong chunk size** — too large = irrelevant info dilutes prompt. Too small = loses context. Test 200-1000 chars.\n- **Missing overlap** — chunks with no overlap break sentences at boundaries. Use 10-20% overlap.\n- **Top-K set too high** — too many retrieved chunks exceed context window or distract the LLM. Start with k=3-5.\n- **Not filtering by metadata** — pre-filter by document type, date, or department before embedding search for relevance.\n\n\n## RAG Architecture\n\n```\nQuery: \"What is our refund policy?\"\n\n                    ┌─────────────────┐\nUser Query ─────→  │  Embed Query    │ → query vector\n                    └────────┬────────┘\n                             ↓\n                    ┌─────────────────┐\n                    │  Vector Search  │ → top-k chunks\n                    │  (ANN index)    │\n                    └────────┬────────┘\n                             ↓\n                    ┌─────────────────────────────┐\n                    │  Prompt = System + Context  │\n                    │  + Query                    │\n                    └────────┬────────────────────┘\n                             ↓\n                    ┌─────────────────┐\n                    │     LLM         │ → Grounded Answer\n                    └─────────────────┘\n```\n\n## Chunking Strategies\n\n```\nFixed-size:     Split every 512 tokens. Simple but can cut mid-sentence.\nSentence-aware: Split at sentence boundaries within token limit.\nSemantic:       Split at topic boundaries (paragraph, heading).\nHierarchical:   Store document summary + chunks. Retrieve at both levels.\n\nOverlap:        50-100 token overlap between chunks — preserves context \n                at chunk boundaries.\n```\n\n## Embedding Model Selection\n\n```\ntext-embedding-3-large (OpenAI): 3072-dim, best quality, API-only\ntext-embedding-3-small (OpenAI): 1536-dim, 5× cheaper\nall-MiniLM-L6-v2 (local):        384-dim, fast, free\nCohere embed-3:                   1024-dim, multilingual\n\nKey: embed queries and documents with the SAME model.\n```\n\n## Evaluation Metrics (RAGAS)\n\n```\nFaithfulness:        Does answer use ONLY retrieved context? (no hallucination)\nAnswer Relevancy:    Does answer address the question?\nContext Recall:      Did retrieval find all necessary chunks?\nContext Precision:   Are retrieved chunks all relevant? (no noise)\n```\n\n## References & Further Learning\n- 📄 **RAG paper**: \"Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks\" — Lewis et al. (arxiv.org/abs/2005.11401)\n- 📄 **RAGAS**: \"RAGAS: Automated Evaluation of RAG\" (arxiv.org/abs/2309.15217)\n- 🎥 **LangChain** \"RAG from scratch\" series (YouTube playlist)\n- 🎥 **Greg Kamradt** \"5 Levels of Text Splitting\" (YouTube) — chunking strategies deep dive\n- 📖 **LlamaIndex docs** — llamaindex.ai — comprehensive RAG framework\n- 📖 **Weaviate blog** — weaviate.io/blog — vector DB + RAG tutorials with diagrams\n- 🖼️ **Diagram**: \"Advanced RAG Techniques\" — towardsdatascience.com\n",
+  "questions": [
+    {
+      "id": "rag-q1",
+      "type": "mcq",
+      "prompt": "Why does RAG improve LLM factual accuracy?",
+      "choices": [
+        "RAG uses a larger model",
+        "RAG provides the LLM with retrieved documents containing up-to-date facts in the prompt — LLM reasons over retrieved evidence rather than relying on potentially outdated training weights",
+        "RAG fine-tunes the model",
+        "RAG compresses the context window"
+      ],
+      "answerIndex": 1,
+      "explanation": "LLMs hallucinate because they generate from training data statistics, not verified facts. RAG injects relevant verified documents into the prompt — LLM can only answer with provided evidence, dramatically reducing hallucination for factual queries.",
+      "tags": [
+        "RAG",
+        "LLM",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-q2",
+      "type": "mcq",
+      "prompt": "Why is document chunking with overlap important in RAG?",
+      "choices": [
+        "Reduces storage",
+        "Chunks at fixed boundaries may split a sentence or argument mid-point. Overlap (50-100 chars between consecutive chunks) preserves context across boundaries — if the answer spans a chunk boundary, overlap ensures retrieval captures the full context",
+        "Required for vector databases",
+        "Overlap improves embedding speed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Example: chunk 1 ends 'The policy applies to...' and chunk 2 starts 'all products purchased...'. Without overlap, retrieval of either chunk gives incomplete information. Overlap ensures both chunks carry that critical context.",
+      "tags": [
+        "RAG",
+        "chunking"
+      ]
+    },
+    {
+      "id": "rag-q3",
+      "type": "mcq",
+      "prompt": "RAG vs fine-tuning for a customer support chatbot with frequently updated FAQs?",
+      "choices": [
+        "Fine-tuning is always better",
+        "RAG — FAQs change frequently. RAG allows updating the knowledge base by adding/modifying documents without model retraining. Fine-tuning bakes knowledge into weights — every FAQ update requires an expensive retraining run",
+        "Same performance",
+        "RAG can't answer FAQ questions"
+      ],
+      "answerIndex": 1,
+      "explanation": "Operational reality: fine-tuning cycles take days and cost money. A new FAQ answer in RAG: add the document to the vector store, available immediately. RAG is the right architecture for frequently updated domain knowledge.",
+      "tags": [
+        "RAG",
+        "fine-tuning",
+        "comparison"
+      ]
+    },
+    {
+      "id": "rag-q4",
+      "type": "mcq",
+      "prompt": "Why is chunking document text necessary for RAG?",
+      "choices": [
+        "Vector DBs only store short strings",
+        "LLMs have context window limits — a 1000-page document can't fit. Chunks ensure each piece fits and the relevant chunk (not the whole doc) is retrieved",
+        "Faster embedding computation",
+        "Required by the embedding model"
+      ],
+      "answerIndex": 1,
+      "explanation": "Embedding a full document loses precision — 'which exact section?'. Chunks give retrieval granularity. Context window limits also prevent stuffing full docs into prompts.",
+      "tags": [
+        "RAG",
+        "chunking"
+      ]
+    },
+    {
+      "id": "rag-q5",
+      "type": "mcq",
+      "prompt": "ANN (Approximate Nearest Neighbor) search in vector DBs:",
+      "choices": [
+        "Always returns exact nearest neighbors",
+        "Returns approximate neighbors much faster using HNSW/IVF indices — 99%+ accuracy at 100× speedup over brute-force",
+        "Requires SQL",
+        "Only works for images"
+      ],
+      "answerIndex": 1,
+      "explanation": "Exact KNN is O(N) per query. ANN (HNSW, IVF-PQ) provides sub-linear query time with near-perfect accuracy. Essential for 10M+ vector collections.",
+      "tags": [
+        "RAG",
+        "vector-db"
+      ]
+    },
+    {
+      "id": "rag-q6",
+      "type": "mcq",
+      "prompt": "Faithfulness in RAGAS evaluation measures:",
+      "choices": [
+        "Answer grammatical quality",
+        "Whether the answer is grounded ONLY in retrieved context — no hallucinated facts added by the LLM",
+        "Query-answer relevance",
+        "Retrieval coverage"
+      ],
+      "answerIndex": 1,
+      "explanation": "Faithfulness: every claim in the answer should be traceable to a retrieved chunk. Unfaithful = LLM added its own 'knowledge' not in context. Critical for factual accuracy.",
+      "tags": [
+        "RAG",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "rag-q7",
+      "type": "mcq",
+      "prompt": "Hybrid search in RAG combines:",
+      "choices": [
+        "Two different LLMs",
+        "Dense (semantic embedding similarity) + sparse (BM25 keyword) search — catches semantic matches AND exact keyword matches for better recall",
+        "CNN and transformer",
+        "Two vector DBs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Dense only: misses exact product codes, names. Sparse only: misses semantic synonyms. Combining via reciprocal rank fusion improves recall significantly.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-q8",
+      "type": "mcq",
+      "prompt": "Re-ranking retrieved chunks before LLM prompt serves to:",
+      "choices": [
+        "Reduce token count",
+        "Use a cross-encoder (more expensive, more accurate) to re-score the top-k chunks and only send the truly relevant ones — reduces noise in context",
+        "Sort alphabetically",
+        "Required for RAG"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bi-encoder retrieval (fast, approximate) → cross-encoder re-ranking (slow, precise). Re-ranker reads query+chunk jointly, far more accurate than cosine similarity alone.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-q9",
+      "type": "mcq",
+      "prompt": "Query rewriting in advanced RAG helps with:",
+      "choices": [
+        "Reducing cost",
+        "Vague or multi-intent queries — rewrite into multiple specific sub-queries or expand with HyDE (Hypothetical Document Embeddings) for better retrieval",
+        "Security",
+        "Token limit"
+      ],
+      "answerIndex": 1,
+      "explanation": "User queries are often vague. Query rewriting: expand abbreviations, generate alternative phrasings, or create hypothetical answers (HyDE) to retrieve more relevant chunks.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-q10",
+      "type": "mcq",
+      "prompt": "Why must queries and documents be embedded with the SAME model?",
+      "choices": [
+        "Performance reasons",
+        "Cosine similarity between embeddings is only meaningful if both vectors live in the same embedding space — different models produce incompatible spaces",
+        "API restriction",
+        "Token count reasons"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each model has its own learned embedding geometry. Cross-model similarity is nonsensical. In production, switching embedding models requires re-embedding ALL documents.",
+      "tags": [
+        "RAG",
+        "embeddings"
+      ]
+    },
+    {
+      "id": "rag-q11",
+      "type": "mcq",
+      "prompt": "Chunk overlap in RAG (e.g. 100-token overlap between chunks) prevents:",
+      "choices": [
+        "Duplicate results",
+        "Loss of context at chunk boundaries — a sentence split across chunk boundaries would be incomplete without overlap",
+        "Token limit issues",
+        "Vector DB errors"
+      ],
+      "answerIndex": 1,
+      "explanation": "Clean splits can cut a key sentence mid-way. Overlap ensures every sentence appears fully in at least one chunk, enabling complete retrieval of context at boundaries.",
+      "tags": [
+        "RAG",
+        "chunking"
+      ]
+    },
+    {
+      "id": "rag-q12",
+      "type": "multi",
+      "prompt": "Which are valid RAG improvement techniques?",
+      "choices": [
+        "Hybrid search (dense + sparse)",
+        "Re-ranking with cross-encoder",
+        "Storing fewer documents",
+        "Query rewriting/expansion"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Hybrid, re-ranking, and query rewriting all improve retrieval quality. Storing fewer documents hurts recall — RAG benefit comes from large knowledge stores.",
+      "tags": [
+        "RAG",
+        "advanced"
+      ]
+    },
+    {
+      "id": "rag-q13",
+      "type": "mcq",
+      "prompt": "Metadata filtering in RAG (filter by date, department, document type) is used for:",
+      "choices": [
+        "Reducing storage cost",
+        "Pre-filtering the search space to only relevant document subsets before vector similarity — improves precision and reduces irrelevant context",
+        "Required for all RAG",
+        "Improving embedding quality"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without filtering, a query retrieves from all docs. Filter: only search docs from this department, or within date range. Especially important for multi-tenant systems.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-q14",
+      "type": "mcq",
+      "prompt": "HyDE (Hypothetical Document Embedding) technique:",
+      "choices": [
+        "Creates synthetic training data",
+        "Generates a hypothetical answer to the query, embeds it, uses that embedding for retrieval — the hypothetical answer is closer in embedding space to real answers than the query itself",
+        "Compresses embeddings",
+        "Replaces chunking"
+      ],
+      "answerIndex": 1,
+      "explanation": "Queries ('how does X work?') are stylistically different from answers ('X works by...'). HyDE: LLM generates a hypothetical answer → embed it → retrieve chunks similar to that answer.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-q15",
+      "type": "mcq",
+      "prompt": "Naive RAG failure: retrieved context is correct but answer is wrong. Likely cause:",
+      "choices": [
+        "Vector DB bug",
+        "LLM didn't faithfully use the context — hallucinated instead, or the relevant information was too deeply buried in a large context (lost in the middle)",
+        "Embedding model failure",
+        "Chunk size too large"
+      ],
+      "answerIndex": 1,
+      "explanation": "Retrieval ≠ generation. The LLM must actually attend to and use the context. Position of key facts matters — don't bury them in a huge context. Re-rank to put most relevant chunks first.",
+      "tags": [
+        "RAG",
+        "generation"
+      ]
+    },
+    {
+      "id": "rag-q16",
+      "type": "mcq",
+      "prompt": "Context window stuffing (sending all retrieved chunks) risks:",
+      "choices": [
+        "Crashes the API",
+        "LLM attention dilution — relevant information gets 'lost in the middle' of a large context. Fewer, more relevant chunks > many marginally relevant ones",
+        "Better results always",
+        "Reducing costs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Counterintuitively, sending MORE context can be worse. Too much irrelevant context distracts the model. Use re-ranking + strict top-k to keep context focused.",
+      "tags": [
+        "RAG",
+        "generation"
+      ]
+    },
+    {
+      "id": "rag-q17",
+      "type": "mcq",
+      "prompt": "GraphRAG differs from standard RAG by:",
+      "choices": [
+        "Using graph databases only",
+        "Building a knowledge graph from documents and traversing entity relationships for retrieval — better for multi-hop queries spanning multiple documents",
+        "Eliminating the LLM",
+        "Faster indexing"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standard RAG: similarity search in flat vector space. GraphRAG (Microsoft): extract entities + relationships into a graph. Multi-hop: 'Who worked at company X that acquired Y?' traverses graph edges.",
+      "tags": [
+        "RAG",
+        "advanced"
+      ]
+    },
+    {
+      "id": "rag-q18",
+      "type": "mcq",
+      "prompt": "RAGAS context_precision metric measures:",
+      "choices": [
+        "Answer grammar",
+        "What fraction of retrieved chunks are actually relevant to answering the question — low precision = too much noise in context",
+        "Speed of retrieval",
+        "Embedding quality"
+      ],
+      "answerIndex": 1,
+      "explanation": "Context precision: are ALL retrieved chunks useful? Low = retrieval is broad but noisy. Improve by: metadata filtering, re-ranking, better chunking, lower k.",
+      "tags": [
+        "RAG",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "rag-q19",
+      "type": "mcq",
+      "prompt": "A vector database differs from traditional databases by primarily indexing on:",
+      "choices": [
+        "Primary key",
+        "Text length",
+        "Semantic similarity using ANN search on high-dimensional dense vectors",
+        "SQL queries"
+      ],
+      "answerIndex": 2,
+      "explanation": "Vector DBs: HNSW/IVF indexes over dense float vectors for sub-linear similarity search. Traditional DBs: B-tree/hash indexes for exact lookup. Complementary — many systems use both.",
+      "tags": [
+        "RAG",
+        "vector-db"
+      ]
+    },
+    {
+      "id": "rag-q20",
+      "type": "mcq",
+      "prompt": "When should you choose RAG over fine-tuning for knowledge injection?",
+      "choices": [
+        "Always — RAG is always better",
+        "When knowledge: is large (millions of docs), changes frequently, needs citation/attribution, or isn't available at training time",
+        "Only for internal docs",
+        "When GPU compute is available"
+      ],
+      "answerIndex": 1,
+      "explanation": "RAG = injection at inference. Fine-tune = bake into weights at training. RAG wins for: dynamic knowledge, large corpora, traceable citations. Fine-tune wins for: stable knowledge, low-latency (no retrieval step).",
+      "tags": [
+        "RAG",
+        "vs-fine-tuning"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rag-fc1",
+      "front": "RAG pipeline",
+      "back": "1. Embed question → vector. 2. Similarity search in vector DB → top-k chunks. 3. Inject chunks into LLM prompt. 4. LLM generates answer from provided evidence. 5. Return with citations.",
+      "tags": [
+        "RAG"
+      ]
+    },
+    {
+      "id": "rag-fc2",
+      "front": "Chunking best practices",
+      "back": "Chunk size: 200-1000 chars (test empirically). Overlap: 10-20% to preserve boundary context. Use semantic splitters (split at paragraph/sentence, not fixed chars). Too large: noise. Too small: missing context.",
+      "tags": [
+        "RAG",
+        "chunking"
+      ]
+    },
+    {
+      "id": "rag-fc3",
+      "front": "RAG vs fine-tuning",
+      "back": "RAG: updatable, transparent, fresh data. Fine-tuning: bakes knowledge in, no retrieval overhead, stale/opaque. Use RAG for frequently changing knowledge; fine-tuning for stable domain style/format.",
+      "tags": [
+        "RAG",
+        "fine-tuning"
+      ]
+    },
+    {
+      "id": "rag-fc4",
+      "front": "Chunking overlap",
+      "back": "50-100 token overlap between chunks prevents context loss at boundaries. Chunk size: 256-512 tokens for retrieval precision; 1024+ for summarization tasks.",
+      "tags": [
+        "RAG",
+        "chunking"
+      ]
+    },
+    {
+      "id": "rag-fc5",
+      "front": "Re-ranking",
+      "back": "Stage 1: bi-encoder ANN retrieval (fast, approximate, top 20). Stage 2: cross-encoder re-ranker (slow, precise, top 3-5). Better precision before LLM context.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-fc6",
+      "front": "RAGAS 4 metrics",
+      "back": "Faithfulness (grounded in context?), Answer Relevancy (addresses question?), Context Recall (found needed chunks?), Context Precision (chunks are relevant?).",
+      "tags": [
+        "RAG",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "rag-fc7",
+      "front": "HyDE",
+      "back": "Generate hypothetical answer (LLM) → embed it → retrieve chunks similar to the hypothetical answer. Better than query embedding for abstract or open-ended queries.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    },
+    {
+      "id": "rag-fc8",
+      "front": "Hybrid search",
+      "back": "Dense (cosine similarity on embeddings) + sparse (BM25 keyword). Combine via Reciprocal Rank Fusion. Catches semantic matches AND exact names/codes.",
+      "tags": [
+        "RAG",
+        "retrieval"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using RAG - Retrieval-Augmented Generation\n\nDesign a realistic production service with RAG - Retrieval-Augmented Generation at its core. No code required:\n\n1. Why RAG - Retrieval-Augmented Generation over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "rag-pc1",
+        "text": "Justified use of RAG - Retrieval-Augmented Generation for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "rag-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "rag-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "rag-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "rag-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does RAG - Retrieval-Augmented Generation remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

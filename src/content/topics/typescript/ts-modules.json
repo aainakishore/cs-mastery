@@ -1,0 +1,361 @@
+{
+  "id": "ts-modules",
+  "unit": 10,
+  "order": 86,
+  "title": "TypeScript Modules and Namespaces",
+  "summary": "ES module syntax, CommonJS interop, namespaces, ambient declarations, and module resolution strategies.",
+  "prereqs": ["ts-decorators"],
+  "guide": "# TypeScript Modules and Namespaces\n\nTypeScript's module system sits on top of JavaScript's ES module standard. The mental model: each file with `import` or `export` is a **module** — an isolated namespace. Files without those keywords are **global scripts** — variables leak into the global scope.\n\n```\nModule vs Script distinction:\n\nmath.ts (script — NO import/export)\n  const PI = 3.14;        ← leaks to global scope\n  function add() {}       ← leaks to global scope\n\nmath.ts (module — HAS import/export)\n  export const PI = 3.14; ← private to this file unless exported\n  const add = () => {};   ← private, not exported\n\n  Other files CANNOT access PI until they explicitly:\n  import { PI } from './math';\n```\n\n## ES Module Syntax\n\n```ts\n// Named exports — explicit names, importers use exact names or alias\nexport const PI = 3.14;\nexport function add(a: number, b: number): number { return a + b; }\nexport type { UserId };  // type-only export (erased in JS output)\n\n// Default export — one per file, importers choose their own name\nexport default class Calculator { /* ... */ }\n\n// Re-export from another module:\nexport { add, PI } from './math';\nexport * from './utils';  // re-export everything\nexport * as utils from './utils';  // namespace re-export\n```\n\n```ts\n// Named import\nimport { add, PI } from './math';\nimport { add as sum, PI as circlePI } from './math';  // aliases\n\n// Default import\nimport Calculator from './calculator';  // any name works\n\n// Namespace import — all exports become properties on a single object\nimport * as math from './math';\nmath.add(1, 2);\nmath.PI;\n\n// Type-only import — erased entirely at compile time (no runtime import)\nimport type { User } from './types';\n```\n\n## CommonJS Interop\n\n```ts\n// CJS requires go through the interop layer:\nimport path from 'path';           // default import of CJS module\nimport { join } from 'path';       // named import (TS synthesizes .join)\nimport * as fs from 'fs';          // namespace import\n\n// esModuleInterop: true (default in newer projects) enables clean syntax\n// Without it, CJS defaults must be imported as:\nimport path = require('path');     // TS namespace import syntax\n\n// The crucial difference:\n// CJS: module.exports = { join, ... }      (exports is an object)\n// ESM: export function join() {}           (named export)\n// TypeScript bridges them via synthetic default exports\n```\n\n## Module Resolution — how TypeScript finds files\n\n```\nTwo resolution strategies:\n\n1. node (legacy) / node16 (modern)\n   import { x } from './utils';\n   TS looks for:\n     ./utils.ts\n     ./utils.tsx\n     ./utils/index.ts\n     ./utils.d.ts\n\n2. bundler (Vite/webpack projects)\n   Respects paths config, supports ESM\n   Allows extensionless imports\n\nBarespecifier (no ./ or /) resolution:\n   import { x } from 'lodash';\n   TS looks in:\n     node_modules/lodash/index.d.ts\n     node_modules/@types/lodash/index.d.ts\n```\n\n## Path Aliases — tsconfig paths\n\n```json\n// tsconfig.json\n{\n  \"compilerOptions\": {\n    \"baseUrl\": \".\",\n    \"paths\": {\n      \"@/*\": [\"src/*\"],\n      \"@components/*\": [\"src/components/*\"]\n    }\n  }\n}\n```\n\n```ts\n// Before: deep relative imports\nimport { Button } from '../../../../components/Button';\n\n// After: alias import\nimport { Button } from '@components/Button';\n```\n\n> **⚠️ Note:** `paths` in tsconfig is for TypeScript checking ONLY. Bundlers (Vite, webpack) need their own alias config pointing to the same directories.\n\n## Namespaces (internal modules)\n\n```ts\n// Namespace — wrap related code in a named scope\n// Used primarily in .d.ts files and legacy code\nnamespace Validation {\n  export interface Validator {\n    isValid(s: string): boolean;\n  }\n\n  export class EmailValidator implements Validator {\n    isValid(s: string) { return s.includes('@'); }\n  }\n}\n\nconst v = new Validation.EmailValidator();\nv.isValid('test@example.com');\n\n// Modern code prefers ES modules over namespaces\n// Namespaces compile to IIFEs with a shared object:\n// (function(Validation) {\n//   Validation.EmailValidator = ...\n// })(Validation || (Validation = {}));\n```\n\n## Ambient Declarations — `.d.ts` files\n\nAmbient declarations describe the shape of code that exists at runtime but wasn't written in TypeScript:\n\n```ts\n// custom.d.ts — tells TypeScript about a global variable injected by the HTML page\ndeclare const __APP_VERSION__: string;\ndeclare const __BUILD_DATE__: number;\n\n// Tell TS to treat SVG imports as React components:\ndeclare module '*.svg' {\n  import React from 'react';\n  const ReactComponent: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;\n  export default ReactComponent;\n}\n\n// Extend an existing module:\ndeclare module 'express' {\n  interface Request {\n    user?: { id: string; role: string };\n  }\n}\n// Now req.user is typed everywhere in Express routes\n```\n\n## Module System Cheatsheet\n\n| Feature | Syntax | Notes |\n|---|---|---|\n| Named export | `export const x = ...` | Explicit name |\n| Default export | `export default ...` | One per file |\n| Type-only export | `export type { T }` | Erased in output |\n| Type-only import | `import type { T }` | Zero JS output |\n| Re-export | `export { x } from './y'` | Passthrough |\n| Namespace import | `import * as ns from './y'` | All exports as object |\n| Path alias | `@/*` in tsconfig paths | TypeScript only |\n| Ambient module | `declare module 'x' {}` | For untyped packages |\n\n## Common Pitfalls\n- Adding `import/export` to a file to make it a module — sometimes you want a global script for declaration files\n- `import type` is not just a hint — it catches cases where a value import would create a circular dependency\n- `paths` in tsconfig does NOT configure your bundler — both need configuration\n- Circular imports: two modules importing each other can lead to `undefined` at runtime in CJS; ESM handles it better via live bindings\n- `esModuleInterop: true` is required for clean default imports from CJS packages like lodash, express\n\n## Connections\n- **ts-tsconfig** — moduleResolution, paths, baseUrl, esModuleInterop options\n- **react-fundamentals** — JSX modules import React; understanding module scope explains why React must be in scope\n- **angular-fundamentals** — NgModule is the Angular wrapper around ES modules",
+  "questions": [
+    {
+      "id": "tsm-q1",
+      "type": "mcq",
+      "prompt": "A TypeScript file becomes a module (not a global script) when:",
+      "choices": [
+        "It has the .ts extension",
+        "It contains at least one import or export statement",
+        "It is in the src/ folder",
+        "It has a named export"
+      ],
+      "answerIndex": 1,
+      "explanation": "The presence of `import` or `export` makes a file a module with its own scope. Without either, the file is a global script — all its top-level declarations are added to the global scope and can conflict with other files.",
+      "tags": ["modules", "scope"]
+    },
+    {
+      "id": "tsm-q2",
+      "type": "mcq",
+      "prompt": "What does `import type { User } from './types'` do differently from `import { User } from './types'`?",
+      "choices": [
+        "No difference — TypeScript erases both at compile time",
+        "type-only import is completely erased from the JavaScript output — no runtime import statement is emitted",
+        "type-only imports are faster at runtime",
+        "type imports are only allowed in .d.ts files"
+      ],
+      "answerIndex": 1,
+      "explanation": "`import type` is erased entirely — no `require()` or `import()` call remains in the JS output. This avoids circular dependency issues, reduces bundle size, and prevents importing a value as if it were a type (a runtime error). Regular `import` emits the import statement even for type-only uses.",
+      "tags": ["modules", "import-type"]
+    },
+    {
+      "id": "tsm-q3",
+      "type": "codeOutput",
+      "prompt": "How would you import ALL exports from `./utils` under a single object named `utils`?",
+      "code": "// Which import statement is correct?\n// A: import utils from './utils';\n// B: import * as utils from './utils';\n// C: import { utils } from './utils';\n// D: import utils = require('./utils');",
+      "choices": [
+        "A — default import",
+        "B — namespace import",
+        "C — named import",
+        "D — CommonJS import"
+      ],
+      "answerIndex": 1,
+      "explanation": "`import * as utils from './utils'` is a namespace import — all named exports become properties of `utils`. `utils.add()`, `utils.PI` etc. Option A gets a default export. C gets one named export called 'utils'. D is CJS-style.",
+      "tags": ["modules", "namespace-import"]
+    },
+    {
+      "id": "tsm-q4",
+      "type": "mcq",
+      "prompt": "What is an ambient declaration (`declare const x: string`)?",
+      "choices": [
+        "A variable declaration that TypeScript will create at runtime",
+        "Tells TypeScript that a value already exists at runtime (from an external source) without TypeScript generating any code for it",
+        "A type alias",
+        "A deprecated feature replaced by interface"
+      ],
+      "answerIndex": 1,
+      "explanation": "`declare` says 'this exists at runtime, I'm just describing its type'. No JavaScript is emitted. Used for: global variables injected by the HTML (`declare const ENV: string`), external scripts, augmenting module types (`.d.ts` files).",
+      "tags": ["ambient", "declarations"]
+    },
+    {
+      "id": "tsm-q5",
+      "type": "mcq",
+      "prompt": "After adding a path alias `'@/*': ['src/*']` in tsconfig, you can immediately use `import { x } from '@/utils'` in:",
+      "choices": [
+        "Both TypeScript type checking AND the bundler (Vite/webpack)",
+        "TypeScript type checking only — the bundler needs its own alias configuration",
+        "The bundler only — TypeScript ignores paths",
+        "Neither — paths aliases require tsc compilation mode"
+      ],
+      "answerIndex": 1,
+      "explanation": "`tsconfig paths` is for TypeScript's language server and type checking ONLY. The bundler (Vite, webpack) does not read tsconfig paths. You must configure an identical alias in `vite.config.ts` (resolve.alias) or webpack.config (resolve.alias).",
+      "tags": ["modules", "paths", "tsconfig"]
+    },
+    {
+      "id": "tsm-q6",
+      "type": "mcq",
+      "prompt": "What is `esModuleInterop: true` needed for?",
+      "choices": [
+        "Enabling ES modules in TypeScript",
+        "Allowing clean default imports from CommonJS modules like `import React from 'react'` instead of `import * as React`",
+        "Enabling top-level await",
+        "Converting ESM to CJS"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without `esModuleInterop`, CJS modules that use `module.exports = X` must be imported as `import * as X`. With it, TypeScript synthesizes a default export, allowing `import X from 'module'`. Most modern tsconfigs have this enabled.",
+      "tags": ["modules", "commonjs-interop", "esModuleInterop"]
+    },
+    {
+      "id": "tsm-q7",
+      "type": "mcq",
+      "prompt": "A `declare module '*.svg'` ambient declaration in a `types.d.ts` file allows:",
+      "choices": [
+        "TypeScript to compile SVG files to JavaScript",
+        "TypeScript to type SVG imports — without it, `import logo from './logo.svg'` would be a type error",
+        "SVG animations",
+        "SVG optimization at build time"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript doesn't natively know the type of `.svg` imports. An ambient module declaration `declare module '*.svg' { ... }` teaches TypeScript what type to assign. Vite/webpack handle the actual transformation at runtime — TypeScript just needs the type info.",
+      "tags": ["ambient", "modules", "declaration-files"]
+    },
+    {
+      "id": "tsm-q8",
+      "type": "multi",
+      "prompt": "Which statements about namespaces are true?",
+      "choices": [
+        "Namespaces compile to IIFEs with a shared object",
+        "Modern TypeScript prefers ES modules over namespaces",
+        "Namespaces and ES modules can be freely mixed in the same project",
+        "Namespaces are primarily used in .d.ts files for organizing global types"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Namespaces DO compile to IIFEs. Modern code prefers ES modules. Namespaces are still used in `.d.ts` files to organize types (e.g., `declare namespace NodeJS { interface ProcessEnv {...} }`). Mixing namespaces and ES modules in the same file is not recommended — TypeScript may behave unexpectedly.",
+      "tags": ["namespaces", "modules"]
+    },
+    {
+      "id": "tsm-q9",
+      "type": "codeOutput",
+      "prompt": "What does TypeScript look for when resolving `import { add } from './math'`?",
+      "code": "// Module resolution (node strategy) tries files in order:\n// Which sequence is correct?",
+      "choices": [
+        "./math.js, ./math.ts, ./math.d.ts",
+        "./math.ts, ./math.tsx, ./math/index.ts, ./math.d.ts",
+        "./math.ts only",
+        "./math/math.ts"
+      ],
+      "answerIndex": 1,
+      "explanation": "Node module resolution tries: `./math.ts`, `./math.tsx`, `./math.d.ts`, `./math/index.ts`, `./math/index.tsx`, `./math/index.d.ts`. The `.js` file is checked in `node16` resolution mode. Extensions can be explicit or inferred.",
+      "tags": ["modules", "module-resolution"]
+    },
+    {
+      "id": "tsm-q10",
+      "type": "mcq",
+      "prompt": "What does `export * as utils from './utils'` do?",
+      "choices": [
+        "Imports all from utils into a local 'utils' variable",
+        "Re-exports all named exports from./utils as a namespace named 'utils' — importers get `import { utils } from './index'; utils.add()`",
+        "Exports only the default from ./utils",
+        "Error — you cannot alias re-exports"
+      ],
+      "answerIndex": 1,
+      "explanation": "`export * as utils` is a namespace re-export. Consumers: `import { utils } from './index'` then `utils.add()`. It's a convenient way to expose an entire module under a nested namespace without an intermediate import.",
+      "tags": ["modules", "re-export"]
+    },
+    {
+      "id": "tsm-q11",
+      "type": "mcq",
+      "prompt": "How do you augment Express's `Request` type to include a `user` property without editing node_modules?",
+      "choices": [
+        "Create a new interface called Request",
+        "Create a .d.ts file with `declare module 'express' { interface Request { user?: User } }` — declaration merges into Express's existing Request interface",
+        "Import Express and extend its class",
+        "Use a type assertion everywhere: `(req as any).user`"
+      ],
+      "answerIndex": 1,
+      "explanation": "Module augmentation: `declare module 'express' { interface Request { user?: User } }` merges your declaration into Express's existing `Request` interface. TypeScript now understands `req.user` in all routes. Zero runtime cost — pure type annotation.",
+      "tags": ["ambient", "declaration-merging", "modules"]
+    },
+    {
+      "id": "tsm-q12",
+      "type": "mcq",
+      "prompt": "Circular imports (A imports B, B imports A) are problematic in CJS but less so in ESM. Why?",
+      "choices": [
+        "ESM is newer and fixes the bug",
+        "CJS resolves modules eagerly and may see 'undefined' for values that haven't been assigned yet. ESM uses live bindings — references resolve to current values at call time",
+        "Circular imports are invalid TypeScript",
+        "CJS doesn't support default exports"
+      ],
+      "answerIndex": 1,
+      "explanation": "In CJS, if A imports B and B imports A, by the time B's `require('./a')` runs, A's module may only be partially executed — some exports are `undefined`. ESM live bindings point to the binding cell, which gets filled in when the module finishes. Circular deps still require care but are less dangerous.",
+      "tags": ["modules", "circular-imports", "commonjs"]
+    },
+    {
+      "id": "tsm-q13",
+      "type": "codeOutput",
+      "prompt": "A file says `const x = 5;` with no imports or exports. In TypeScript this is:",
+      "code": "// file: global.ts\nconst x = 5;",
+      "choices": [
+        "A module — const defines a module-scoped variable",
+        "A global script — x is added to the global scope and conflicts with same-named vars in other files",
+        "A declaration file",
+        "An error — all TypeScript files must have exports"
+      ],
+      "answerIndex": 1,
+      "explanation": "No `import` or `export` = global script. `x` becomes a global variable. If another file also declares `const x = 5`, TypeScript errors on duplicate identifier. Fix: add `export {}` at the bottom to make it a module (even without exporting anything).",
+      "tags": ["modules", "scope", "global"]
+    },
+    {
+      "id": "tsm-q14",
+      "type": "mcq",
+      "prompt": "What is a `.d.ts` file and what does it contain?",
+      "choices": [
+        "A compiled JavaScript file",
+        "A TypeScript declaration file — contains only type information (interfaces, type aliases, declare statements) with zero JavaScript output",
+        "A deprecated TypeScript format",
+        "A configuration file"
+      ],
+      "answerIndex": 1,
+      "explanation": "`.d.ts` files are pure type declaration files. They describe the types of a library or codebase without containing any executable code. TypeScript uses them for type checking. When you install `@types/lodash`, you get `.d.ts` files that describe lodash's API.",
+      "tags": ["declaration-files", "modules"]
+    },
+    {
+      "id": "tsm-q15",
+      "type": "multi",
+      "prompt": "Which are valid reasons to use `import type`?",
+      "choices": [
+        "Prevent circular import issues caused by value imports",
+        "Ensure a symbol is completely removed from the JS bundle if it's only used as a type",
+        "Improve IDE autocomplete performance",
+        "Avoid accidentally using a type as a value"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`import type` helps with circular deps (no runtime import), ensures the import is fully erased from output (bundle optimization), and prevents accidentally calling a type as a function. IDE performance is not a primary reason.",
+      "tags": ["modules", "import-type"]
+    },
+    {
+      "id": "tsm-q16",
+      "type": "mcq",
+      "prompt": "What happens when you `export default` a function and a colleague imports it as `import MyFn from './fn'`?",
+      "choices": [
+        "Error — default imports must use the original function name",
+        "Works — the name 'MyFn' is the importer's choice; default exports carry no required name",
+        "Works — but TypeScript warns about name mismatch",
+        "Only works if the function has the same name as the file"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default exports can be imported with any name the importer chooses. This is by design — they represent 'the main thing this module exports'. The downside: inconsistent naming across a codebase. Many style guides prefer named exports for this reason.",
+      "tags": ["modules", "default-export"]
+    },
+    {
+      "id": "tsm-q17",
+      "type": "mcq",
+      "prompt": "tsconfig `moduleResolution: 'bundler'` is recommended when:",
+      "choices": [
+        "Using tsc directly to compile to Node.js",
+        "Using Vite, webpack, or another bundler — it matches the real resolution algorithm used by the bundler, allowing extensionless imports and .tsx files",
+        "Writing library code published to npm",
+        "Using Deno"
+      ],
+      "answerIndex": 1,
+      "explanation": "`moduleResolution: 'bundler'` matches how Vite/webpack resolve modules — it allows importing without extensions and supports `.tsx`. For Node.js libraries use `node16` or `nodenext`. For Deno use `node16` with specific adjustments.",
+      "tags": ["modules", "module-resolution", "tsconfig"]
+    },
+    {
+      "id": "tsm-q18",
+      "type": "mcq",
+      "prompt": "What is the purpose of `export {}` at the bottom of a TypeScript file?",
+      "choices": [
+        "Exports all variables",
+        "Makes the file a module (enables module scope) without exporting anything — prevents variables from leaking to global scope",
+        "Clears all exports",
+        "Marks the file as ambient"
+      ],
+      "answerIndex": 1,
+      "explanation": "Empty `export {}` is a common trick: it makes a file a module (adding module scope isolation) without exporting anything. Useful for files that define globals or side effects but shouldn't have exports.",
+      "tags": ["modules", "scope"]
+    },
+    {
+      "id": "tsm-q19",
+      "type": "multi",
+      "prompt": "Which of these correctly describe barrel files (`index.ts`)?",
+      "choices": [
+        "Re-export multiple modules so consumers import from one location",
+        "Can cause large bundle sizes if tree-shaking doesn't work correctly",
+        "Required by TypeScript for directories",
+        "Can create circular dependency issues if modules within the directory import from the barrel"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Barrel files re-export for convenience: `export { Button } from './Button'; export { Input } from './Input'`. This helps DX but can bloat bundles if tree-shaking fails. Modules inside the same directory importing the barrel (instead of each other directly) can create circular deps.",
+      "tags": ["modules", "barrel-files", "patterns"]
+    },
+    {
+      "id": "tsm-q20",
+      "type": "mcq",
+      "prompt": "You install a package `foo` with no TypeScript types. The error is: 'Could not find a declaration file for module foo'. The cleanest fix is:",
+      "choices": [
+        "Add `// @ts-ignore` to every import",
+        "Install `@types/foo` from DefinitelyTyped, OR create a `foo.d.ts` under `src/types/` with `declare module 'foo'`",
+        "Convert the package to TypeScript",
+        "Use `require('foo')` instead"
+      ],
+      "answerIndex": 1,
+      "explanation": "If `@types/foo` exists on npm, install it. If not, create a stub: `declare module 'foo' { const x: any; export default x; }`. For better types, write fuller declarations in your own `.d.ts`. `@ts-ignore` hides the error everywhere but gives you no type safety.",
+      "tags": ["modules", "declaration-files", "types"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "tsm-fc1",
+      "front": "Module vs global script",
+      "back": "Any `import` or `export` = module (scoped). No `import`/`export` = global script (pollutes global scope). Use `export {}` to force module scope without exporting.",
+      "tags": ["modules", "scope"]
+    },
+    {
+      "id": "tsm-fc2",
+      "front": "import type vs import",
+      "back": "`import type { T }` is fully erased — no runtime import. Use it for types to avoid circular deps and reduce bundle. Regular `import` emits a runtime statement.",
+      "tags": ["modules", "import-type"]
+    },
+    {
+      "id": "tsm-fc3",
+      "front": "tsconfig paths — critical limitation",
+      "back": "paths aliases work for TypeScript type checking ONLY. Bundlers (Vite, webpack) need their own alias config. Both configs must point to the same directories.",
+      "tags": ["modules", "paths", "tsconfig"]
+    },
+    {
+      "id": "tsm-fc4",
+      "front": "Ambient declaration — declare keyword",
+      "back": "`declare const x: T` — tells TypeScript about a value that exists at runtime but wasn't written in TypeScript. Emits zero JavaScript. Used in `.d.ts` files and for injected globals.",
+      "tags": ["ambient", "declarations"]
+    },
+    {
+      "id": "tsm-fc5",
+      "front": "Module augmentation",
+      "back": "`declare module 'express' { interface Request { user?: User } }` — merges into Express's existing types. Lets you add fields to library interfaces without touching node_modules.",
+      "tags": ["modules", "ambient", "declaration-merging"]
+    },
+    {
+      "id": "tsm-fc6",
+      "front": "esModuleInterop",
+      "back": "Enables clean `import React from 'react'` for CJS packages. Without it: `import * as React from 'react'`. Most modern tsconfigs set it to true.",
+      "tags": ["modules", "commonjs-interop"]
+    },
+    {
+      "id": "tsm-fc7",
+      "front": "Namespace (legacy)",
+      "back": "Compiles to an IIFE with a shared object. Use in .d.ts for organizing global types. Modern code uses ES modules instead. Namespaces inside ES module files are discouraged.",
+      "tags": ["namespaces"]
+    },
+    {
+      "id": "tsm-fc8",
+      "front": "Barrel file tradeoff",
+      "back": "index.ts re-exports from multiple files — convenient for importers. Risk: can create circular deps inside the folder; can defeat tree-shaking if bundler can't analyse re-exports.",
+      "tags": ["modules", "barrel-files"]
+    }
+  ],
+  "project": {
+    "brief": "Your application has grown to have deep relative imports like `import { UserService } from '../../../services/UserService'`. Design a clean module structure: 1) Propose folder structure and path aliases that eliminate deep relative imports. 2) Write the tsconfig paths config AND the Vite resolve.alias config that implements it. 3) Create a barrel `index.ts` for a `services/` folder — list 3 potential circular dependency risks and how to avoid them. 4) You need to type an untyped npm package `color-picker` that exports `{ pickColor(): string }`. Write the ambient declaration. 5) Extend Express's Request type to include `currentUser: { id: string; role: string } | undefined`.",
+    "checklist": [
+      { "id": "c1", "text": "tsconfig paths and Vite alias configs are consistent and point to same directories", "weight": 1 },
+      { "id": "c2", "text": "Barrel index.ts re-exports services correctly", "weight": 1 },
+      { "id": "c3", "text": "3 circular dep risks identified: self-import, cross-service import through barrel, barrel importing from consumer", "weight": 1 },
+      { "id": "c4", "text": "Ambient declaration for color-picker written as declare module with correct shape", "weight": 1 },
+      { "id": "c5", "text": "Express Request augmentation uses declare module 'express' + interface Request", "weight": 1 }
+    ],
+    "hints": [
+      "tsconfig: `\"@services/*\": [\"src/services/*\"]`. Vite: `resolve: { alias: { '@services': path.resolve(__dirname, 'src/services') } }`.",
+      "Circular risk: ServiceA imports ServiceB, ServiceB imports index.ts which re-exports ServiceA → cycle.",
+      "Ambient: `declare module 'color-picker' { export function pickColor(): string; }`",
+      "Express augment: in a `src/types/express.d.ts` — `declare module 'express' { interface Request { currentUser?: {...} } }`"
+    ]
+  }
+}
+

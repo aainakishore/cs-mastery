@@ -1,0 +1,432 @@
+{
+  "id": "angular-standalone",
+  "unit": 10,
+  "order": 105,
+  "title": "Angular Standalone Components",
+  "summary": "Standalone components and directives, bootstrapping without NgModule, functional providers, and migration.",
+  "prereqs": [
+    "angular-services-di",
+    "angular-routing"
+  ],
+  "guide": "# Angular Standalone Components\n\nStandalone (stable Angular 15): each component declares its own imports — no NgModule required. Think of NgModule as a *shared locker room* where everyone declared their gear. Standalone is like each player *carrying their own gear* — self-contained, tree-shakeable, and easier to reason about.\n\n```\nNgModule era                        Standalone era\n─────────────────────────────────   ─────────────────────────────────\n@NgModule({                         @Component({\n  declarations: [A, B, C],            standalone: true,\n  imports: [CommonModule,             imports: [\n            RouterModule,               NgIf, NgFor,   ← tree-shakeable\n            SharedModule],              RouterLink,\n  exports: [A]                         UserCardComp   ← another standalone\n})                                    ]\n// 'A' must know SharedModule exists  // 'A' knows exactly what it uses\n```\n\n## Standalone Component\n```typescript\n@Component({\n  selector: 'app-dashboard',\n  standalone: true,\n  imports: [\n    NgIf, NgFor, AsyncPipe,     // granular — tree-shakeable\n    RouterLink, RouterOutlet,\n    UserCardComponent,           // other standalone components\n  ],\n  template: `...`\n})\nexport class DashboardComponent {}\n```\n\n## Bootstrapping\n```typescript\nbootstrapApplication(AppComponent, {\n  providers: [\n    provideRouter(routes, withPreloading(PreloadAllModules)),\n    provideHttpClient(withInterceptors([authInterceptor])),\n    provideAnimations(),\n  ]\n});\n// AppComponent must be standalone: true\n```\n\n## Functional Interceptor\n```typescript\nexport const authInterceptor: HttpInterceptorFn = (req, next) => {\n  const token = inject(AuthService).getToken();\n  return next(req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }));\n};\n```\n\n## Lazy Loading\n```typescript\n{ path: 'settings', loadComponent: () =>\n    import('./settings.component').then(m => m.SettingsComponent) }\n{ path: 'admin',    loadChildren: () =>\n    import('./admin/admin.routes').then(m => m.adminRoutes) }\n```\n\n## Tree-Shaking\nImport `NgIf`, `NgFor` individually instead of `CommonModule` to tree-shake unused utilities.\nAngular 17+ `@if`/`@for` need no import at all.\n\n```\nCommonModule (old)                  Standalone individual imports\n  NgIf ✓ included                   NgIf  ← included\n  NgFor ✓ included                  (NgFor not referenced = excluded)\n  NgSwitch ← unused, still bundled  AsyncPipe ← included\n  AsyncPipe ✓ included              Bundle: smaller\n  DatePipe ← unused, still bundled\n  Bundle: larger\n```\n\n## Migration Strategy\n```\n1. Leaf components first (no children to update)\n2. Make pipes/directives standalone\n3. Update parent imports[] to reference components directly\n4. Convert SharedModule to barrel of standalone items\n5. Delete NgModules once no longer referenced\n6. Update bootstrap to bootstrapApplication\n```\n\n## Common Pitfalls\n- `RouterOutlet` must be in imports for `<router-outlet>`.\n- Non-standalone pipe/directive: wrap in a module, import that module.\n- `provideHttpClient()` required in bootstrapApplication — not automatic.\n- Tests: `imports: [MyStandaloneComponent]` not declarations.\n- `providedIn: root` services become true singletons — no longer module-scoped with lazy loading.\n",
+  "questions": [
+    {
+      "id": "ast-q1",
+      "type": "mcq",
+      "prompt": "What does `standalone: true` enable?",
+      "choices": [
+        "Run outside Angular",
+        "Component declares its own deps in imports[] \u2014 no NgModule needed",
+        "Lazy-loads by default",
+        "AOT-compiled only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Self-contained: imports[] replaces NgModule declarations for this component.",
+      "tags": [
+        "standalone"
+      ]
+    },
+    {
+      "id": "ast-q2",
+      "type": "mcq",
+      "prompt": "Standalone replacement for RouterModule.forRoot?",
+      "choices": [
+        "RouterModule.standalone",
+        "provideRouter(routes) in bootstrapApplication providers",
+        "Auto-discovered",
+        "RouterModule still required"
+      ],
+      "answerIndex": 1,
+      "explanation": "provideRouter(routes) is the composable functional provider for routing.",
+      "tags": [
+        "standalone",
+        "routing"
+      ]
+    },
+    {
+      "id": "ast-q3",
+      "type": "mcq",
+      "prompt": "Why import NgIf/NgFor individually instead of CommonModule?",
+      "choices": [
+        "Faster execution",
+        "Tree-shaking \u2014 unused directives/pipes in CommonModule won't be bundled",
+        "Required for standalone",
+        "CommonModule deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "CommonModule bundles ~20 items. Individual imports let tree-shaker exclude unused ones.",
+      "tags": [
+        "standalone",
+        "tree-shaking"
+      ]
+    },
+    {
+      "id": "ast-q4",
+      "type": "codeOutput",
+      "prompt": "Standalone component uses <router-outlet> but imports only CommonModule. What happens at runtime?",
+      "code": "@Component({ standalone: true, imports: [CommonModule], template: '<router-outlet></router-outlet>' })\nexport class AppComponent {}",
+      "choices": [
+        "Works fine",
+        "Compile error",
+        "Runtime: router-outlet is not a known element",
+        "Navigation disabled"
+      ],
+      "answerIndex": 2,
+      "explanation": "RouterOutlet must be imported explicitly. Without it Angular reports unknown element.",
+      "tags": [
+        "standalone"
+      ]
+    },
+    {
+      "id": "ast-q5",
+      "type": "mcq",
+      "prompt": "How to provide HttpClient in standalone app?",
+      "choices": [
+        "Import HttpClientModule in AppComponent",
+        "HttpClientModule in bootstrap providers",
+        "provideHttpClient() in bootstrapApplication providers",
+        "Automatic"
+      ],
+      "answerIndex": 2,
+      "explanation": "provideHttpClient() (from @angular/common/http) is the functional replacement for HttpClientModule.",
+      "tags": [
+        "standalone",
+        "HttpClient"
+      ]
+    },
+    {
+      "id": "ast-q6",
+      "type": "mcq",
+      "prompt": "Use standalone component in NgModule-based project?",
+      "choices": [
+        "Incompatible",
+        "Add to NgModule's imports array (not declarations)",
+        "Add to declarations",
+        "Bridge module required"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standalone components go in NgModule.imports \u2014 enables incremental migration.",
+      "tags": [
+        "standalone",
+        "migration"
+      ]
+    },
+    {
+      "id": "ast-q7",
+      "type": "mcq",
+      "prompt": "TestBed for standalone component?",
+      "choices": [
+        "declarations: [Comp]",
+        "imports: [Comp] \u2014 brings own deps",
+        "TestBed.overrideComponent only",
+        "No TestBed needed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standalone components are imported \u2014 they bring their own dependencies.",
+      "tags": [
+        "standalone",
+        "testing"
+      ]
+    },
+    {
+      "id": "ast-q8",
+      "type": "multi",
+      "prompt": "Functional (non-class) providers in modern Angular?",
+      "choices": [
+        "provideRouter(routes)",
+        "provideHttpClient()",
+        "RouterModule.forRoot(routes)",
+        "provideAnimations()"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "provideRouter, provideHttpClient, provideAnimations are functional. RouterModule.forRoot is NgModule.",
+      "tags": [
+        "standalone",
+        "providers"
+      ]
+    },
+    {
+      "id": "ast-q9",
+      "type": "mcq",
+      "prompt": "Functional HttpInterceptorFn vs class interceptor?",
+      "choices": [
+        "Identical",
+        "HttpInterceptorFn: plain function, inject() for services, registered via withInterceptors([fn])",
+        "Functions can't intercept",
+        "Class still required"
+      ],
+      "answerIndex": 1,
+      "explanation": "No class, no implements keyword. Just register via withInterceptors.",
+      "tags": [
+        "standalone",
+        "HttpClient"
+      ]
+    },
+    {
+      "id": "ast-q10",
+      "type": "mcq",
+      "prompt": "CLI command to migrate to standalone?",
+      "choices": [
+        "ng migrate standalone",
+        "ng generate @angular/core:standalone",
+        "ng convert standalone",
+        "ng standalone --migrate"
+      ],
+      "answerIndex": 1,
+      "explanation": "ng generate @angular/core:standalone runs the official migration schematic.",
+      "tags": [
+        "standalone",
+        "migration",
+        "cli"
+      ]
+    },
+    {
+      "id": "ast-q11",
+      "type": "mcq",
+      "prompt": "A lazy NgModule-based feature had providedIn module-scoped service. After migration to standalone + providedIn: 'root', what changes?",
+      "choices": [
+        "Nothing — behavior is identical",
+        "Service becomes a true global singleton — no longer a new instance per lazy load",
+        "Service is tree-shaken",
+        "Lazy loading breaks"
+      ],
+      "answerIndex": 1,
+      "explanation": "Module-scoped services created a new instance per lazy-loaded module. providedIn: 'root' makes one singleton. This is a behavior change that can cause state leaks between feature areas.",
+      "tags": ["standalone", "migration"]
+    },
+    {
+      "id": "ast-q12",
+      "type": "mcq",
+      "prompt": "Angular 17+ built-in control flow (@if, @for) requires which import?",
+      "choices": [
+        "NgIf, NgFor individually",
+        "CommonModule",
+        "No import — built into the template compiler",
+        "ControlFlowModule"
+      ],
+      "answerIndex": 2,
+      "explanation": "@if/@for are compiled syntax, not directives. No runtime import needed. This is a key advantage over *ngIf/*ngFor.",
+      "tags": ["standalone", "tree-shaking"]
+    },
+    {
+      "id": "ast-q13",
+      "type": "mcq",
+      "prompt": "To use a non-standalone pipe in a standalone component, you should:",
+      "choices": [
+        "Add the pipe class directly to component imports[]",
+        "Create a @NgModule that declares and exports the pipe, then import that module",
+        "Convert it to standalone first — no other option",
+        "Use a wrapper service"
+      ],
+      "answerIndex": 1,
+      "explanation": "Only standalone classes can go directly in imports[]. Legacy pipes/directives need a module wrapper that exports them. Incremental migration allows this.",
+      "tags": ["standalone", "migration"]
+    },
+    {
+      "id": "ast-q14",
+      "type": "codeOutput",
+      "prompt": "What happens when you try to declare a standalone component in an NgModule?",
+      "code": "@NgModule({\n  declarations: [MyStandaloneComponent],  // standalone: true\n  exports: [MyStandaloneComponent]\n})",
+      "choices": [
+        "Works fine",
+        "Compile error: standalone components cannot be declared in NgModule",
+        "Runtime error",
+        "The standalone flag is ignored"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standalone components go in NgModule.imports[], not declarations[]. Angular throws a compile-time error if you try to declare them.",
+      "tags": ["standalone"]
+    },
+    {
+      "id": "ast-q15",
+      "type": "multi",
+      "prompt": "Which are valid in a standalone component's imports[]?",
+      "choices": [
+        "Other standalone components",
+        "NgModules (e.g. MatButtonModule)",
+        "Non-standalone components directly",
+        "Standalone pipes and directives"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Standalone imports[] accepts: standalone components, standalone directives, standalone pipes, and NgModules. Non-standalone items need to be wrapped in an NgModule first.",
+      "tags": ["standalone"]
+    },
+    {
+      "id": "ast-q16",
+      "type": "mcq",
+      "prompt": "provideHttpClient(withInterceptors([fn])) — what type must fn be?",
+      "choices": [
+        "class implementing HttpInterceptor",
+        "HttpInterceptorFn — (req, next) => Observable<HttpEvent>",
+        "HttpHandler subclass",
+        "object with intercept() method"
+      ],
+      "answerIndex": 1,
+      "explanation": "withInterceptors takes functional interceptors: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn) => Observable<HttpEvent<unknown>>",
+      "tags": ["standalone", "HttpClient"]
+    },
+    {
+      "id": "ast-q17",
+      "type": "mcq",
+      "prompt": "When using TestBed with a standalone component, how do you mock a child component?",
+      "choices": [
+        "TestBed.overrideComponent(MyComp, { set: { declarations: [MockChild] }})",
+        "TestBed.overrideComponent(MyComp, { set: { imports: [MockChild] }})",
+        "Add MockChild to TestBed.configureTestingModule declarations",
+        "Standalone components cannot mock children"
+      ],
+      "answerIndex": 1,
+      "explanation": "Override the parent standalone component's imports array via TestBed.overrideComponent with set.imports containing the mock.",
+      "tags": ["standalone", "testing"]
+    },
+    {
+      "id": "ast-q18",
+      "type": "mcq",
+      "prompt": "The correct migration order for standalone is:",
+      "choices": [
+        "Root components first, then children",
+        "Leaf components first (no children), working up toward root",
+        "Services first, then components",
+        "Order doesn't matter"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leaf components have no sub-components to worry about. Converting them first means their parents' imports lists only need updating once, not multiple times.",
+      "tags": ["standalone", "migration"]
+    },
+    {
+      "id": "ast-q19",
+      "type": "codeOutput",
+      "prompt": "Standalone component used inside an existing NgModule-based app. Developer adds it to declarations[]. What happens?",
+      "code": "@NgModule({ declarations: [StandaloneComp] }) // StandaloneComp has standalone:true",
+      "choices": [
+        "Works — backwards compatible",
+        "Angular ignores standalone flag in declarations",
+        "Compile error — standalone cannot be in declarations",
+        "Runtime warning only"
+      ],
+      "answerIndex": 2,
+      "explanation": "Standalone components must go in imports[], not declarations[]. Angular enforces this at compile time.",
+      "tags": ["standalone"]
+    },
+    {
+      "id": "ast-q20",
+      "type": "multi",
+      "prompt": "Which advantages does standalone offer over NgModule?",
+      "choices": [
+        "Explicit dependency graph per component",
+        "Better tree-shaking with granular imports",
+        "Fewer zone.js patches",
+        "Simpler lazy loading via loadComponent"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Standalone enables explicit per-component deps, better tree-shaking from granular imports, and simpler lazy loading. Zone.js behavior is independent of standalone.",
+      "tags": ["standalone"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ast-fc1",
+      "front": "standalone: true",
+      "back": "Component declares deps in imports[]. No NgModule needed. Direct import of other standalone components. Self-documenting, tree-shakeable.",
+      "tags": [
+        "standalone"
+      ]
+    },
+    {
+      "id": "ast-fc2",
+      "front": "bootstrapApplication providers",
+      "back": "provideRouter(routes), provideHttpClient(), provideAnimations(). Functional, composable. Replaces AppModule + imports array.",
+      "tags": [
+        "standalone",
+        "bootstrap"
+      ]
+    },
+    {
+      "id": "ast-fc3",
+      "front": "Functional interceptor",
+      "back": "const fn: HttpInterceptorFn = (req, next) => { const t = inject(Auth).getToken(); return next(req.clone({setHeaders:{Authorization:`Bearer ${t}`}})); }",
+      "tags": [
+        "standalone",
+        "HttpClient"
+      ]
+    },
+    {
+      "id": "ast-fc4",
+      "front": "loadComponent vs loadChildren",
+      "back": "loadComponent: lazy single standalone component. loadChildren: lazy routes array file. Both split separate JS chunks.",
+      "tags": [
+        "standalone",
+        "lazy-loading"
+      ]
+    },
+    {
+      "id": "ast-fc5",
+      "front": "Non-standalone in standalone",
+      "back": "Wrap in @NgModule({ declarations:[Comp], exports:[Comp] }). Import that module in standalone component's imports[].",
+      "tags": [
+        "standalone",
+        "migration"
+      ]
+    },
+    {
+      "id": "ast-fc6",
+      "front": "Testing standalone",
+      "back": "TestBed.configureTestingModule({ imports: [MyComp], providers: [{ provide:Svc, useClass:Mock }] }). No declarations.",
+      "tags": [
+        "standalone",
+        "testing"
+      ]
+    },
+    {
+      "id": "ast-fc7",
+      "front": "Standalone in NgModule",
+      "back": "Add to NgModule.imports[] — NOT declarations[]. This enables incremental migration: use standalone components inside legacy NgModule apps immediately.",
+      "tags": ["standalone", "migration"]
+    },
+    {
+      "id": "ast-fc8",
+      "front": "Angular @if / @for",
+      "back": "Angular 17+ built-in control flow syntax. No import needed — compiled directly. Replaces *ngIf/*ngFor. No NgIf/NgFor in imports[] required.",
+      "tags": ["standalone", "tree-shaking"]
+    }
+  ],
+  "project": {
+    "brief": "Migrate FeatureModule (ProductList, ProductDetail, SharedModule with TruncatePipe and HighlightDirective). Plan: (1) migration order; (2) SharedModule handling; (3) FeatureModule fate; (4) lazy loading; (5) ProductService scope after migration.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Migrate leaf components first: standalone: true, move NgModule imports",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "TruncatePipe/HighlightDirective: make standalone OR keep in SharedModule imported by components",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "FeatureModule: delete or keep as thin re-export for backwards compat",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Routing: loadChildren \u2192 import('./product.routes').then(m => m.productRoutes)",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "ProductService: providedIn: root \u2192 global singleton (behavior change from module-scoped)",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "Start with leaf components \u2014 simplest imports.",
+      "ProductService was module-scoped (new instance per lazy load). providedIn:root makes it a global singleton.",
+      "Routes file (no module): export const productRoutes: Routes = [...]"
+    ]
+  }
+}

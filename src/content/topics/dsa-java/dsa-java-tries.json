@@ -1,0 +1,444 @@
+{
+  "id": "dsa-java-tries",
+  "unit": 9,
+  "order": 75,
+  "title": "Tries in Java",
+  "summary": "Trie node structure, insert/search/startsWith, autocomplete, word search, and when to prefer Trie over HashMap.",
+  "prereqs": [
+    "dsa-java-strings",
+    "dsa-java-hashing"
+  ],
+  "guide": "# Tries in Java\n\nA Trie (pronounced 'try', from re**trie**val) is a tree where **each edge represents one character** and **each node represents a prefix**. Walking from the root to any node spells out a prefix. Walking to a node marked as a word-end spells out a complete word. This structure makes prefix queries \u2014 'does anything start with XY?' \u2014 O(length of prefix), regardless of how many words are stored.\n\n## Node structure and shape\n```java\n// Each node has up to 26 children (one per lowercase letter)\n// and a boolean flag marking 'a word ends here'.\n//\n// Visualise inserting 'cat', 'car', 'dog':\n//\n//        root\n//       /    \\\n//      c      d\n//      |      |\n//      a      o\n//     / \\     |\n//    t*  r*   g*     (* = isEnd true)\n//\n// 'ca' is a prefix but NOT a word (isEnd=false at 'a' node)\n// 'cat' IS a word  (isEnd=true  at 't' node)\n\nclass TrieNode {\n    TrieNode[] children = new TrieNode[26];  // index = ch - 'a'\n    boolean isEnd = false;\n}\n```\n\n## Insert \u2014 walk the path, create nodes on demand\n```java\nclass Trie {\n    private final TrieNode root = new TrieNode();\n\n    void insert(String word) {\n        TrieNode cur = root;\n        for (char ch : word.toCharArray()) {\n            int idx = ch - 'a';\n            if (cur.children[idx] == null)\n                cur.children[idx] = new TrieNode();  // create if missing\n            cur = cur.children[idx];\n        }\n        cur.isEnd = true;  // mark the final node as a complete word\n    }\n}\n// Time: O(L)  where L = word length\n// Space: O(L) new nodes in worst case\n```\n\n## Search vs startsWith \u2014 spot the one-character difference\n```java\n// SEARCH: does the FULL word exist?\nboolean search(String word) {\n    TrieNode cur = root;\n    for (char ch : word.toCharArray()) {\n        int idx = ch - 'a';\n        if (cur.children[idx] == null) return false;  // prefix broken\n        cur = cur.children[idx];\n    }\n    return cur.isEnd;  // \u2190 must be a complete word\n}\n\n// STARTSSWITH: does any stored word begin with this prefix?\nboolean startsWith(String prefix) {\n    TrieNode cur = root;\n    for (char ch : prefix.toCharArray()) {\n        int idx = ch - 'a';\n        if (cur.children[idx] == null) return false;\n        cur = cur.children[idx];\n    }\n    return true;  // \u2190 just reaching the node is enough, no isEnd check\n}\n```\n\n## Autocomplete \u2014 collect all words under a prefix node\n```java\nList<String> autocomplete(String prefix) {\n    TrieNode cur = root;\n    for (char ch : prefix.toCharArray()) {\n        int idx = ch - 'a';\n        if (cur.children[idx] == null) return Collections.emptyList();\n        cur = cur.children[idx];\n    }\n    // DFS from 'cur' collecting all words\n    List<String> results = new ArrayList<>();\n    dfs(cur, new StringBuilder(prefix), results);\n    return results;\n}\n\nvoid dfs(TrieNode node, StringBuilder sb, List<String> res) {\n    if (node.isEnd) res.add(sb.toString());\n    for (int i = 0; i < 26; i++) {\n        if (node.children[i] != null) {\n            sb.append((char)('a' + i));\n            dfs(node.children[i], sb, res);\n            sb.deleteCharAt(sb.length() - 1);  // backtrack\n        }\n    }\n}\n```\n\n## When Trie beats HashMap\n| Operation | HashMap | Trie |\n|---|---|---|\n| Exact word lookup | O(L) avg | O(L) |\n| Prefix existence | O(total words \u00d7 L) | O(L) |\n| Autocomplete | O(total words \u00d7 L) | O(L + output) |\n| Sorted word iteration | O(n log n) | O(n) in-order DFS |\n\n**Use Trie when:** you need prefix queries, autocomplete, spellcheck, or IP routing.\n**Use HashMap when:** only exact lookups and inserts \u2014 simpler and lower constant factors.\n\n## Common Pitfalls\n- Forgetting cur.isEnd = true after the loop in insert \u2014 the word is stored as a path but not marked as a complete word\n- Confusing search() and startsWith() \u2014 search requires isEnd=true; startsWith just needs the path to exist\n- Using HashMap<Character, TrieNode> as children \u2014 correct but slower than TrieNode[26]; use array for lowercase-only alphabets\n- Not backtracking the StringBuilder in DFS autocomplete \u2014 causes words to accumulate incorrectly\n- Assuming delete is simple \u2014 deleting a word may require removing shared prefix nodes only if no other word uses them\n\n## Connections\n- **Strings**: every Trie operation processes one character at a time \u2014 O(L) where L is string length\n- **Hashing**: Trie is an alternative to HashMap<String,...> when prefix queries matter\n- **Recursion/Backtracking**: autocomplete DFS uses backtracking (StringBuilder undo)\n- **Graphs/Trees**: a Trie is a rooted tree \u2014 DFS traversal collects all stored words",
+  "questions": [
+    {
+      "id": "djtr-q1",
+      "type": "mcq",
+      "prompt": "Each node in a Trie represents:",
+      "choices": [
+        "A complete word",
+        "A single character",
+        "A prefix \u2014 the path from root to this node spells the prefix",
+        "An alphabet index"
+      ],
+      "answerIndex": 2,
+      "explanation": "The node itself doesn't store a character \u2014 the EDGE leading to it does. The node represents the prefix formed by that path.",
+      "tags": [
+        "structure"
+      ]
+    },
+    {
+      "id": "djtr-q2",
+      "type": "mcq",
+      "prompt": "Trie insert time complexity for a word of length L:",
+      "choices": [
+        "O(1)",
+        "O(L)",
+        "O(n) where n is total stored words",
+        "O(L log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Walk L edges, creating nodes where missing. Only L steps regardless of how many words exist.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djtr-q3",
+      "type": "mcq",
+      "prompt": "startsWith() differs from search() by:",
+      "choices": [
+        "Being faster",
+        "Not checking isEnd \u2014 just verifying the prefix path exists",
+        "Checking parent nodes",
+        "Using BFS instead of DFS"
+      ],
+      "answerIndex": 1,
+      "explanation": "A prefix doesn't need to be a complete word \u2014 reaching the last prefix character node is sufficient.",
+      "tags": [
+        "search"
+      ]
+    },
+    {
+      "id": "djtr-q4",
+      "type": "codeOutput",
+      "prompt": "Insert 'cat'. search('ca') returns:",
+      "code": "// Trie has only 'cat' inserted\n// search checks isEnd at final node",
+      "choices": [
+        "true",
+        "false",
+        "null",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "'ca' path exists but the node at 'a' has isEnd=false \u2014 'ca' was never inserted as a complete word.",
+      "tags": [
+        "search",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djtr-q5",
+      "type": "codeOutput",
+      "prompt": "Insert 'cat'. startsWith('ca') returns:",
+      "code": "// Trie has only 'cat'\n// startsWith just needs the path",
+      "choices": [
+        "true",
+        "false",
+        "null",
+        "Error"
+      ],
+      "answerIndex": 0,
+      "explanation": "The path c\u2192a exists in the Trie \u2014 startsWith returns true without checking isEnd.",
+      "tags": [
+        "search",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djtr-q6",
+      "type": "mcq",
+      "prompt": "Space complexity of a Trie storing n words of average length L:",
+      "choices": [
+        "O(n)",
+        "O(L)",
+        "O(n \u00d7 L) worst case",
+        "O(26^L)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each character of each word potentially needs a node \u2014 O(n\u00d7L) nodes total in the worst case (no shared prefixes).",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djtr-q7",
+      "type": "mcq",
+      "prompt": "Space usage improves when stored words share:",
+      "choices": [
+        "The same length",
+        "Common prefixes \u2014 shared prefix nodes are reused",
+        "No characters in common",
+        "The same suffix"
+      ],
+      "answerIndex": 1,
+      "explanation": "'cat', 'car', 'cab' share the path c\u2192a \u2014 that prefix is stored ONCE, not three times.",
+      "tags": [
+        "space"
+      ]
+    },
+    {
+      "id": "djtr-q8",
+      "type": "mcq",
+      "prompt": "Autocomplete starting from a prefix node uses:",
+      "choices": [
+        "BFS to find the shortest words",
+        "DFS with backtracking to collect all words in the subtree",
+        "Binary search on stored words",
+        "In-order traversal"
+      ],
+      "answerIndex": 1,
+      "explanation": "DFS explores every branch; backtracking the StringBuilder undoes the character added for each branch.",
+      "tags": [
+        "autocomplete"
+      ]
+    },
+    {
+      "id": "djtr-q9",
+      "type": "mcq",
+      "prompt": "In the TrieNode[26] children array, the index for character 'c' is:",
+      "choices": [
+        "2",
+        "3",
+        "'c' - 'a' = 2",
+        "ASCII value of 'c'"
+      ],
+      "answerIndex": 2,
+      "explanation": "'a'\u21920, 'b'\u21921, 'c'\u21922. Formula: ch - 'a'.",
+      "tags": [
+        "structure"
+      ]
+    },
+    {
+      "id": "djtr-q10",
+      "type": "mcq",
+      "prompt": "A Trie node with isEnd=true means:",
+      "choices": [
+        "It has no children",
+        "A complete word ends at this node",
+        "It is the root",
+        "It has exactly one child"
+      ],
+      "answerIndex": 1,
+      "explanation": "isEnd=true marks that the prefix spelled by the root-to-this-node path is a stored word. Children may still exist (e.g. 'cat' and 'cats').",
+      "tags": [
+        "structure"
+      ]
+    },
+    {
+      "id": "djtr-q11",
+      "type": "multi",
+      "prompt": "Which operations is a Trie faster at than a HashSet<String>?",
+      "choices": [
+        "Exact word lookup",
+        "Prefix existence check",
+        "Autocomplete (list all words with prefix)",
+        "Counting total stored words"
+      ],
+      "answerIndexes": [
+        1,
+        2
+      ],
+      "explanation": "Exact lookup is O(L) for both. Prefix check and autocomplete are O(L + output) for Trie vs O(n\u00d7L) scan for HashSet.",
+      "tags": [
+        "comparison"
+      ]
+    },
+    {
+      "id": "djtr-q12",
+      "type": "mcq",
+      "prompt": "Word Search II (find all dictionary words in a grid) uses Trie because:",
+      "choices": [
+        "It makes DFS faster by pruning: branch abandoned when no word starts with current path",
+        "Grids require tree structures",
+        "HashMap can't store characters",
+        "It avoids visited arrays"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trie allows pruning \u2014 if the current board path is not a prefix of any dictionary word, stop immediately.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djtr-q13",
+      "type": "mcq",
+      "prompt": "Inserting 'app' into a Trie that already has 'apple':",
+      "choices": [
+        "Replaces 'apple'",
+        "Creates new nodes a,p,p",
+        "Reuses the existing a\u2192p\u2192p path, just marks isEnd=true at the second 'p' node",
+        "Throws duplicate error"
+      ],
+      "answerIndex": 2,
+      "explanation": "The shared prefix is already there \u2014 only isEnd changes at the word boundary node.",
+      "tags": [
+        "insert"
+      ]
+    },
+    {
+      "id": "djtr-q14",
+      "type": "mcq",
+      "prompt": "Trie sorted word iteration (DFS in children order 0\u219225) produces:",
+      "choices": [
+        "Random order",
+        "Reverse alphabetical",
+        "Alphabetical order \u2014 'a' children before 'b'",
+        "Length-sorted order"
+      ],
+      "answerIndex": 2,
+      "explanation": "Iterating children[0] to children[25] is alphabetical order \u2014 Trie gives sorted enumeration for free.",
+      "tags": [
+        "traversal"
+      ]
+    },
+    {
+      "id": "djtr-q15",
+      "type": "mcq",
+      "prompt": "Deleting a word from a Trie is complex because:",
+      "choices": [
+        "Trie nodes can't be removed",
+        "You must not delete nodes that are shared by other words or are prefixes of other words",
+        "The root must be rebuilt",
+        "isEnd cannot be set to false"
+      ],
+      "answerIndex": 1,
+      "explanation": "Only remove the node if it has no children AND is not a prefix of another word \u2014 requires careful post-order DFS.",
+      "tags": [
+        "delete"
+      ]
+    },
+    {
+      "id": "djtr-q16",
+      "type": "mcq",
+      "prompt": "HashMap<Character,TrieNode> vs TrieNode[26] for children:",
+      "choices": [
+        "HashMap is always better",
+        "TrieNode[26] uses more memory but gives O(1) child access; HashMap saves space for sparse alphabets",
+        "TrieNode[26] is O(log 26) access",
+        "No practical difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "26-element array is O(1) index. HashMap adds hashing overhead but uses less memory when alphabet is large or sparse.",
+      "tags": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "djtr-q17",
+      "type": "codeOutput",
+      "prompt": "Trie with 'bear','bell','bid','bull','buy'. startsWith('b') returns:",
+      "code": "// All words start with 'b'",
+      "choices": [
+        "true",
+        "false",
+        "5",
+        "null"
+      ],
+      "answerIndex": 0,
+      "explanation": "Path b exists \u2014 startsWith('b') is true. All stored words share the 'b' prefix.",
+      "tags": [
+        "tracing"
+      ]
+    },
+    {
+      "id": "djtr-q18",
+      "type": "mcq",
+      "prompt": "Longest common prefix of all words in a Trie is found by:",
+      "choices": [
+        "Comparing all word pairs",
+        "Walking from root until a node branches (children > 1) or hits isEnd",
+        "Sorting words and comparing first and last",
+        "BFS level-order to the deepest level"
+      ],
+      "answerIndex": 1,
+      "explanation": "Follow the single-child chain from root \u2014 the moment a node has 2+ children or isEnd=true, the common prefix ends.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djtr-q19",
+      "type": "mcq",
+      "prompt": "A compressed Trie (Radix tree) reduces space by:",
+      "choices": [
+        "Removing duplicate words",
+        "Merging chains of single-child nodes into one edge label",
+        "Hashing each word",
+        "Sorting children arrays"
+      ],
+      "answerIndex": 1,
+      "explanation": "Instead of one node per character, a chain is compressed into one edge with a string label. Fewer nodes, same lookup time.",
+      "tags": [
+        "variants"
+      ]
+    },
+    {
+      "id": "djtr-q20",
+      "type": "mcq",
+      "prompt": "After inserting 'cats' into a Trie that has 'cat', search('cat') returns:",
+      "choices": [
+        "false \u2014 'cats' overwrote it",
+        "true \u2014 isEnd at 't' node is unchanged; 'cats' added a new 's' child",
+        "Error \u2014 prefix conflict",
+        "null"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both words coexist: the 't' node stays isEnd=true, and a new 's' child is added below it.",
+      "tags": [
+        "insert",
+        "insight"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djtr-fc1",
+      "front": "Trie node",
+      "back": "children: TrieNode[26]  (index = ch-'a').  isEnd: boolean.",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc2",
+      "front": "Insert",
+      "back": "Walk path, create missing nodes. Set isEnd=true at last node. O(L).",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc3",
+      "front": "search vs startsWith",
+      "back": "search: reach end AND isEnd==true. startsWith: just reach end node.",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc4",
+      "front": "Shared prefix",
+      "back": "'cat','car','cab' share c\u2192a path \u2014 stored once. Space benefit of Trie.",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc5",
+      "front": "Autocomplete",
+      "back": "Navigate to prefix node, then DFS with StringBuilder backtracking.",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc6",
+      "front": "When to use Trie",
+      "back": "Prefix queries, autocomplete, spellcheck, word-search grid pruning.",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc7",
+      "front": "Alphabetical order",
+      "back": "DFS children[0..25] in order \u2192 words come out alphabetically.",
+      "tags": [
+        "tries"
+      ]
+    },
+    {
+      "id": "djtr-fc8",
+      "front": "isEnd subtlety",
+      "back": "isEnd=true AND has children = valid word that is also a prefix (e.g. 'cat' in 'cats').",
+      "tags": [
+        "tries"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write TrieLab.java implementing a Trie class with:\n1. insert(String word)\n2. search(String word) \u2192 boolean\n3. startsWith(String prefix) \u2192 boolean\n4. autocomplete(String prefix) \u2192 List<String>  (sorted)\n5. longestCommonPrefix(String[] words) \u2192 String\nInclude main() tests: prefix of another word ('cat'/'cats'), empty prefix autocomplete (all words), single character words.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "insert correctly sets isEnd=true only at the final character node",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "search returns false for a prefix that was never inserted as a full word",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "startsWith returns true for any prefix of any inserted word",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "autocomplete uses DFS with StringBuilder backtracking \u2014 no duplicates",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "longestCommonPrefix walks the single-child chain until branch or isEnd",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "autocomplete: pass 'new StringBuilder(prefix)' to DFS so the prefix is already in the builder.",
+      "longestCommonPrefix: insert all words, then walk from root following the only child at each step.",
+      "search vs startsWith: the ONLY code difference is 'return cur.isEnd' vs 'return true' at the end."
+    ]
+  }
+}

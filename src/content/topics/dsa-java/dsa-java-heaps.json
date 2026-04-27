@@ -1,0 +1,439 @@
+{
+  "id": "dsa-java-heaps",
+  "unit": 9,
+  "order": 70,
+  "title": "Heaps and PriorityQueue in Java",
+  "summary": "Min/max heap shape and order properties, heapify, PriorityQueue API, top-k, k-way merge, and median of a stream.",
+  "prereqs": [
+    "dsa-java-binary-trees",
+    "dsa-java-sorting"
+  ],
+  "guide": "# Heaps and PriorityQueue in Java\n\nA heap is a **complete binary tree** stored compactly in an array where every parent is 'better' than its children. 'Better' means smaller in a min-heap and larger in a max-heap. The practical payoff: you can always read the best element in O(1) and remove it in O(log n) \u2014 which is exactly what a priority queue needs.\n\n## Shape + order \u2014 the two heap invariants\n```java\n// SHAPE: complete binary tree \u2014 every level filled left-to-right\n// So it is stored perfectly in an array with no wasted slots:\n//\n//         1          index 0\n//       /   \\\n//      3     2        index 1, 2\n//     / \\   / \\\n//    7   4  5   6     index 3, 4, 5, 6\n//\n// Parent of i  \u2192  (i - 1) / 2\n// Left child   \u2192  2*i + 1\n// Right child  \u2192  2*i + 2\n//\n// MIN-HEAP ORDER: heap[parent] <= heap[child]  (root = global minimum)\n// MAX-HEAP ORDER: heap[parent] >= heap[child]  (root = global maximum)\n```\n\n## Java PriorityQueue \u2014 min-heap by default\n```java\n// Min-heap (natural order)\nPriorityQueue<Integer> minH = new PriorityQueue<>();\nminH.offer(5); minH.offer(1); minH.offer(3);\nminH.peek();    // 1  \u2014 O(1), does NOT remove\nminH.poll();    // 1  \u2014 O(log n), removes minimum\n\n// Max-heap (reverse order)\nPriorityQueue<Integer> maxH = new PriorityQueue<>(Comparator.reverseOrder());\n\n// Custom objects \u2014 sort by frequency descending\nPriorityQueue<int[]> pq = new PriorityQueue<>((a, b) -> b[1] - a[1]);\n```\n\n## Heapify \u2014 build a heap from an array in O(n)\n```java\n// Naive: insert n elements one by one \u2192 O(n log n)\n// Smart: sift-down starting from the LAST non-leaf upward \u2192 O(n)\n//\n// Why O(n)? Most nodes are near the bottom with short sift-down paths.\n// The math: sum of all sift-down work = O(n)  (not O(n log n)).\n//\nvoid buildHeap(int[] a) {\n    int n = a.length;\n    for (int i = n / 2 - 1; i >= 0; i--)  // last non-leaf = n/2-1\n        siftDown(a, n, i);\n}\n```\n\n## Top-K pattern \u2014 keep a heap of size k\n```java\n// Top-K LARGEST elements \u2014 use a MIN-heap of size k.\n// Mental model: the min-heap is a 'bouncer' that keeps only the\n// k biggest seen so far. Anything smaller than the heap's min gets rejected.\n//\nint[] topKLargest(int[] nums, int k) {\n    PriorityQueue<Integer> minH = new PriorityQueue<>();\n    for (int n : nums) {\n        minH.offer(n);\n        if (minH.size() > k) minH.poll();  // evict the current minimum\n    }\n    // minH now contains exactly the k largest elements\n    return minH.stream().mapToInt(Integer::intValue).toArray();\n}\n// Time: O(n log k)   Space: O(k)\n```\n\n## Median of a data stream \u2014 two heaps\n```java\n// Trick: keep a MAX-heap for the lower half and a MIN-heap for the upper half.\n// Balance them so sizes differ by at most 1.\n//\n//  lower (max-heap): [1, 2, 3]    upper (min-heap): [4, 5, 6]\n//                          \u2191 max of lower \u2264 min of upper \u2191\n//\n// Median = average of both tops (even count) or top of larger heap (odd count).\nPriorityQueue<Integer> lower = new PriorityQueue<>(Comparator.reverseOrder());\nPriorityQueue<Integer> upper = new PriorityQueue<>();\n\nvoid addNum(int num) {\n    lower.offer(num);\n    upper.offer(lower.poll());     // balance: push lower's max to upper\n    if (upper.size() > lower.size()) lower.offer(upper.poll()); // keep lower >= upper\n}\ndouble findMedian() {\n    return lower.size() > upper.size()\n        ? lower.peek()\n        : (lower.peek() + upper.peek()) / 2.0;\n}\n```\n\n## K-way merge \u2014 merge k sorted lists in O(n log k)\n```java\n// Put the FIRST element of each list into a min-heap.\n// Every poll() gives the global minimum; then push the next element\n// from the same list. Repeat until heap is empty.\n//\nList<Integer> mergeKSorted(int[][] lists) {\n    // heap stores: [value, listIndex, elementIndex]\n    PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> a[0]));\n    for (int i = 0; i < lists.length; i++)\n        if (lists[i].length > 0) pq.offer(new int[]{lists[i][0], i, 0});\n    List<Integer> res = new ArrayList<>();\n    while (!pq.isEmpty()) {\n        int[] cur = pq.poll();\n        res.add(cur[0]);\n        int next = cur[2] + 1;\n        if (next < lists[cur[1]].length)\n            pq.offer(new int[]{lists[cur[1]][next], cur[1], next});\n    }\n    return res;\n}\n```\n\n## Common Pitfalls\n- Confusing peek() (O(1), no removal) with poll() (O(log n), removes root)\n- Using a max-heap for top-K largest \u2014 counterintuitive but correct: min-heap lets you evict the smallest quickly\n- Forgetting that Java PriorityQueue is a MIN-heap by default\n- Assuming heapify (buildHeap) is O(n log n) \u2014 it is actually O(n) because lower nodes do less work\n- Index arithmetic: parent = (i-1)/2, left child = 2i+1, right child = 2i+2 \u2014 off-by-one off-by-one off-by-one\n\n## Connections\n- **Binary Trees**: a heap is a complete binary tree stored in an array\n- **Sorting**: heap sort uses heapify + n extractions \u2014 O(n log n) in-place\n- **Graphs**: Dijkstra's algorithm replaces a visited array with a min-heap on distances\n- **Sliding Window**: some window problems use a heap when you need fast max/min updates",
+  "questions": [
+    {
+      "id": "djhp-q1",
+      "type": "mcq",
+      "prompt": "A min-heap guarantees:",
+      "choices": [
+        "The array is fully sorted",
+        "The root is the smallest element",
+        "Each level is sorted left to right",
+        "Left child < right child always"
+      ],
+      "answerIndex": 1,
+      "explanation": "Only the root is guaranteed to be the global minimum. The rest of the heap is partially ordered.",
+      "tags": [
+        "min-heap"
+      ]
+    },
+    {
+      "id": "djhp-q2",
+      "type": "mcq",
+      "prompt": "Java PriorityQueue default ordering:",
+      "choices": [
+        "Max-heap (largest first)",
+        "Min-heap (smallest first)",
+        "Insertion order",
+        "Random"
+      ],
+      "answerIndex": 1,
+      "explanation": "PriorityQueue<Integer> uses natural Comparable order \u2014 smallest element at the head.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djhp-q3",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "PriorityQueue<Integer> pq = new PriorityQueue<>();\npq.offer(5); pq.offer(1); pq.offer(3);\nSystem.out.println(pq.poll());",
+      "choices": [
+        "5",
+        "3",
+        "1",
+        "null"
+      ],
+      "answerIndex": 2,
+      "explanation": "Min-heap: poll() returns and removes the smallest element \u2014 1.",
+      "tags": [
+        "java",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djhp-q4",
+      "type": "mcq",
+      "prompt": "For top-K LARGEST elements, use:",
+      "choices": [
+        "Max-heap of all n elements, poll k times",
+        "Min-heap of size k \u2014 evict minimum when size exceeds k",
+        "Sort descending, take first k",
+        "Both A and B are O(n log k) for large n"
+      ],
+      "answerIndex": 1,
+      "explanation": "Min-heap of size k: heap's root is the *smallest of the top-k*. New element replaces it if larger. Space O(k), time O(n log k).",
+      "tags": [
+        "top-k"
+      ]
+    },
+    {
+      "id": "djhp-q5",
+      "type": "mcq",
+      "prompt": "Building a heap from n elements using sift-down (heapify) takes:",
+      "choices": [
+        "O(n log n)",
+        "O(n)",
+        "O(n\u00b2)",
+        "O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sift-down from index n/2-1 down to 0. Most nodes are near leaves with short paths \u2014 total work sums to O(n).",
+      "tags": [
+        "heapify"
+      ]
+    },
+    {
+      "id": "djhp-q6",
+      "type": "mcq",
+      "prompt": "In a heap array, the parent of element at index i is at:",
+      "choices": [
+        "i / 2",
+        "(i - 1) / 2",
+        "i * 2",
+        "i - 1"
+      ],
+      "answerIndex": 1,
+      "explanation": "Zero-indexed: parent(i) = (i-1)/2. Left child = 2i+1, right child = 2i+2.",
+      "tags": [
+        "array-index"
+      ]
+    },
+    {
+      "id": "djhp-q7",
+      "type": "codeOutput",
+      "prompt": "What is the parent index of element at index 5?",
+      "code": "// zero-indexed heap array\n// parent(5) = ?",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answerIndex": 1,
+      "explanation": "(5 - 1) / 2 = 2 (integer division).",
+      "tags": [
+        "array-index",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djhp-q8",
+      "type": "mcq",
+      "prompt": "peek() vs poll() on a PriorityQueue:",
+      "choices": [
+        "Both remove the root",
+        "peek() reads root in O(1) without removing; poll() removes root in O(log n)",
+        "poll() is O(1)",
+        "peek() is O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "peek = look at the best without removing; poll = remove and restore heap order via sift-down.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djhp-q9",
+      "type": "mcq",
+      "prompt": "After poll() removes the root from a min-heap, heap order is restored by:",
+      "choices": [
+        "Re-building the whole heap",
+        "Moving the last element to root and sifting it down",
+        "Sorting the array",
+        "Swapping root with its smaller child repeatedly upward"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sift-down: compare with children, swap with smaller child, repeat until heap property restored. O(log n).",
+      "tags": [
+        "heapify"
+      ]
+    },
+    {
+      "id": "djhp-q10",
+      "type": "mcq",
+      "prompt": "Heap sort time and space complexity:",
+      "choices": [
+        "O(n log n) time, O(n) space",
+        "O(n log n) time, O(1) space",
+        "O(n) time, O(1) space",
+        "O(n\u00b2) time, O(1) space"
+      ],
+      "answerIndex": 1,
+      "explanation": "Build heap O(n) + n extractions each O(log n) = O(n log n). In-place \u2014 O(1) extra space.",
+      "tags": [
+        "heap-sort"
+      ]
+    },
+    {
+      "id": "djhp-q11",
+      "type": "mcq",
+      "prompt": "Median of a data stream uses two heaps because:",
+      "choices": [
+        "One heap is not enough memory",
+        "Max-heap holds lower half, min-heap holds upper half \u2014 their tops bracket the median in O(1)",
+        "Two heaps are faster than sorting",
+        "It avoids duplicates"
+      ],
+      "answerIndex": 1,
+      "explanation": "Splitting the stream at the median lets you read it in O(1) without sorting all data.",
+      "tags": [
+        "median"
+      ]
+    },
+    {
+      "id": "djhp-q12",
+      "type": "mcq",
+      "prompt": "In the two-heap median approach, the size invariant to maintain is:",
+      "choices": [
+        "Both heaps always equal size",
+        "Lower half size >= upper half size, differ by at most 1",
+        "Upper half always larger",
+        "Sizes can differ by any amount"
+      ],
+      "answerIndex": 1,
+      "explanation": "Keeping sizes within 1 ensures the median is either the top of the larger heap or average of both tops.",
+      "tags": [
+        "median"
+      ]
+    },
+    {
+      "id": "djhp-q13",
+      "type": "mcq",
+      "prompt": "K-way merge of k sorted lists with total n elements using a heap runs in:",
+      "choices": [
+        "O(n)",
+        "O(n log n)",
+        "O(n log k)",
+        "O(k log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each of the n elements is inserted and removed from a heap of size k \u2014 O(log k) per element.",
+      "tags": [
+        "k-way-merge"
+      ]
+    },
+    {
+      "id": "djhp-q14",
+      "type": "multi",
+      "prompt": "Which real problems map naturally to a min-heap?",
+      "choices": [
+        "Dijkstra's shortest path",
+        "Scheduling tasks by earliest deadline",
+        "Finding the k-th largest element",
+        "Checking if a graph is bipartite"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Graph bipartiteness uses BFS/DFS coloring, not a heap. The others need fast minimum extraction.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djhp-q15",
+      "type": "mcq",
+      "prompt": "Inserting into a heap (offer/add) works by:",
+      "choices": [
+        "Adding to root and sifting down",
+        "Adding at the END and sifting UP to restore heap order",
+        "Binary search to find insertion position",
+        "Re-heapifying the whole array"
+      ],
+      "answerIndex": 1,
+      "explanation": "Append to end (preserves shape), then sift-up: swap with parent while smaller than parent. O(log n).",
+      "tags": [
+        "insert"
+      ]
+    },
+    {
+      "id": "djhp-q16",
+      "type": "codeOutput",
+      "prompt": "Max-heap creation in Java:",
+      "code": "PriorityQueue<Integer> maxH =\n    new PriorityQueue<>(Comparator.reverseOrder());\nmaxH.offer(3); maxH.offer(7); maxH.offer(1);\nSystem.out.println(maxH.peek());",
+      "choices": [
+        "1",
+        "3",
+        "7",
+        "null"
+      ],
+      "answerIndex": 2,
+      "explanation": "reverseOrder() makes largest element the root \u2014 peek() returns 7.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djhp-q17",
+      "type": "mcq",
+      "prompt": "To find the k-th largest element in an unsorted array optimally:",
+      "choices": [
+        "Sort descending O(n log n)",
+        "Max-heap poll k times O(n + k log n)",
+        "Min-heap of size k O(n log k)",
+        "Linear scan O(n) with QuickSelect"
+      ],
+      "answerIndex": 2,
+      "explanation": "O(n log k) min-heap is better than full sort when k << n. QuickSelect O(n) avg exists but heap is simpler.",
+      "tags": [
+        "top-k"
+      ]
+    },
+    {
+      "id": "djhp-q18",
+      "type": "mcq",
+      "prompt": "A complete binary tree with height h has at most how many nodes?",
+      "choices": [
+        "h\u00b2",
+        "2^h",
+        "2^(h+1) - 1",
+        "h * log h"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each level i has 2^i nodes; summing levels 0 to h gives 2^(h+1) - 1.",
+      "tags": [
+        "shape"
+      ]
+    },
+    {
+      "id": "djhp-q19",
+      "type": "mcq",
+      "prompt": "Dijkstra's algorithm uses a min-heap to:",
+      "choices": [
+        "Store all graph edges",
+        "Always process the unvisited node with the current shortest known distance",
+        "Detect cycles",
+        "Count connected components"
+      ],
+      "answerIndex": 1,
+      "explanation": "Greedy: the min-heap ensures the next node processed has the definitively shortest path.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djhp-q20",
+      "type": "mcq",
+      "prompt": "Why can't we efficiently search for an arbitrary element in a heap?",
+      "choices": [
+        "Heaps don't support search",
+        "Heap order is weaker than BST order \u2014 only parent-child relationship is guaranteed, not left-right",
+        "It would take O(n log n)",
+        "Only the root can be accessed"
+      ],
+      "answerIndex": 1,
+      "explanation": "A heap only guarantees parent \u2264 children; arbitrary search requires O(n) scan unlike a BST's O(log n).",
+      "tags": [
+        "heap-vs-bst"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djhp-fc1",
+      "front": "Heap invariants",
+      "back": "SHAPE: complete binary tree. ORDER: parent \u2264 children (min) or parent \u2265 children (max).",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc2",
+      "front": "Array index formulas",
+      "back": "parent(i) = (i-1)/2.  left(i) = 2i+1.  right(i) = 2i+2.",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc3",
+      "front": "Java PriorityQueue",
+      "back": "Min-heap by default. Max-heap: new PriorityQueue<>(Comparator.reverseOrder()).",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc4",
+      "front": "peek vs poll",
+      "back": "peek(): O(1) read root. poll(): O(log n) remove root + sift-down.",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc5",
+      "front": "Top-K largest",
+      "back": "Use MIN-heap of size k. New element replaces heap min if larger. O(n log k).",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc6",
+      "front": "Heapify (buildHeap)",
+      "back": "Sift-down from index n/2-1 to 0. O(n) total \u2014 not O(n log n).",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc7",
+      "front": "Median of stream",
+      "back": "Max-heap (lower half) + min-heap (upper half). Balance sizes \u00b11. Median = tops.",
+      "tags": [
+        "heaps"
+      ]
+    },
+    {
+      "id": "djhp-fc8",
+      "front": "K-way merge",
+      "back": "Min-heap of k heads. poll \u2192 append to result \u2192 push next from same list. O(n log k).",
+      "tags": [
+        "heaps"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write HeapsLab.java with:\n1. topKLargest(int[] nums, int k) \u2192 int[]  using a min-heap of size k\n2. kthLargest(int[] nums, int k) \u2192 int  (same approach, return just the k-th)\n3. mergeKSorted(int[][] lists) \u2192 List<Integer>  k-way merge\n4. MedianFinder class with addNum(int) and findMedian() \u2192 double\nInclude main() tests: k=1, k=n, streams with even and odd counts.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "topKLargest evicts heap min only when size exceeds k",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "mergeKSorted handles empty sublists without NullPointerException",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "MedianFinder addNum always rebalances so |lower.size()-upper.size()| <= 1",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "findMedian returns a double (not int) \u2014 handles even-count averaging correctly",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "topKLargest: after processing all elements, drain the min-heap into result \u2014 it comes out in ascending order.",
+      "mergeKSorted: store [value, listIdx, elemIdx] in heap so you know which list to advance.",
+      "MedianFinder: always push to lower first, then rebalance \u2014 this guarantees lower.max <= upper.min."
+    ]
+  }
+}

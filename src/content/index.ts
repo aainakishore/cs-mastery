@@ -2,7 +2,7 @@ import type { Topic, Unit } from './schema'
 
 // Vite import.meta.glob — loads all topic JSONs without per-file import statements
 // This avoids TS2307 errors from verbatimModuleSyntax + bundler moduleResolution
-const topicModules = import.meta.glob('./topics/*.json', { eager: true }) as Record<
+const topicModules = import.meta.glob('./topics/**/*.json', { eager: true }) as Record<
   string,
   { default: Topic }
 >
@@ -28,10 +28,13 @@ export const UNIT_LABELS: Record<Unit, string> = {
   5: 'Cloud & DevOps',
   6: 'AI Advanced',
   7: 'Tooling',
+  8: 'Financial Literacy',
+  9: 'DSA in Java',
+  10: 'Frontend Frameworks',
 }
 
 export function getTopicsByUnit(unit: Unit): Topic[] {
   return topics.filter((t) => t.unit === unit)
 }
 
-export const UNITS: Unit[] = [1, 2, 3, 4, 5, 6, 7]
+export const UNITS: Unit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

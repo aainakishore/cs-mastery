@@ -1,0 +1,364 @@
+{
+  "id": "react-fundamentals",
+  "unit": 10,
+  "order": 88,
+  "title": "React Fundamentals",
+  "summary": "JSX, components, props, and the virtual DOM mental model — how React figures out what to paint on screen.",
+  "prereqs": ["ts-fundamentals"],
+  "guide": "# React Fundamentals\n\nReact is a **UI-as-a-function** library. The core idea: your entire UI is the output of calling a function with some data. Give it the same data, get the same screen. Change the data, React figures out the smallest set of DOM changes needed to match.\n\n```\n     Data (props + state)\n          │\n          ▼  Your component functions\n     Virtual DOM   ← lightweight JS object tree\n          │\n          ▼  React's reconciler (the \"diff\")\n     Minimal DOM patches\n          │\n          ▼\n     Real browser DOM → pixels on screen\n```\n\n## JSX — HTML inside JavaScript\n\nJSX is syntactic sugar. The browser never sees it — the build tool (Vite/Babel) transforms it to `React.createElement()` calls.\n\n```tsx\n// What you write\nconst el = <h1 className=\"title\">Hello</h1>;\n\n// What the compiler emits\nconst el = React.createElement('h1', { className: 'title' }, 'Hello');\n\n// JSX rules:\n// 1. One root element (or use <> Fragment shorthand)\n// 2. Attributes use camelCase: className, onClick, htmlFor\n// 3. Expressions in {curly braces}\n// 4. Self-closing tags must close: <img />, <br />\n\nconst Greeting = ({ name }: { name: string }) => (\n  <div>\n    <h1>Hello, {name}!</h1>        {/* expression */}\n    <p>Today is {new Date().toDateString()}</p>\n  </div>\n);\n```\n\n## Components — the building blocks\n\nA component is a **function that returns JSX** (or null). React calls it, gets a virtual DOM description, and paints accordingly.\n\n```\n     App\n    /   \\\n  Nav   Page\n        /  \\\n     List  Sidebar\n     /  \\\n  Item  Item\n\nEach box is a function call.\nEach function returns a JSX description.\nReact assembles the whole tree and renders it.\n```\n\n```tsx\n// Functional component — the modern standard\ntype CardProps = {\n  title: string;\n  body: string;\n  onClick?: () => void;\n};\n\nfunction Card({ title, body, onClick }: CardProps) {\n  return (\n    <article onClick={onClick}>\n      <h2>{title}</h2>\n      <p>{body}</p>\n    </article>\n  );\n}\n\n// Usage — props are just function arguments\n<Card title=\"TypeScript\" body=\"Static types\" onClick={() => alert('clicked')} />\n```\n\n## Props — data flows down, events flow up\n\n```\n         <App data={users} />\n              │  data down\n              ▼\n         <UserList users={users} onSelect={setSelected} />\n              │  data down        event up ↑\n              ▼\n         <UserRow user={u} onClick={() => onSelect(u)} />\n```\n\nProps are **read-only**. A component must NEVER mutate its own props — this would break React's one-directional data flow guarantee.\n\n```tsx\n// ✗ WRONG — never mutate props\nfunction Badge({ count }: { count: number }) {\n  count++;  // TS error + logical bug\n  return <span>{count}</span>;\n}\n\n// ✓ CORRECT — derive a new value\nfunction Badge({ count }: { count: number }) {\n  const display = count + 1;  // derived, not mutated\n  return <span>{display}</span>;\n}\n```\n\n## Virtual DOM — the diff engine\n\nReact never directly tells the browser 'change this div'. Instead:\n1. Calls your component functions → builds a **virtual DOM** (plain JS objects)\n2. Compares the new virtual DOM with the previous snapshot (the **diff**)\n3. Converts only the *differences* into real DOM operations\n\n```\nPrevious vDOM:         New vDOM after state change:\n<ul>                   <ul>\n  <li>Alice</li>         <li>Alice</li>\n  <li>Bob</li>           <li>Bob</li>\n</ul>                    <li>Charlie</li>  ← only this DOM node is added\n                       </ul>\n\n React only calls createElement for <li>Charlie</li>\n → 1 DOM operation instead of rebuilding the whole list\n```\n\n## Keys — help React match old and new elements\n\nWhen you render a list, React needs a way to match items in the old and new virtual DOM. **Keys are that identity signal.**\n\n```tsx\n// ✗ Using array index as key — breaks on reorder/insert\n{items.map((item, i) => <li key={i}>{item.name}</li>)}\n\n// ✓ Using stable unique id\n{items.map(item => <li key={item.id}>{item.name}</li>)}\n\n// Without keys / wrong keys:\n// React may REUSE the wrong DOM node → stale input state, animation glitches\n```\n\n```\nWith key=id:   items=[A, B, C]  →  insert D at start  →  [D, A, B, C]\n  React matches A↔A, B↔B, C↔C by key, only creates D  → 1 DOM op\n\nWith key=index: same operation\n  React sees index 0 changed A→D, 1 changed B→A, 2 changed C→B, 3 is new C\n  → 4 DOM ops + potential state bugs\n```\n\n## Conditional Rendering\n\n```tsx\n// Ternary — two branches\n{isLoggedIn ? <Dashboard /> : <Login />}\n\n// Short-circuit — one branch (falsy = render nothing)\n{error && <ErrorBanner message={error} />}\n\n// Careful: 0 is falsy but JSX renders it as '0' text!\n// Use Boolean coercion:\n{count > 0 && <Badge count={count} />}  // ✓\n{!!count && <Badge count={count} />}    // ✓\n{count && <Badge count={count} />}      // ✗ renders '0' when count=0\n```\n\n## Complexity Cheatsheet\n\n| Concept | Key rule |\n|---|---|\n| Component re-render | Happens when props or state change |\n| Props mutation | Never — always read-only |\n| Key for lists | Must be stable, unique, not array index |\n| JSX compilation | Transformed to createElement at build time |\n| Fragment `<>` | Groups elements without adding a DOM node |\n\n## Common Pitfalls\n- Using array index as list `key` — causes state bugs on reorder\n- `{count && <X />}` renders `0` when count is zero — use `count > 0 &&`\n- Mutating props — breaks data flow, causes unreliable rendering\n- Returning two sibling elements without a wrapper or Fragment\n- Forgetting that JSX must use `className`, not `class`\n\n## Connections\n- **react-state-effects** — add state and side effects to components\n- **react-rendering** — deep dive into reconciliation and when components re-render\n- **ts-fundamentals** — type your props with TypeScript interfaces\n- **react-hooks** — custom hooks extract and reuse stateful logic",
+  "questions": [
+    {
+      "id": "rf-q1",
+      "type": "mcq",
+      "prompt": "JSX is valid JavaScript that browsers execute directly:",
+      "choices": [
+        "True — modern browsers support JSX natively",
+        "False — JSX is transformed to React.createElement() calls by the build tool before reaching the browser",
+        "True — only for Chrome",
+        "False — JSX is converted to HTML strings"
+      ],
+      "answerIndex": 1,
+      "explanation": "Browsers have no knowledge of JSX. Vite/Babel transforms `<h1>Hello</h1>` to `React.createElement('h1', null, 'Hello')` before bundling. The browser only ever sees JavaScript.",
+      "tags": ["jsx", "compilation"]
+    },
+    {
+      "id": "rf-q2",
+      "type": "codeOutput",
+      "prompt": "What renders when count = 0?",
+      "code": "function Badge({ count }: { count: number }) {\n  return <div>{count && <span>Items: {count}</span>}</div>;\n}",
+      "choices": [
+        "Nothing — falsy short-circuits",
+        "Items: 0",
+        "The text '0'",
+        "An empty <div/>"
+      ],
+      "answerIndex": 2,
+      "explanation": "`count && <span>…</span>` when count=0: `0` is falsy so the right side is not evaluated. JSX renders the left side value `0` as the text character '0'. Use `count > 0 &&` to fix this.",
+      "tags": ["jsx", "conditional-rendering", "gotcha"]
+    },
+    {
+      "id": "rf-q3",
+      "type": "mcq",
+      "prompt": "Props in React are:",
+      "choices": [
+        "Mutable state managed by the child component",
+        "Read-only data passed from parent to child — the child must never mutate them",
+        "Shared global state between siblings",
+        "Only available in class components"
+      ],
+      "answerIndex": 1,
+      "explanation": "Props flow down. Read-only enforced by convention (and TypeScript readonly). Mutation breaks the one-way data flow contract React relies on for predictable rendering.",
+      "tags": ["props", "data-flow"]
+    },
+    {
+      "id": "rf-q4",
+      "type": "mcq",
+      "prompt": "Why should list items use a stable, unique id as the React key instead of array index?",
+      "choices": [
+        "Index keys cause a console warning only",
+        "With index keys, React cannot match elements correctly on reorder/insert — DOM nodes get wrong state and animations break",
+        "Index keys are slower to compute",
+        "React ignores index keys entirely"
+      ],
+      "answerIndex": 1,
+      "explanation": "Keys are React's identity signal. If item B moves from index 1 to index 0, an index key tells React 'index 0 changed' — it reuses the DOM node from the old index 0 (item A). Stable IDs ensure each item keeps its correct DOM node.",
+      "tags": ["keys", "lists", "reconciliation"]
+    },
+    {
+      "id": "rf-q5",
+      "type": "codeOutput",
+      "prompt": "Which attribute name is correct in JSX?",
+      "code": "// Option A:\n<label class=\"title\" for=\"name\">Name</label>\n// Option B:\n<label className=\"title\" htmlFor=\"name\">Name</label>",
+      "choices": [
+        "Option A — JSX uses HTML attribute names",
+        "Option B — JSX uses camelCase DOM property names",
+        "Both are valid",
+        "Neither — use style prop instead"
+      ],
+      "answerIndex": 1,
+      "explanation": "JSX maps to DOM properties, not HTML attributes. `class` → `className` (class is a reserved JS word). `for` → `htmlFor` (for is a reserved JS word). HTML attributes work in actual HTML files, not JSX.",
+      "tags": ["jsx", "attributes"]
+    },
+    {
+      "id": "rf-q6",
+      "type": "mcq",
+      "prompt": "The Virtual DOM is:",
+      "choices": [
+        "A faster version of the browser DOM built into Chrome",
+        "A plain JavaScript object tree that React builds in memory, diffs against the previous render, and uses to compute minimal DOM operations",
+        "The shadow DOM API",
+        "A cached copy of the real DOM stored in localStorage"
+      ],
+      "answerIndex": 1,
+      "explanation": "The virtual DOM is just plain JavaScript objects — lightweight and fast to create. React diffs (compares) old and new vDOM trees to figure out the minimum set of real DOM changes needed.",
+      "tags": ["virtual-dom", "reconciliation"]
+    },
+    {
+      "id": "rf-q7",
+      "type": "multi",
+      "prompt": "Which are valid JSX rules?",
+      "choices": [
+        "Must return exactly one root element (or use a Fragment)",
+        "Self-closing tags must be explicitly closed: <img />",
+        "Attribute values that are strings must use {{ double braces }}",
+        "JavaScript expressions go inside { single curly braces }"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "String attribute values use standard quotes: `className=\"title\"`. Double braces `{{ }}` are only for inline style objects: `style={{ color: 'red' }}`. All other options are correct JSX rules.",
+      "tags": ["jsx", "syntax"]
+    },
+    {
+      "id": "rf-q8",
+      "type": "codeOutput",
+      "prompt": "What is the TypeScript type of the `onClick` prop here?",
+      "code": "type ButtonProps = {\n  label: string;\n  onClick?: () => void;\n};",
+      "choices": [
+        "Function",
+        "() => void | undefined",
+        "A function that takes no arguments and returns nothing, optionally provided",
+        "EventHandler"
+      ],
+      "answerIndex": 2,
+      "explanation": "The `?` makes the prop optional (can be undefined). `() => void` means a function with no parameters that returns nothing (void). Together: the prop may or may not be passed, and if passed must match that signature.",
+      "tags": ["props", "typescript", "types"]
+    },
+    {
+      "id": "rf-q9",
+      "type": "mcq",
+      "prompt": "Two sibling JSX elements must be wrapped in a parent. To avoid adding an extra DOM node, use:",
+      "choices": [
+        "<div>",
+        "React.Fragment or the <> shorthand",
+        "React.StrictMode",
+        "A comment node"
+      ],
+      "answerIndex": 1,
+      "explanation": "`<React.Fragment>` or `<>…</>` groups children without emitting a DOM element. Using `<div>` adds an extra DOM node that may break CSS layouts.",
+      "tags": ["jsx", "fragment"]
+    },
+    {
+      "id": "rf-q10",
+      "type": "mcq",
+      "prompt": "When does React call a function component again (re-render)?",
+      "choices": [
+        "On every browser tick",
+        "When its props or internal state changes, or when an ancestor re-renders",
+        "Only when the user interacts",
+        "Once — on initial mount only"
+      ],
+      "answerIndex": 1,
+      "explanation": "React re-renders a component when: its own state changes, its props change, or any ancestor re-renders (unless memoised). This is why managing what triggers re-renders is central to React performance.",
+      "tags": ["rendering", "re-render"]
+    },
+    {
+      "id": "rf-q11",
+      "type": "codeOutput",
+      "prompt": "What does this component return when `show` is false?",
+      "code": "function Toggle({ show }: { show: boolean }) {\n  return <div>{show ? <p>Visible</p> : null}</div>;\n}",
+      "choices": [
+        "Nothing — the component throws",
+        "<div></div> — an empty div with no children",
+        "<div>null</div>",
+        "The component is unmounted"
+      ],
+      "answerIndex": 1,
+      "explanation": "`null` is a valid JSX return value meaning 'render nothing here'. The outer `<div>` still renders. The component is not unmounted — it stays in the tree but its child is absent.",
+      "tags": ["conditional-rendering", "null"]
+    },
+    {
+      "id": "rf-q12",
+      "type": "mcq",
+      "prompt": "Data flow in React is:",
+      "choices": [
+        "Bidirectional — child can push data back up via props",
+        "Unidirectional — data flows down via props; events flow up via callback props",
+        "Any direction via the Context API",
+        "Managed entirely by the browser event system"
+      ],
+      "answerIndex": 1,
+      "explanation": "React enforces one-way data flow: parent passes data down as props. Children communicate upward by calling callback functions (also passed as props). Context is a way to skip intermediaries but still flows down.",
+      "tags": ["data-flow", "props"]
+    },
+    {
+      "id": "rf-q13",
+      "type": "codeOutput",
+      "prompt": "Identify the bug:",
+      "code": "function Counter({ count }: { count: number }) {\n  count = count + 1;  // fix the count before displaying\n  return <div>{count}</div>;\n}",
+      "choices": [
+        "No bug — count is a local variable in the function scope",
+        "count++ would be better",
+        "Mutating a prop parameter — TypeScript should flag this; the parent's state is not actually changed, but this pattern is confusing and wrong",
+        "The return statement is missing parentheses"
+      ],
+      "answerIndex": 2,
+      "explanation": "Props are conceptually read-only. While JavaScript lets you reassign a parameter, it doesn't change the parent's value. TypeScript with `readonly` would error. The intent should be `const display = count + 1` — a derived value, not mutation.",
+      "tags": ["props", "mutation", "gotcha"]
+    },
+    {
+      "id": "rf-q14",
+      "type": "mcq",
+      "prompt": "What happens to a React component when it is 'unmounted'?",
+      "choices": [
+        "Its useState values are preserved for next mount",
+        "It is removed from the virtual DOM and real DOM; useState values are lost",
+        "It becomes invisible but stays in memory",
+        "Only its children are removed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Unmounting destroys the component instance. All state is lost. Cleanup functions from useEffect run. On the next mount the component starts fresh with initial state.",
+      "tags": ["lifecycle", "unmount"]
+    },
+    {
+      "id": "rf-q15",
+      "type": "multi",
+      "prompt": "Which of these cause a React component to re-render?",
+      "choices": [
+        "Parent component re-renders",
+        "A ref value changes",
+        "Component's useState setter is called",
+        "A local variable inside the component changes"
+      ],
+      "answerIndexes": [0, 2],
+      "explanation": "Ref changes do NOT trigger re-renders (that is the point of refs). Local variable changes are lost on each render and do not trigger them either. Parent re-render and state updates do.",
+      "tags": ["rendering", "re-render", "refs"]
+    },
+    {
+      "id": "rf-q16",
+      "type": "mcq",
+      "prompt": "React's reconciler compares virtual DOM trees using which primary heuristic?",
+      "choices": [
+        "Deep equality of all props recursively",
+        "Element type + key: same type means update, different type means unmount+remount",
+        "Component display name",
+        "DOM node reference equality"
+      ],
+      "answerIndex": 1,
+      "explanation": "React first checks if the element type is the same. If `<div>` becomes `<span>`, React unmounts the div and mounts a new span (expensive). If type is same, it updates props in place. Keys identify items within sibling lists.",
+      "tags": ["reconciliation", "virtual-dom"]
+    },
+    {
+      "id": "rf-q17",
+      "type": "codeOutput",
+      "prompt": "What does React render for the key='0' vs key={item.id} difference when you insert an item at start?",
+      "code": "// Before: items = [{id:'a', name:'Alice'}, {id:'b', name:'Bob'}]\n// After insert: items = [{id:'c', name:'Charlie'}, {id:'a', name:'Alice'}, {id:'b', name:'Bob'}]\n// Using key={index}:",
+      "choices": [
+        "React creates 1 new DOM node (Charlie) and keeps Alice and Bob",
+        "React creates 3 new DOM nodes — sees all indices changed",
+        "React updates all 3 text nodes — same number of ops as stable keys",
+        "React moves DOM nodes without recreating them"
+      ],
+      "answerIndex": 2,
+      "explanation": "With index keys: index 0 changed Alice→Charlie, index 1 changed Bob→Alice, index 2 is new Bob. React updates all 3 text content. With id keys: only 1 new node (Charlie) is created; Alice and Bob are reused. Same op count here BUT state (input focus, checked state) would be wrong.",
+      "tags": ["keys", "reconciliation", "performance"]
+    },
+    {
+      "id": "rf-q18",
+      "type": "mcq",
+      "prompt": "A component that returns `null` is:",
+      "choices": [
+        "Mounted but renders nothing to the DOM",
+        "Unmounted from the tree",
+        "An error — components must return JSX",
+        "A portal"
+      ],
+      "answerIndex": 0,
+      "explanation": "Returning `null` is perfectly valid. The component stays in the virtual DOM tree (so state is preserved, effects run) but contributes nothing to the real DOM. Unmounting requires the parent to stop rendering the component entirely.",
+      "tags": ["conditional-rendering", "null", "lifecycle"]
+    },
+    {
+      "id": "rf-q19",
+      "type": "mcq",
+      "prompt": "The JSX expression `<MyComponent />` compiles to:",
+      "choices": [
+        "document.createElement('MyComponent')",
+        "React.createElement(MyComponent, null)",
+        "new MyComponent(null)",
+        "ReactDOM.render(MyComponent)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lowercase tags (`<div>`) compile to `createElement('div', …)` (string). Capitalized tags (`<MyComponent>`) compile to `createElement(MyComponent, …)` (function reference). This is how React distinguishes HTML elements from custom components.",
+      "tags": ["jsx", "compilation"]
+    },
+    {
+      "id": "rf-q20",
+      "type": "mcq",
+      "prompt": "You have a list component receiving an array prop. The parent re-renders with the same array contents but a new array reference. The child:",
+      "choices": [
+        "Does not re-render — React does deep equality on arrays",
+        "Re-renders — React does shallow (reference) equality on props by default",
+        "Re-renders only if the array length changed",
+        "Throws an error — arrays cannot be props"
+      ],
+      "answerIndex": 1,
+      "explanation": "React.memo and React.PureComponent use shallow equality (===). A new array `[]` !== the previous `[]` even with the same contents. Without memoisation, the child re-renders. This is why `useMemo` / stable references matter.",
+      "tags": ["rendering", "props", "memoisation"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rf-fc1",
+      "front": "Virtual DOM purpose",
+      "back": "Lightweight JS object tree. React diffs old vs new vDOM → computes minimal real DOM operations. Never write to the DOM directly.",
+      "tags": ["virtual-dom", "reconciliation"]
+    },
+    {
+      "id": "rf-fc2",
+      "front": "JSX compiles to",
+      "back": "`React.createElement(type, props, ...children)`. Lowercase = HTML element string. Uppercase = component function reference.",
+      "tags": ["jsx", "compilation"]
+    },
+    {
+      "id": "rf-fc3",
+      "front": "Props rule",
+      "back": "Read-only. Data flows down, events flow up via callback props. Never mutate props — derive new values instead.",
+      "tags": ["props", "data-flow"]
+    },
+    {
+      "id": "rf-fc4",
+      "front": "List keys — correct choice",
+      "back": "Use stable, unique IDs from data. Never array index. Wrong keys → wrong DOM reuse → state bugs on list reorder.",
+      "tags": ["keys", "lists"]
+    },
+    {
+      "id": "rf-fc5",
+      "front": "count && <X /> when count=0",
+      "back": "Renders the text '0' — falsy value propagates to DOM. Fix: `count > 0 && <X />` or `Boolean(count) && <X />`.",
+      "tags": ["conditional-rendering", "gotcha"]
+    },
+    {
+      "id": "rf-fc6",
+      "front": "Fragment <>",
+      "back": "Groups siblings without adding a DOM node. Use over <div> when a wrapper would break CSS or add semantically meaningless nesting.",
+      "tags": ["jsx", "fragment"]
+    },
+    {
+      "id": "rf-fc7",
+      "front": "When does a component re-render?",
+      "back": "1) Own state changes. 2) Props change (shallow ref check). 3) Ancestor re-renders. Refs do NOT trigger re-renders.",
+      "tags": ["rendering", "re-render"]
+    },
+    {
+      "id": "rf-fc8",
+      "front": "Returning null from a component",
+      "back": "Valid — component stays mounted (state preserved), but renders nothing to DOM. Different from unmounting, which destroys state.",
+      "tags": ["conditional-rendering", "lifecycle"]
+    }
+  ],
+  "project": {
+    "brief": "Design the component tree for a 'Contact List' feature: a search box, a list of contact cards, and a detail panel that appears when a card is clicked. 1) Draw the component tree with component names and props shown on each edge. 2) Identify which component owns the search query state and which owns the selected contact state — justify why. 3) Show how the search query flows down to filter the list, without the ContactCard knowing about the query. 4) Identify two places where wrong keys would cause bugs and explain what the bug would be. 5) Which props in your design should be optional? Why?",
+    "checklist": [
+      { "id": "c1", "text": "Component tree drawn with at least 4 components and labelled props on edges", "weight": 1 },
+      { "id": "c2", "text": "State ownership justified — explains lifting state to the right level", "weight": 1 },
+      { "id": "c3", "text": "Filtering logic stays in parent — ContactCard only receives filtered data", "weight": 1 },
+      { "id": "c4", "text": "Two concrete key-bug scenarios identified with specific effects", "weight": 1 },
+      { "id": "c5", "text": "Optional props identified with reasoning (onClick on a display-only card, etc.)", "weight": 1 }
+    ],
+    "hints": [
+      "State should live in the closest common ancestor of all components that need it.",
+      "ContactCard should not know about the search query — it just renders data. The parent filters before passing.",
+      "Key bug scenario 1: list reorder with index keys — focused input jumps to wrong item.",
+      "Key bug scenario 2: removing first item with index keys — all items shift, React reuses wrong DOM nodes."
+    ]
+  }
+}
+

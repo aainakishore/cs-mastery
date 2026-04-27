@@ -1,0 +1,442 @@
+{
+  "id": "dsa-java-recursion",
+  "unit": 9,
+  "order": 66,
+  "title": "Recursion in Java",
+  "summary": "Base cases, recursive cases, call stack frames, tail recursion, memoization, and backtracking.",
+  "prereqs": [
+    "dsa-java-stacks"
+  ],
+  "guide": "# Recursion in Java\n\nRecursion is a function that calls **itself** with a smaller version of the same problem. Every recursive solution has two parts:\n\n1. **Base case** \u2014 the smallest problem you can answer directly (no more calls needed)\n2. **Recursive case** \u2014 break the problem down and rely on a self-call to handle the rest\n\n```\nfactorial(4)\n  \u2514\u2500 4 \u00d7 factorial(3)\n           \u2514\u2500 3 \u00d7 factorial(2)\n                    \u2514\u2500 2 \u00d7 factorial(1)\n                              \u2514\u2500 1  \u2190 BASE CASE (return immediately)\n                    returns 2\u00d71 = 2\n           returns 3\u00d72 = 6\n  returns 4\u00d76 = 24\n```\n\n## The Call Stack \u2014 what really happens\n\nEach function call pushes a **frame** (local variables + return address) onto the call stack. When a function returns, its frame is popped.\n\n```\nStack grows \u2193 during recursion, shrinks \u2191 during return:\n\nPUSH:  [fact(4)] \u2192 [fact(4)][fact(3)] \u2192 [fact(4)][fact(3)][fact(2)] \u2192 \u2026 \u2192 base case\nPOP:   base returns 1 \u2192 fact(2) computes 2 \u2192 fact(3) computes 6 \u2192 fact(4) computes 24\n```\n\n**StackOverflowError** occurs when the stack runs out of space \u2014 usually from infinite recursion or depth > ~10,000.\n\n## Fibonacci \u2014 the overlapping subproblems problem\n\n```\nfib(5)\n\u251c\u2500\u2500 fib(4)\n\u2502   \u251c\u2500\u2500 fib(3)  \u2190 computed again below \u2193\n\u2502   \u2514\u2500\u2500 fib(2)\n\u2514\u2500\u2500 fib(3)      \u2190 DUPLICATE \u2014 fib(3) computed twice!\n    \u251c\u2500\u2500 fib(2)\n    \u2514\u2500\u2500 fib(1)\n\nWithout caching: O(2^n) calls\nWith memoization: each fib(k) computed exactly once \u2192 O(n)\n```\n\n```java\nint fib(int n, int[] memo) {\n    if (n <= 1) return n;                         // base case\n    if (memo[n] != -1) return memo[n];            // cached\n    return memo[n] = fib(n-1, memo) + fib(n-2, memo);  // store before returning\n}\n```\n\n## Three Recursion Patterns\n\n```\nPATTERN 1 \u2014 Linear (head recursion):\n  process(list) = do(head) + process(tail)\n  Example: sum of array, factorial\n\nPATTERN 2 \u2014 Binary (divide-and-conquer):\n  solve(arr) = merge(solve(left half), solve(right half))\n  Example: merge sort, binary search\n\nPATTERN 3 \u2014 Backtracking:\n  explore(path) = for each choice:\n                    add choice to path\n                    explore(path)      \u2190 go deeper\n                    remove choice      \u2190 undo (backtrack)\n  Example: permutations, N-Queens, Sudoku\n```\n\n## Backtracking Visualised \u2014 Permutations of [1,2,3]\n\n```\n                   []\n          /         |         \\\n        [1]        [2]        [3]\n       /   \\      /   \\      /   \\\n    [1,2] [1,3] [2,1] [2,3] [3,1] [3,2]\n      |     |     |     |     |     |\n   [1,2,3][1,3,2][2,1,3][2,3,1][3,1,2][3,2,1]  \u2190 6 leaves = 3! permutations\n```\n\n```java\nvoid permute(int[] nums, int start, List<List<Integer>> res) {\n    if (start == nums.length) { res.add(/* collect */); return; }\n    for (int i = start; i < nums.length; i++) {\n        swap(nums, start, i);          // choose\n        permute(nums, start + 1, res); // explore\n        swap(nums, start, i);          // undo (backtrack)\n    }\n}\n```\n\n## Memoization vs Tabulation\n\n```\nMEMOIZATION (top-down): write recursive function, cache results\n  \u2713 Easy to derive \u2014 code mirrors the recurrence\n  \u2717 Call stack overhead; risk of StackOverflow for deep n\n\nTABULATION (bottom-up): fill array from smallest to largest\n  \u2713 No recursion \u2014 no stack overhead\n  \u2713 Easier to space-optimise\n  \u2717 Must determine fill order manually\n```\n\n## Tail Recursion \u2014 last call is the recursive call\n\n```java\n// NOT tail recursive \u2014 multiplication happens AFTER the recursive call returns\nint factorial(int n) { return n * factorial(n-1); }\n\n// Tail recursive \u2014 accumulator holds result, no work after recursive call\nint factorial(int n, int acc) { return n == 0 ? acc : factorial(n-1, n * acc); }\n// Java does NOT optimise tail calls (unlike Haskell/Scala) \u2014 still risks StackOverflow\n// Solution for deep recursion: convert to iterative manually\n```\n\n## When to Use Recursion vs Iteration\n\n| Prefer recursion | Prefer iteration |\n|---|---|\n| Problem is naturally hierarchical (trees, graphs) | Simple loops over arrays |\n| Backtracking / exhaustive search | When depth could exceed ~10k frames |\n| Divide-and-conquer | Performance-critical inner loops |\n| Code clarity matters more than micro-optimisation | When tail-call elimination isn't guaranteed (Java) |\n\n## Common Pitfalls\n- Missing base case \u2192 infinite recursion \u2192 StackOverflowError\n- Base case is wrong (e.g. `n == 1` instead of `n <= 1`) \u2192 handles n=0 incorrectly\n- Forgetting to **undo** the choice in backtracking \u2192 incorrect results\n- Using -1 as memo sentinel when -1 is a valid answer \u2192 always recomputes\n\n## Connections\n- **Stacks** \u2014 recursion uses the call stack; iterative DFS/backtracking replaces it with an explicit Deque\n- **Trees** \u2014 almost every tree problem is naturally recursive (base case = null node)\n- **DP** \u2014 memoized recursion IS top-down DP\n- **Divide and Conquer** \u2014 merge sort, quick sort, and binary search are recursive split-and-combine algorithms\n",
+  "questions": [
+    {
+      "id": "djr-q1",
+      "type": "mcq",
+      "prompt": "Every recursive function must have:",
+      "choices": [
+        "A loop",
+        "A base case",
+        "A void return type",
+        "A static modifier"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without a base case recursion never terminates.",
+      "tags": [
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "djr-q2",
+      "type": "mcq",
+      "prompt": "Naive Fibonacci recursion time complexity:",
+      "choices": [
+        "O(n)",
+        "O(n log n)",
+        "O(2^n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each call branches into two \u2014 the call tree has 2^n nodes.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djr-q3",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "int f(int n) {\n    if (n == 0) return 0;\n    return 1 + f(n - 1);\n}\nSystem.out.println(f(4));",
+      "choices": [
+        "0",
+        "3",
+        "4",
+        "5"
+      ],
+      "answerIndex": 2,
+      "explanation": "f(4)=1+f(3)=1+1+f(2)=\u2026=4.",
+      "tags": [
+        "tracing"
+      ]
+    },
+    {
+      "id": "djr-q4",
+      "type": "mcq",
+      "prompt": "Memoization stores:",
+      "choices": [
+        "Input arguments only",
+        "Results of subproblem calls keyed by input",
+        "Call stack frames",
+        "Random values"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cache answers so each unique input is solved only once.",
+      "tags": [
+        "memoization"
+      ]
+    },
+    {
+      "id": "djr-q5",
+      "type": "mcq",
+      "prompt": "StackOverflowError in recursion is caused by:",
+      "choices": [
+        "Heap exhaustion",
+        "Recursion depth exceeding JVM stack memory",
+        "Array index out of bounds",
+        "Null dereference"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each frame consumes stack memory; too-deep recursion exhausts it.",
+      "tags": [
+        "overflow"
+      ]
+    },
+    {
+      "id": "djr-q6",
+      "type": "mcq",
+      "prompt": "Memoised Fibonacci time complexity:",
+      "choices": [
+        "O(2^n)",
+        "O(n^2)",
+        "O(n)",
+        "O(log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each of the n distinct inputs is computed exactly once.",
+      "tags": [
+        "memoization"
+      ]
+    },
+    {
+      "id": "djr-q7",
+      "type": "mcq",
+      "prompt": "The call stack is:",
+      "choices": [
+        "A heap-allocated list",
+        "A LIFO stack of activation frames",
+        "A queue",
+        "A hash map"
+      ],
+      "answerIndex": 1,
+      "explanation": "Method calls push frames; returns pop them \u2014 LIFO order.",
+      "tags": [
+        "call-stack"
+      ]
+    },
+    {
+      "id": "djr-q8",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "void count(int n) {\n    if (n == 0) return;\n    System.out.print(n + \" \");\n    count(n - 1);\n}\ncount(3);",
+      "choices": [
+        "1 2 3",
+        "3 2 1",
+        "0 1 2 3",
+        "3"
+      ],
+      "answerIndex": 1,
+      "explanation": "Prints before recursing: 3, then 2, then 1.",
+      "tags": [
+        "order"
+      ]
+    },
+    {
+      "id": "djr-q9",
+      "type": "mcq",
+      "prompt": "Backtracking is recursion that:",
+      "choices": [
+        "Never terminates",
+        "Undoes the last choice then tries the next alternative",
+        "Always finds the globally optimal solution",
+        "Uses BFS"
+      ],
+      "answerIndex": 1,
+      "explanation": "Explore \u2192 recurse \u2192 un-choose (backtrack) \u2192 try next.",
+      "tags": [
+        "backtracking"
+      ]
+    },
+    {
+      "id": "djr-q10",
+      "type": "mcq",
+      "prompt": "Converting recursion to iterative requires:",
+      "choices": [
+        "A queue always",
+        "An explicit stack mirroring call frames",
+        "A hash map",
+        "Sorting first"
+      ],
+      "answerIndex": 1,
+      "explanation": "Explicit stack replicates LIFO frame behaviour.",
+      "tags": [
+        "iterative"
+      ]
+    },
+    {
+      "id": "djr-q11",
+      "type": "mcq",
+      "prompt": "Recursive merge sort time complexity:",
+      "choices": [
+        "O(n)",
+        "O(n log n)",
+        "O(n^2)",
+        "O(2^n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "log n split levels, each doing O(n) merge work.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "djr-q12",
+      "type": "mcq",
+      "prompt": "Overlapping subproblems in a recursive solution signal:",
+      "choices": [
+        "No optimisation possible",
+        "Use greedy algorithm",
+        "Dynamic programming opportunity",
+        "Sort the input first"
+      ],
+      "answerIndex": 2,
+      "explanation": "Memoize or tabulate to avoid exponential recomputation.",
+      "tags": [
+        "dp"
+      ]
+    },
+    {
+      "id": "djr-q13",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "int sum(int n) {\n    if (n <= 0) return 0;\n    return n + sum(n - 2);\n}\nSystem.out.println(sum(5));",
+      "choices": [
+        "6",
+        "9",
+        "15",
+        "5"
+      ],
+      "answerIndex": 1,
+      "explanation": "sum(5)=5+sum(3)=5+3+sum(1)=5+3+1=9.",
+      "tags": [
+        "tracing"
+      ]
+    },
+    {
+      "id": "djr-q14",
+      "type": "mcq",
+      "prompt": "fast power(x, n) using divide-and-conquer runs in:",
+      "choices": [
+        "O(n)",
+        "O(log n)",
+        "O(n^2)",
+        "O(2^n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Halve n each step \u2014 O(log n) multiplications.",
+      "tags": [
+        "fast-power"
+      ]
+    },
+    {
+      "id": "djr-q15",
+      "type": "multi",
+      "prompt": "Which problems are naturally recursive?",
+      "choices": [
+        "Tree traversal",
+        "Tower of Hanoi",
+        "Bubble sort",
+        "Generating permutations"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "These have self-similar substructure. Bubble sort is an iterative comparison.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djr-q16",
+      "type": "mcq",
+      "prompt": "In backtracking, what must happen after the recursive call?",
+      "choices": [
+        "Nothing",
+        "Undo the choice made before the call",
+        "Add result to output immediately",
+        "Break out of the loop"
+      ],
+      "answerIndex": 1,
+      "explanation": "Restoring state before trying the next choice is the 'back' in backtracking.",
+      "tags": [
+        "backtracking"
+      ]
+    },
+    {
+      "id": "djr-q17",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "void dfs(int n) {\n    if (n == 0) { System.out.print(\"done \"); return; }\n    dfs(n - 1);\n    System.out.print(n + \" \");\n}\ndfs(3);",
+      "choices": [
+        "done 1 2 3",
+        "3 2 1 done",
+        "done 3 2 1",
+        "1 2 3 done"
+      ],
+      "answerIndex": 0,
+      "explanation": "Base case prints first as recursion unwinds: done 1 2 3.",
+      "tags": [
+        "order"
+      ]
+    },
+    {
+      "id": "djr-q18",
+      "type": "mcq",
+      "prompt": "Typical safe recursion depth in Java (default stack):",
+      "choices": [
+        "~100",
+        "~1 000",
+        "~5 000\u201310 000",
+        "Unlimited"
+      ],
+      "answerIndex": 2,
+      "explanation": "Depends on frame size; increase with -Xss JVM flag.",
+      "tags": [
+        "overflow"
+      ]
+    },
+    {
+      "id": "djr-q19",
+      "type": "mcq",
+      "prompt": "Recursive binary search space complexity:",
+      "choices": [
+        "O(n)",
+        "O(log n) \u2014 call stack depth",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each halving adds one frame; log n frames maximum.",
+      "tags": [
+        "binary-search"
+      ]
+    },
+    {
+      "id": "djr-q20",
+      "type": "mcq",
+      "prompt": "return fib(n-1) + fib(n-2) without memoization computes fib(2):",
+      "choices": [
+        "Once",
+        "Twice",
+        "Exponentially many times",
+        "log n times"
+      ],
+      "answerIndex": 2,
+      "explanation": "Overlapping subproblems cause exponential duplicate work.",
+      "tags": [
+        "memoization"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djr-fc1",
+      "front": "Recursion structure",
+      "back": "Base case (stop) + recursive case (reduce toward base).",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc2",
+      "front": "Naive Fibonacci complexity",
+      "back": "O(2^n) \u2014 exponential due to overlapping subproblems.",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc3",
+      "front": "Memoization",
+      "back": "Cache subproblem results by input. Fibonacci drops from O(2^n) \u2192 O(n).",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc4",
+      "front": "StackOverflowError",
+      "back": "Recursion too deep \u2014 exceeded JVM stack. Fix: iterative + explicit stack.",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc5",
+      "front": "Backtracking",
+      "back": "choose \u2192 recurse \u2192 un-choose. Explores all candidates, prunes dead ends.",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc6",
+      "front": "Call stack frame",
+      "back": "Holds: local variables, parameters, return address.",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc7",
+      "front": "Fast power",
+      "back": "power(x, n/2)\u00b2 \u2014 O(log n) multiplications via divide-and-conquer.",
+      "tags": [
+        "recursion"
+      ]
+    },
+    {
+      "id": "djr-fc8",
+      "front": "Overlapping subproblems",
+      "back": "Same sub-inputs solved repeatedly \u2192 memoize (top-down DP).",
+      "tags": [
+        "recursion"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write RecursionLab.java with five methods:\n1. factorial(int n)\n2. fibonacci(int n) \u2014 memoised with int[] memo\n3. powerFast(double x, int n) \u2014 O(log n)\n4. permutations(String s) \u2014 backtracking, return List<String>\n5. floodFill(int[][] grid, int r, int c, int colour)\nInclude main() with test cases for each.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "factorial handles n=0 and n=1 correctly",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "fibonacci uses memo array passed as parameter, not a field",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "powerFast handles n=0 and negative n",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "permutations uses swap-based backtracking",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "floodFill terminates on boundary and same-colour cells",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "powerFast: if n%2==0, compute half = power(x,n/2) once and return half*half.",
+      "Permutations: swap chars[start] with chars[i], recurse on start+1, then swap back.",
+      "FloodFill base case: out-of-bounds OR grid[r][c] != originalColour."
+    ]
+  }
+}

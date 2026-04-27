@@ -1,0 +1,361 @@
+{
+  "id": "angular-data-binding",
+  "unit": 10,
+  "order": 98,
+  "title": "Angular Data Binding",
+  "summary": "Interpolation, property binding, event binding, and two-way binding — how Angular keeps the template and component class in sync.",
+  "prereqs": ["angular-fundamentals"],
+  "guide": "# Angular Data Binding\n\nData binding is Angular's **synchronisation mechanism between the component class (TypeScript) and the template (HTML)**. Picture a live wire: changes on one side instantly propagate to the other, without you writing any imperative DOM code.\n\n```\n   Component Class (TypeScript)\n         ┌─────────────┐\n         │  title = 'Hi'│\n         │  count = 0   │\n         │  onClick()   │\n         └──────┬───────┘\n                │  Data Binding\n         ┌──────▼───────┐\n         │   Template   │\n         │   (HTML)     │\n         └─────────────┘\n\nFour directions:\n  1. {{ }}          Interpolation    class → template  (display)\n  2. [property]     Property Binding class → template  (set DOM property)\n  3. (event)        Event Binding    template → class  (react to user)\n  4. [(ngModel)]    Two-Way Binding  class ↔ template  (both directions)\n```\n\n## 1. Interpolation — {{ expression }}\n\nThe simplest form: embed a class property or expression directly in the HTML.\n\n```html\n<!-- component.ts: title = 'Angular Binding' -->\n<h1>{{ title }}</h1>                    <!-- displays: Angular Binding -->\n<p>{{ 1 + 2 }}</p>                      <!-- displays: 3 -->\n<p>{{ user.name | uppercase }}</p>      <!-- pipe transforms the value -->\n<p>{{ isAdmin ? 'Admin' : 'User' }}</p> <!-- ternary expression -->\n```\n\n**What it does internally:** Angular evaluates the expression in double curly braces against the component instance and replaces the `{{ }}` with the string result. It re-evaluates on every change detection cycle.\n\n**What you can't do in interpolation:**\n- Assignments (`{{ x = 5 }}`)\n- `new` keyword\n- Chained expressions with `;`\n- Global statement keywords (`let`, `var`)\n\n## 2. Property Binding — [property]=\"expression\"\n\nSets a DOM element **property** (not an HTML attribute) to a component value. Square brackets `[]` flow data **from class → template**.\n\n```html\n<!-- Bind src property of <img> -->\n<img [src]=\"profileImageUrl\" [alt]=\"user.name\" />\n\n<!-- Bind disabled property of <button> -->\n<button [disabled]=\"isSubmitting\">Submit</button>\n\n<!-- Bind a CSS class -->\n<div [class.active]=\"isSelected\">Item</div>\n\n<!-- Bind inline styles -->\n<div [style.fontSize.px]=\"fontSize\">Text</div>\n\n<!-- Bind an @Input property of a child component -->\n<app-card [title]=\"cardTitle\" [data]=\"cardData\"></app-card>\n```\n\n**Attribute vs Property — the critical distinction:**\n\n```\nHTML Attribute:  <input value=\"hello\">       ← initialises the input\nDOM Property:    input.value                 ← current live value\n\nAfter user types 'world':\n  getAttribute('value') → 'hello'  (unchanged)\n  .value                → 'world'  (live)\n\n[value]=\"name\" binds the PROPERTY (live).\nattr.value=\"name\" binds the ATTRIBUTE (initial only).\n\nUse [attr.colspan]=\"n\" for pure HTML attributes with no DOM property equivalent.\n```\n\n## 3. Event Binding — (event)=\"handler()\"\n\nListens to DOM events and calls a component method. Parentheses `()` flow data **from template → class**.\n\n```html\n<!-- Click event -->\n<button (click)=\"onSubmit()\">Submit</button>\n\n<!-- Access the event object with $event -->\n<input (input)=\"onSearch($event)\" />\n\n<!-- Keyboard events -->\n<input (keydown.enter)=\"onEnter()\" />\n\n<!-- Custom events from child components -->\n<app-rating (ratingChange)=\"handleRating($event)\"></app-rating>\n```\n\n```typescript\n@Component({ ... })\nexport class FormComponent {\n  onSearch(event: Event) {\n    const value = (event.target as HTMLInputElement).value;\n    this.searchTerm = value;\n  }\n\n  onSubmit() {\n    console.log('Submitted:', this.searchTerm);\n  }\n}\n```\n\n**$event magic:** Angular passes the DOM event object as `$event`. For custom component outputs, `$event` is whatever the `EventEmitter` emits.\n\n## 4. Two-Way Binding — [(ngModel)]\n\nCombines property binding AND event binding into one syntax — the \"banana in a box\" `[()]`.\n\n```\n[(ngModel)] = [ngModel] + (ngModelChange)\n\nExpanded form:\n  <input [ngModel]=\"username\" (ngModelChange)=\"username = $event\">\n\nShorthand (two-way):\n  <input [(ngModel)]=\"username\">\n```\n\n```html\n<!-- Requires FormsModule in the module/component imports -->\n<input [(ngModel)]=\"email\" placeholder=\"Email\" />\n<p>You typed: {{ email }}</p>\n```\n\n```\nUser types 'a' → input event fires → ngModelChange emits 'a'\n                  → username = 'a' in component\n                  → [ngModel]=\"username\" updates input.value = 'a'\n```\n\n**When to use two-way binding:**\n- Simple template-driven forms\n- Quick UI prototypes\n- Settings toggles, search inputs\n\n**Prefer reactive forms** for complex forms with validation.\n\n## Two-Way Binding on Custom Components\n\nYou can implement two-way binding on your own components using the `Input/Output` convention:\n\n```typescript\n@Component({ selector: 'app-counter', ... })\nexport class CounterComponent {\n  @Input() count = 0;\n  @Output() countChange = new EventEmitter<number>(); // must be Input name + 'Change'\n\n  increment() {\n    this.countChange.emit(this.count + 1);\n  }\n}\n```\n\n```html\n<!-- Parent can now use two-way binding: -->\n<app-counter [(count)]=\"parentCount\"></app-counter>\n```\n\n## Class and Style Bindings\n\n```html\n<!-- Single class toggle -->\n<div [class.highlight]=\"isHighlighted\">text</div>\n\n<!-- Multiple classes with object -->\n<div [ngClass]=\"{ 'active': isActive, 'disabled': isDisabled }\">text</div>\n\n<!-- Multiple classes with array -->\n<div [ngClass]=\"['btn', 'btn-primary']\">text</div>\n\n<!-- Single style -->\n<div [style.color]=\"textColor\">text</div>\n\n<!-- Multiple styles with object -->\n<div [ngStyle]=\"{ 'font-size': fontSize + 'px', 'color': color }\">text</div>\n```\n\n## Binding Cheatsheet\n\n| Syntax | Direction | Example | Use when |\n|---|---|---|---|\n| `{{ x }}` | class → template | `{{ name }}` | Display text |\n| `[prop]` | class → template | `[disabled]=\"loading\"` | Set DOM property |\n| `(event)` | template → class | `(click)=\"save()\"` | React to user events |\n| `[(x)]` | both | `[(ngModel)]=\"email\"` | Sync form input |\n| `[attr.x]` | class → template | `[attr.colspan]=\"n\"` | HTML attribute (no property) |\n| `[class.x]` | class → template | `[class.active]=\"on\"` | Toggle CSS class |\n| `[style.x]` | class → template | `[style.color]=\"c\"` | Inline style |\n\n## Common Pitfalls\n- **Calling methods in templates** — `{{ getUser() }}` runs on every change detection cycle, causing performance issues. Use a property or pipe instead.\n- **Forgetting FormsModule** — `[(ngModel)]` without `FormsModule` imported gives a cryptic error.\n- **Attribute vs property confusion** — `[href]` sets the DOM property; `[attr.href]` sets the HTML attribute. For `<a>` use `[href]`. For `colspan` use `[attr.colspan]` — there's no `colspan` DOM property.\n- **Mutating objects in event handlers** — Angular's default change detection compares references; mutating an object won't trigger re-render. Assign a new reference: `this.items = [...this.items, newItem]`.\n- **$event type casting** — Angular infers `$event` as `any` for native events; cast `(event.target as HTMLInputElement).value`.\n\n## Connections\n- **angular-directives** — ngClass, ngStyle are directives that enhance binding\n- **angular-forms** — template-driven forms use ngModel; reactive forms avoid two-way binding\n- **angular-signals** — modern Angular uses signals as a more efficient alternative to class properties in bindings",
+  "questions": [
+    {
+      "id": "adb-q1",
+      "type": "mcq",
+      "prompt": "What does `[disabled]=\"isLoading\"` do in Angular?",
+      "choices": [
+        "Sets the HTML attribute 'disabled' to the string 'isLoading'",
+        "Binds the DOM property 'disabled' to the component's isLoading value — button is disabled when isLoading is truthy",
+        "Triggers a method called isLoading when clicked",
+        "Creates a two-way binding with isLoading"
+      ],
+      "answerIndex": 1,
+      "explanation": "Square brackets `[prop]` = property binding. It evaluates `isLoading` as an expression from the component class and sets the DOM `disabled` property. Contrast with `disabled=\"isLoading\"` (no brackets) which would set a literal string attribute.",
+      "tags": ["data-binding", "property-binding"]
+    },
+    {
+      "id": "adb-q2",
+      "type": "mcq",
+      "prompt": "A user types in an `[(ngModel)]` bound input. What happens?",
+      "choices": [
+        "Only the template updates — the component property doesn't change until form submit",
+        "The DOM input updates from the component but typing doesn't update the component",
+        "Both the template AND the component property update simultaneously — every keystroke syncs both directions",
+        "Nothing — ngModel requires a form element parent"
+      ],
+      "answerIndex": 2,
+      "explanation": "Two-way binding `[()]` is shorthand for `[ngModel]=\"x\" (ngModelChange)=\"x = $event\"`. Every keystroke fires the ngModelChange event which updates the component property. The component change then flows back to update the DOM input. Both stay in sync.",
+      "tags": ["data-binding", "two-way-binding", "ngModel"]
+    },
+    {
+      "id": "adb-q3",
+      "type": "codeOutput",
+      "prompt": "What renders in the template?",
+      "code": "// component.ts\ncount = 3;\nisActive = true;\n\n// template\n<p>{{ count * 2 }}</p>\n<span [class.active]=\"isActive\">Label</span>",
+      "choices": [
+        "<p>count * 2</p> and <span>Label</span>",
+        "<p>6</p> and <span class=\"active\">Label</span>",
+        "<p>6</p> and <span class=\"isActive\">Label</span>",
+        "Error — expressions not allowed in interpolation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Interpolation `{{ count * 2 }}` evaluates the expression: 3 * 2 = 6. `[class.active]=\"isActive\"` adds the CSS class 'active' when isActive is truthy. The class name used is literally 'active', not the variable name.",
+      "tags": ["data-binding", "interpolation", "class-binding"]
+    },
+    {
+      "id": "adb-q4",
+      "type": "mcq",
+      "prompt": "Why would you use `[attr.colspan]=\"n\"` instead of `[colspan]=\"n\"`?",
+      "choices": [
+        "They are equivalent — use either",
+        "`colspan` is an HTML attribute with no corresponding DOM property of the same name. `[colspan]` would fail. `[attr.colspan]` correctly sets the HTML attribute",
+        "`[attr.colspan]` is deprecated in Angular 17+",
+        "`[colspan]` is for tables only; `[attr.colspan]` works everywhere"
+      ],
+      "answerIndex": 1,
+      "explanation": "Property binding `[prop]` targets DOM object properties (e.g., `element.disabled`). Some HTML attributes like `colspan` don't have a matching DOM property. For these, use `[attr.attributeName]` to bind the HTML attribute directly.",
+      "tags": ["data-binding", "property-binding", "attribute-binding"]
+    },
+    {
+      "id": "adb-q5",
+      "type": "mcq",
+      "prompt": "Why is calling a method in interpolation like `{{ computeTotal() }}` a performance problem?",
+      "choices": [
+        "It isn't — Angular memoizes method calls automatically",
+        "It compiles to incorrect JavaScript",
+        "Angular's change detection runs the template (including method calls) on every change detection cycle — a method can run dozens of times per second if not careful",
+        "Methods are not allowed in templates"
+      ],
+      "answerIndex": 2,
+      "explanation": "Angular's change detection by default runs on every async event (click, HTTP, setTimeout). `{{ computeTotal() }}` re-calls the method every cycle. For expensive computations, use a component property (set once) or a pure pipe (cached by pipe). Alternatively, switch to OnPush change detection.",
+      "tags": ["data-binding", "performance", "change-detection"]
+    },
+    {
+      "id": "adb-q6",
+      "type": "codeOutput",
+      "prompt": "What happens when this template renders and the user hasn't typed anything yet?",
+      "code": "// component.ts\nemail = '';\n\n// template\n<input [(ngModel)]=\"email\" />\n<p>Email: {{ email }}</p>",
+      "choices": [
+        "Error — FormsModule not mentioned so it crashes",
+        "Empty input, displays 'Email: '",
+        "Input shows 'email', displays 'Email: email'",
+        "Input is undefined"
+      ],
+      "answerIndex": 1,
+      "explanation": "Assuming FormsModule is imported: email = '' means the input starts empty and the paragraph shows 'Email: '. The interpolation displays the current value of email, which is an empty string. The display would be 'Email: ' with nothing after the colon.",
+      "tags": ["data-binding", "ngModel", "two-way-binding"]
+    },
+    {
+      "id": "adb-q7",
+      "type": "mcq",
+      "prompt": "To implement two-way binding on a custom component, the Output must follow which naming convention?",
+      "choices": [
+        "Any name — Angular detects the pattern automatically",
+        "Must end in 'Emitter'",
+        "Must be the Input name + 'Change' (e.g., Input: count, Output: countChange)",
+        "Must be prefixed with 'on' (e.g., onCount)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Angular's `[()]` two-way binding desugars to `[inputName]` + `(inputNameChange)`. If your Input is `count`, the Output MUST be `countChange`. This naming contract lets Angular wire the two-way binding without any extra configuration.",
+      "tags": ["data-binding", "two-way-binding", "custom-components"]
+    },
+    {
+      "id": "adb-q8",
+      "type": "mcq",
+      "prompt": "After a user types in an `<input value=\"hello\">`, what does `getAttribute('value')` return vs `.value`?",
+      "choices": [
+        "Both return the current typed value",
+        "getAttribute('value') returns 'hello' (original attribute); .value returns the current live value (what user typed)",
+        "getAttribute('value') returns the current typed value; .value returns 'hello'",
+        "Both return 'hello' until the form is submitted"
+      ],
+      "answerIndex": 1,
+      "explanation": "HTML attributes initialise DOM properties but the attribute value doesn't automatically update. After typing, the DOM `value` property reflects the current input, but `getAttribute('value')` still returns the original HTML attribute. This is why Angular uses `[value]` (property binding) not `value=` (attribute).",
+      "tags": ["data-binding", "attribute-vs-property"]
+    },
+    {
+      "id": "adb-q9",
+      "type": "multi",
+      "prompt": "Which of these are valid Angular data binding syntaxes?",
+      "choices": [
+        "{{ title }}",
+        "[src]=\"imageUrl\"",
+        "(click)=\"save()\"",
+        "{title}"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "`{{ }}` is interpolation, `[]` is property binding, `()` is event binding — all valid. `{title}` is not Angular syntax (that's JSX-style). Angular uses double curly braces for interpolation.",
+      "tags": ["data-binding", "syntax"]
+    },
+    {
+      "id": "adb-q10",
+      "type": "codeOutput",
+      "prompt": "What does `$event` contain in this template?",
+      "code": "<input (input)=\"handleInput($event)\" />\n\n// component.ts\nhandleInput(event: Event) {\n  console.log(typeof event);\n}",
+      "choices": [
+        "The string value the user typed",
+        "The DOM Event object (type 'object')",
+        "The HTMLInputElement",
+        "undefined"
+      ],
+      "answerIndex": 1,
+      "explanation": "For native DOM events, `$event` is the actual DOM Event object (an InputEvent in this case). To get the typed value: `(event.target as HTMLInputElement).value`. `$event` is NOT the value directly — it's the event. For custom EventEmitter outputs, `$event` is whatever was emitted.",
+      "tags": ["data-binding", "event-binding", "$event"]
+    },
+    {
+      "id": "adb-q11",
+      "type": "mcq",
+      "prompt": "What is the expanded form of `[(ngModel)]=\"username\"`?",
+      "choices": [
+        "[ngModel]=\"username\" (ngModel)=\"username = $event\"",
+        "[ngModel]=\"username\" (ngModelChange)=\"username = $event\"",
+        "[(ngModel)]=\"username\" is not expandable — it's a special directive",
+        "(ngModel)=\"username\" [ngModel]=\"username\""
+      ],
+      "answerIndex": 1,
+      "explanation": "Two-way binding `[(x)]` desugars to `[x]` (property binding in) + `(xChange)` (event binding out). For ngModel specifically: `[ngModel]=\"username\"` sets the input value; `(ngModelChange)=\"username = $event\"` updates the property when the user types. The Change suffix is the contract.",
+      "tags": ["data-binding", "ngModel", "two-way-binding"]
+    },
+    {
+      "id": "adb-q12",
+      "type": "mcq",
+      "prompt": "You add `(click)=\"handleClick()\"` but the method fires multiple times per click. Most likely cause:",
+      "choices": [
+        "Click events always fire multiple times — use debounce",
+        "Event bubbling — the click fires on the element AND bubbles to parent elements that also have (click) handlers",
+        "Angular's change detection runs the handler twice",
+        "ngZone intercepts click events"
+      ],
+      "answerIndex": 1,
+      "explanation": "DOM events bubble up the tree. If both a child and parent have (click) handlers, both fire on one click. Fix: `$event.stopPropagation()` in the handler, or `(click)=\"handler(); $event.stopPropagation()\"` in the template.",
+      "tags": ["event-binding", "bubbling"]
+    },
+    {
+      "id": "adb-q13",
+      "type": "mcq",
+      "prompt": "How do you bind multiple CSS classes conditionally using an object?",
+      "choices": [
+        "[class]=\"{ active: isActive, disabled: isDisabled }\"",
+        "[ngClass]=\"{ 'active': isActive, 'disabled': isDisabled }\"",
+        "(class)=\"{ active: isActive }\"",
+        "{{ isActive ? 'active' : '' }}"
+      ],
+      "answerIndex": 1,
+      "explanation": "`[ngClass]` accepts an object where keys are CSS class names and values are boolean expressions. When true, the class is added; when false, removed. `[class]` with an object works too in Angular 9+ but `[ngClass]` is more established and supports more syntax forms.",
+      "tags": ["data-binding", "class-binding", "ngClass"]
+    },
+    {
+      "id": "adb-q14",
+      "type": "mcq",
+      "prompt": "What is MISSING that would cause `[(ngModel)]` to silently not work or throw an error?",
+      "choices": [
+        "The ReactiveFormsModule",
+        "FormsModule must be imported in the module or component's imports array",
+        "The HttpClientModule",
+        "A form tag wrapping the input"
+      ],
+      "answerIndex": 1,
+      "explanation": "`ngModel` is declared in `FormsModule`. Without importing it, Angular either silently ignores the directive (no binding) or throws a template parse error. Always import `FormsModule` (from '@angular/forms') in the module where you use template-driven forms.",
+      "tags": ["data-binding", "ngModel", "FormsModule"]
+    },
+    {
+      "id": "adb-q15",
+      "type": "mcq",
+      "prompt": "What does `[style.fontSize.px]=\"size\"` do when size = 16?",
+      "choices": [
+        "Sets font-size to '16px' on the element",
+        "Sets font-size to '16' (no unit) on the element",
+        "Throws an error — style binding requires a string",
+        "Sets a CSS variable --fontSize to 16"
+      ],
+      "answerIndex": 0,
+      "explanation": "The `.px` suffix automatically appends the 'px' unit. `[style.fontSize.px]=\"16\"` results in `font-size: 16px`. Without the suffix: `[style.fontSize]=\"'16px'\"` — you'd need to include the unit in the string.",
+      "tags": ["data-binding", "style-binding"]
+    },
+    {
+      "id": "adb-q16",
+      "type": "mcq",
+      "prompt": "You want to pass data DOWN from a parent to a child component. Which binding is appropriate?",
+      "choices": [
+        "Event binding (child)=\"handler()\"",
+        "Property binding [inputName]=\"parentValue\"",
+        "Two-way binding [(value)]=\"parentValue\"",
+        "Interpolation {{ parentValue }} inside child"
+      ],
+      "answerIndex": 1,
+      "explanation": "Data flows from parent to child via property binding `[childInput]=\"parentValue\"`, where the child declares `@Input() childInput`. Event binding is the reverse (child to parent via @Output EventEmitter). Two-way is both directions. Interpolation is only for text content in the current template.",
+      "tags": ["data-binding", "property-binding", "component-communication"]
+    },
+    {
+      "id": "adb-q17",
+      "type": "mcq",
+      "prompt": "Which statement is true about interpolation `{{ }}` vs property binding `[]`?",
+      "choices": [
+        "They are fully interchangeable — same behavior",
+        "Interpolation converts the result to a string. Property binding sets the actual typed value. Use [] when the target needs a non-string type (boolean, number, object)",
+        "Property binding is deprecated in modern Angular",
+        "Interpolation only works with primitives"
+      ],
+      "answerIndex": 1,
+      "explanation": "`<button disabled=\"{{ isDisabled }}\">` sets a string attribute — a non-empty string is truthy, so disabled='false' still disables the button! `<button [disabled]=\"isDisabled\">` sets the boolean property correctly. Use `[]` for typed data.",
+      "tags": ["data-binding", "interpolation", "property-binding"]
+    },
+    {
+      "id": "adb-q18",
+      "type": "multi",
+      "prompt": "Which are valid ways to dynamically add a CSS class in Angular?",
+      "choices": [
+        "[class.active]=\"condition\"",
+        "[ngClass]=\"{ 'active': condition }\"",
+        "(class.active)=\"condition\"",
+        "class=\"{{ condition ? 'active' : '' }}\""
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`[class.x]`, `[ngClass]`, and even the interpolation form `class=\"{{ }}\"` all work. `(class.active)` is invalid — parentheses are for events, not class bindings.",
+      "tags": ["data-binding", "class-binding"]
+    },
+    {
+      "id": "adb-q19",
+      "type": "mcq",
+      "prompt": "You mutate an array: `this.items.push(newItem)`. The template `*ngFor` doesn't update. Why?",
+      "choices": [
+        "ngFor only works with Observables",
+        "Angular's default change detection uses identity check — the array reference is the same, so Angular doesn't detect the change. Assign a new array: `this.items = [...this.items, newItem]`",
+        "push() is synchronous so Angular misses it",
+        "ngFor caches the array and won't check for 10 seconds"
+      ],
+      "answerIndex": 1,
+      "explanation": "With default (non-OnPush) change detection, Angular does detect mutations because it checks dirty marking. However with OnPush components or RxJS async pipe, you MUST use immutable updates. In all cases, best practice is to avoid mutations and assign new references.",
+      "tags": ["data-binding", "change-detection", "mutation"]
+    },
+    {
+      "id": "adb-q20",
+      "type": "mcq",
+      "prompt": "What does `(keydown.enter)=\"onEnter()\"` do?",
+      "choices": [
+        "Fires onEnter on any keydown event",
+        "Fires onEnter only when the Enter key is pressed (Angular's key event filtering)",
+        "Sets the Enter key behavior globally",
+        "Invalid syntax — use (keydown)=\"$event.code === 'Enter' && onEnter()\""
+      ],
+      "answerIndex": 1,
+      "explanation": "Angular supports key filtering in event bindings: `(keydown.enter)`, `(keydown.shift.enter)`, `(keydown.escape)`, etc. This is Angular's enhanced event syntax layered on top of native events — it internally filters the keydown event to only fire the handler when Enter is pressed.",
+      "tags": ["event-binding", "keyboard-events"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "adb-fc1",
+      "front": "Four binding syntaxes",
+      "back": "{{ }} interpolation (class→template). [] property binding (class→template). () event binding (template→class). [()] two-way binding (both). Square brackets = input direction. Parentheses = output direction.",
+      "tags": ["data-binding"]
+    },
+    {
+      "id": "adb-fc2",
+      "front": "[(ngModel)] desugared",
+      "back": "[ngModel]=\"x\" (ngModelChange)=\"x = $event\". The banana-in-a-box is shorthand for property + event binding together. Requires FormsModule imported.",
+      "tags": ["data-binding", "ngModel"]
+    },
+    {
+      "id": "adb-fc3",
+      "front": "Attribute vs property binding",
+      "back": "[prop]=\"x\" sets the DOM property (live, typed). [attr.name]=\"x\" sets the HTML attribute. Use [attr.colspan] for table attributes — there's no DOM colspan property.",
+      "tags": ["data-binding", "attribute-binding"]
+    },
+    {
+      "id": "adb-fc4",
+      "front": "Custom component two-way binding",
+      "back": "@Input() value; @Output() valueChange = new EventEmitter(). Parent uses [(value)]=\"x\". Output MUST be named inputName + 'Change'.",
+      "tags": ["data-binding", "custom-components"]
+    },
+    {
+      "id": "adb-fc5",
+      "front": "$event in native vs custom events",
+      "back": "Native DOM event: $event is the Event object — cast to get value: (event.target as HTMLInputElement).value. Custom @Output: $event is whatever EventEmitter.emit() sends.",
+      "tags": ["event-binding", "$event"]
+    },
+    {
+      "id": "adb-fc6",
+      "front": "[class.x] vs [ngClass]",
+      "back": "[class.x]=\"bool\" — toggle one class. [ngClass]=\"{ 'x': bool, 'y': bool2 }\" — toggle multiple. [ngClass] also accepts string or array. Both are property bindings.",
+      "tags": ["data-binding", "class-binding"]
+    },
+    {
+      "id": "adb-fc7",
+      "front": "Style binding with unit",
+      "back": "[style.fontSize.px]=\"n\" → font-size: npx. [style.opacity]=\"0.5\" → opacity: 0.5. Avoid [ngStyle] for single properties — use direct [style.x] (cleaner, Angular 9+).",
+      "tags": ["data-binding", "style-binding"]
+    },
+    {
+      "id": "adb-fc8",
+      "front": "Interpolation limitations",
+      "back": "{{ }} cannot contain: assignments (x=5), new keyword, chained statements with ;, global keywords (let/var). These cause template parse errors. Only expressions allowed.",
+      "tags": ["data-binding", "interpolation"]
+    }
+  ],
+  "project": {
+    "brief": "You are building a real-time form preview component. The component has: a text input bound to `userName`, a color picker bound to `themeColor`, a toggle button for `isBold`, and a preview `<div>` that displays the name in the selected color with bold styling applied when toggled. Design the full template using all four binding types: (1) Interpolation to display userName in the preview. (2) Property binding to set the preview div's style.color and style.fontWeight. (3) Event binding on the toggle button to flip the isBold property. (4) Two-way binding on the inputs. Additionally: what breaks if you forget FormsModule? What happens if you write disabled='{{ isDisabled }}' on a button vs [disabled]='isDisabled'?",
+    "checklist": [
+      { "id": "c1", "text": "Template uses {{ userName }} for the preview text display", "weight": 1 },
+      { "id": "c2", "text": "[style.color]=\"themeColor\" and [style.fontWeight]=\"isBold ? 'bold' : 'normal'\" on preview div", "weight": 1 },
+      { "id": "c3", "text": "(click)=\"isBold = !isBold\" on the toggle button", "weight": 1 },
+      { "id": "c4", "text": "[(ngModel)] on both inputs; explains FormsModule requirement", "weight": 1 },
+      { "id": "c5", "text": "Explains disabled='false' still disables (string is truthy) vs [disabled]=\"false\" (boolean false disables nothing)", "weight": 1 }
+    ],
+    "hints": [
+      "Interpolation for display only — [style.fontWeight] must use property binding, not interpolation.",
+      "FormsModule: without it, [(ngModel)] is silently ignored or throws a template error.",
+      "disabled='{{ isDisabled }}' — if isDisabled is false, it renders disabled='false'. A non-empty string attribute = truthy in HTML. The button is STILL disabled.",
+      "Toggle: (click)=\"isBold = !isBold\" is valid inline expression. For complex logic, move to component method."
+    ]
+  }
+}
+

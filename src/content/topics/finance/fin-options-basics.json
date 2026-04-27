@@ -1,0 +1,218 @@
+{
+  "id": "fin-options-basics",
+  "unit": 8,
+  "order": 53,
+  "title": "Options Trading Basics",
+  "summary": "Calls, puts, strike prices, expiry, option chains, and how options give leverage with defined risk.",
+  "prereqs": ["fin-stock-market-basics"],
+  "guide": "# Options Trading Basics\n\nOptions are **derivative contracts** that give you the *right* (not obligation) to buy or sell an asset at a specific price before a specific date.\n\n## Two Types: Call and Put\n\n### Call Option\n- Right to **BUY** the underlying at the strike price\n- Profitable when you expect the price to **go up**\n- Premium paid upfront = maximum loss\n\n**Analogy:** You pay ₹500 for a 'reservation' to buy a flat at ₹50 lakh within 3 months. If the flat's market value rises to ₹55 lakh, you exercise your right and profit. If it falls to ₹45 lakh, you skip — only lose the ₹500 booking amount.\n\n### Put Option\n- Right to **SELL** the underlying at the strike price\n- Profitable when you expect the price to **go down**\n- Like insurance on your portfolio\n\n**Analogy:** You own gold worth ₹50,000. You pay ₹300 for the right to sell it at ₹50,000 for 3 months. Even if gold crashes to ₹40,000, you still sell at ₹50,000. The ₹300 was your insurance premium.\n\n## Key Terminology\n| Term | Meaning |\n|---|---|\n| **Strike Price (K)** | Price at which you can buy/sell |\n| **Premium** | Price paid for the option contract |\n| **Expiry** | Date the option contract expires |\n| **Lot Size** | Number of shares per NSE contract (e.g., NIFTY = 50 units) |\n| **ITM** | In The Money — option has intrinsic value |\n| **ATM** | At The Money — strike ≈ current price |\n| **OTM** | Out of The Money — option has no intrinsic value |\n\n## In-the-Money vs Out-of-the-Money\n**For CALL options:**\n- ITM: Strike < Current Price (you have the right to buy cheap)\n- ATM: Strike ≈ Current Price\n- OTM: Strike > Current Price (you'd be buying above market — no intrinsic value)\n\n**For PUT options:**\n- ITM: Strike > Current Price (you can sell above market)\n- ATM: Strike ≈ Current Price\n- OTM: Strike < Current Price\n\n## Option Pricing Components\n**Option Premium = Intrinsic Value + Time Value**\n- **Intrinsic Value**: Real profit if exercised now\n- **Time Value**: Extra paid for the possibility price moves in your favour before expiry\n\nAs expiry approaches, time value decays to zero — this is called **theta decay**.\n\n## Option Chain\nAn option chain shows all available strike prices and their call/put premiums, OI (Open Interest), and volume for a given expiry.\n\n**Reading an Option Chain:**\n- LTP (Last Traded Price) = premium\n- OI = number of outstanding contracts (higher = more interest)\n- Change in OI = market positioning shifts\n\n## Option Greeks (Overview)\n| Greek | Measures |\n|---|---|\n| **Delta (Δ)** | Change in premium per ₹1 move in underlying |\n| **Theta (Θ)** | Time decay per day (always negative for buyers) |\n| **Vega (ν)** | Sensitivity to volatility changes |\n| **Gamma (Γ)** | Rate of change of Delta |\n\n**Delta intuition:** A Call with delta 0.5 will gain ₹0.50 if the stock rises ₹1. Delta of deep ITM ≈ 1. Deep OTM ≈ 0.\n\n## Real-World Scenario\n**Scenario:** NIFTY is at 22,000. You buy a 22,200 CALL at ₹150 premium (1 lot = 50 units). Total cost = ₹7,500. If NIFTY rises to 22,500 by expiry, your call is worth 300 (intrinsic value). Profit = (300 − 150) × 50 = ₹7,500 (100% return on premium). If NIFTY stays below 22,200, you lose the full ₹7,500 — but no more.\n\n**Contrast with futures:** Futures have unlimited loss potential. Options buyers have **defined maximum loss = premium paid**.\n\n## Common Pitfalls\n1. **Buying far OTM options** hoping for jackpot — 90%+ expire worthless.\n2. **Ignoring theta decay** — every day you hold, the option loses time value.\n3. **Buying options before high-volatility events** (earnings) — IV crush post-event wipes value.\n4. **Overleveraging** — small premium = large lot value exposure.\n5. **Not understanding assignment** — selling options means obligation, not just right.\n\n## Mind Map\n- Options\n  - Types: Call (right to buy), Put (right to sell)\n  - Moneyness: ITM, ATM, OTM\n  - Pricing: Intrinsic Value + Time Value\n  - Greeks: Delta, Theta, Vega, Gamma\n  - Chain: Strike, Premium, OI, Volume\n\n## Connections\n- **Options Strategies** — combining options for specific payoff profiles\n- **Technical Analysis** — timing option entries\n- **Derivatives/Futures** — same underlying, different risk profile",
+  "questions": [
+    {
+      "id": "fob-q1",
+      "type": "mcq",
+      "prompt": "A CALL option gives you the right to:",
+      "choices": ["Sell the underlying at the strike price", "Buy the underlying at the strike price", "Short sell the underlying", "Receive dividends on the underlying"],
+      "answerIndex": 1,
+      "explanation": "Call = right to BUY. Put = right to SELL. Neither is an obligation.",
+      "tags": ["options-basics", "call-put"]
+    },
+    {
+      "id": "fob-q2",
+      "type": "mcq",
+      "prompt": "For a CALL option, it is In-The-Money (ITM) when:",
+      "choices": ["Strike price > Current price", "Strike price < Current price", "Strike price = Current price", "Expiry is near"],
+      "answerIndex": 1,
+      "explanation": "Call ITM: Strike < Current price. You have the right to buy below market = intrinsic value exists.",
+      "tags": ["itm-atm-otm"]
+    },
+    {
+      "id": "fob-q3",
+      "type": "mcq",
+      "prompt": "What is the maximum loss for an option buyer?",
+      "choices": ["Unlimited", "The underlying asset value", "The premium paid", "Strike price × lot size"],
+      "answerIndex": 2,
+      "explanation": "Options buyers have defined risk = premium paid. Sellers have theoretically unlimited risk.",
+      "tags": ["risk-management", "options-basics"]
+    },
+    {
+      "id": "fob-q4",
+      "type": "mcq",
+      "prompt": "Theta in options trading refers to:",
+      "choices": ["Sensitivity to underlying price movement", "Time decay of the option premium", "Volatility sensitivity", "Rate of delta change"],
+      "answerIndex": 1,
+      "explanation": "Theta = daily time decay. As expiry approaches, time value erodes. Theta works against option buyers, in favour of sellers.",
+      "tags": ["greeks", "theta"]
+    },
+    {
+      "id": "fob-q5",
+      "type": "mcq",
+      "prompt": "Delta of 0.6 on a Call option means:",
+      "choices": ["The option will expire worthless 60% of the time", "Premium increases by ₹0.60 for each ₹1 rise in underlying", "60% of premium is time value", "Time decay is 60% complete"],
+      "answerIndex": 1,
+      "explanation": "Delta = rate of change of option premium vs underlying. Delta 0.6 means premium rises ₹0.60 per ₹1 underlying rise.",
+      "tags": ["greeks", "delta"]
+    },
+    {
+      "id": "fob-q6",
+      "type": "mcq",
+      "prompt": "Option Premium = Intrinsic Value + ___",
+      "choices": ["Delta", "Time Value", "Strike Price", "Open Interest"],
+      "answerIndex": 1,
+      "explanation": "Premium = Intrinsic Value (real profit if exercised now) + Time Value (future potential). Time value decays to 0 at expiry.",
+      "tags": ["option-pricing"]
+    },
+    {
+      "id": "fob-q7",
+      "type": "mcq",
+      "prompt": "An OTM (Out of The Money) Put option has:",
+      "choices": ["Intrinsic value only", "No intrinsic value, only time value", "High delta", "Negative premium"],
+      "answerIndex": 1,
+      "explanation": "OTM options have zero intrinsic value — premium consists entirely of time value and volatility premium.",
+      "tags": ["itm-atm-otm", "option-pricing"]
+    },
+    {
+      "id": "fob-q8",
+      "type": "mcq",
+      "prompt": "IV Crush after earnings means:",
+      "choices": ["Stock rises sharply post earnings", "Implied Volatility drops sharply after the event, erasing option time value", "Options gain intrinsic value", "Delta approaches 1"],
+      "answerIndex": 1,
+      "explanation": "Before earnings, IV rises (uncertainty premium). After results, uncertainty is resolved, IV collapses — option buyers can lose even if direction was right.",
+      "tags": ["implied-volatility", "iv-crush"]
+    },
+    {
+      "id": "fob-q9",
+      "type": "match",
+      "prompt": "Match Call option moneyness with the condition:",
+      "left": ["ITM Call", "ATM Call", "OTM Call"],
+      "right": ["Strike < Current price", "Strike ≈ Current price", "Strike > Current price"],
+      "pairs": [[0,0],[1,1],[2,2]],
+      "explanation": "For calls: lower strike relative to spot = more 'in the money'.",
+      "tags": ["itm-atm-otm"]
+    },
+    {
+      "id": "fob-q10",
+      "type": "mcq",
+      "prompt": "Which Greek measures sensitivity of option price to changes in volatility?",
+      "choices": ["Delta", "Theta", "Vega", "Gamma"],
+      "answerIndex": 2,
+      "explanation": "Vega = premium change per 1% change in implied volatility. High vega = option price very sensitive to volatility.",
+      "tags": ["greeks", "vega"]
+    },
+    {
+      "id": "fob-q11",
+      "type": "mcq",
+      "prompt": "A PUT option is analogous to:",
+      "choices": ["Buying insurance on a stock you own", "A loan against your portfolio", "Buying shares on margin", "A fixed deposit"],
+      "answerIndex": 0,
+      "explanation": "Put option = insurance. Pay a premium for protection against price falling below strike. Used as a hedge.",
+      "tags": ["put-option", "hedging"]
+    },
+    {
+      "id": "fob-q12",
+      "type": "mcq",
+      "prompt": "Open Interest (OI) in an option chain represents:",
+      "choices": ["Total profit from open positions", "Number of outstanding/open contracts", "Volume traded today", "Daily price change"],
+      "answerIndex": 1,
+      "explanation": "OI = total open (not yet exercised or closed) contracts. Rising OI = new positions being opened.",
+      "tags": ["option-chain", "oi"]
+    },
+    {
+      "id": "fob-q13",
+      "type": "mcq",
+      "prompt": "Far Out-of-the-Money options are often called 'lottery tickets' because:",
+      "choices": ["They pay regular dividends", "They have very low probability of profit but offer huge leverage", "They have no theta decay", "They are free to buy"],
+      "answerIndex": 1,
+      "explanation": "Far OTM options are cheap but require large price moves to become profitable. Most expire worthless.",
+      "tags": ["options-basics", "risk"]
+    },
+    {
+      "id": "fob-q14",
+      "type": "mcq",
+      "prompt": "NIFTY lot size is 50. A CALL at ₹200 premium costs you:",
+      "choices": ["₹200", "₹10,000", "₹500", "₹1,000"],
+      "answerIndex": 1,
+      "explanation": "Total premium = 200 × 50 = ₹10,000. Lot size multiplies the premium to get actual capital at risk.",
+      "tags": ["lot-size", "options-basics"]
+    },
+    {
+      "id": "fob-q15",
+      "type": "mcq",
+      "prompt": "Gamma measures:",
+      "choices": ["Daily time decay", "Rate of change of Delta as underlying moves", "Volatility sensitivity", "Probability of expiring ITM"],
+      "answerIndex": 1,
+      "explanation": "Gamma = how fast delta changes. High gamma near expiry = delta changes rapidly with small price moves.",
+      "tags": ["greeks", "gamma"]
+    },
+    {
+      "id": "fob-q16",
+      "type": "mcq",
+      "prompt": "An option SELLER (writer) faces:",
+      "choices": ["Limited, defined risk equal to premium received", "Potentially unlimited risk (especially for naked calls)", "No risk at all", "Risk only equal to intrinsic value"],
+      "answerIndex": 1,
+      "explanation": "Option writers receive premium but face large/unlimited losses if the market moves strongly against them.",
+      "tags": ["option-selling", "risk"]
+    },
+    {
+      "id": "fob-q17",
+      "type": "mcq",
+      "prompt": "At expiry, if a Call option is OTM, the option:",
+      "choices": ["Pays the difference between strike and spot", "Expires worthless — loss = full premium paid", "Automatically exercises", "Is rolled to next expiry"],
+      "answerIndex": 1,
+      "explanation": "OTM options at expiry = zero intrinsic value = worthless. Buyer loses entire premium.",
+      "tags": ["expiry", "options-basics"]
+    },
+    {
+      "id": "fob-q18",
+      "type": "mcq",
+      "prompt": "Implied Volatility (IV) is best described as:",
+      "choices": ["Historical price volatility", "Market's forward-looking expectation of price volatility embedded in option price", "The actual moves the stock will make", "VIX index value"],
+      "answerIndex": 1,
+      "explanation": "IV is derived from option prices — it tells you how much volatility the market is 'pricing in' for the future.",
+      "tags": ["implied-volatility"]
+    },
+    {
+      "id": "fob-q19",
+      "type": "mcq",
+      "prompt": "Weekly options vs Monthly options — weekly options have:",
+      "choices": ["Lower time value and faster theta decay", "Higher time value", "Less liquidity universally", "No intrinsic value"],
+      "answerIndex": 0,
+      "explanation": "Weekly options are closer to expiry = less time value = faster theta decay. Good for option sellers, harder for buyers.",
+      "tags": ["expiry", "theta"]
+    },
+    {
+      "id": "fob-q20",
+      "type": "mcq",
+      "prompt": "Which statement is FALSE about options?",
+      "choices": ["Buyers have a right but not obligation", "Sellers have an obligation if buyer exercises", "Buyers face unlimited loss potential", "Time value decreases as expiry approaches"],
+      "answerIndex": 2,
+      "explanation": "FALSE: Buyers face LIMITED loss = premium paid. SELLERS face unlimited (or large) loss potential.",
+      "tags": ["options-basics", "call-put"]
+    }
+  ],
+  "flashcards": [
+    { "id": "fob-fc1", "front": "Call vs Put option", "back": "Call = right to BUY at strike. Put = right to SELL at strike. Both give rights, not obligations. Loss limited to premium.", "tags": ["call-put"] },
+    { "id": "fob-fc2", "front": "ITM, ATM, OTM for Calls", "back": "ITM: Strike < Spot (has intrinsic value). ATM: Strike ≈ Spot. OTM: Strike > Spot (only time value).", "tags": ["moneyness"] },
+    { "id": "fob-fc3", "front": "Theta decay", "back": "Time value erodes daily, accelerating near expiry. Theta is NEGATIVE for buyers (lose value each day). Positive for sellers.", "tags": ["greeks", "theta"] },
+    { "id": "fob-fc4", "front": "Delta", "back": "Rate of change of option premium per ₹1 change in underlying. Deep ITM call ≈ 1. OTM call ≈ 0.1-0.3.", "tags": ["greeks", "delta"] },
+    { "id": "fob-fc5", "front": "IV Crush", "back": "After a major event (earnings), implied volatility drops sharply. Option premiums collapse even if direction was correct.", "tags": ["implied-volatility"] },
+    { "id": "fob-fc6", "front": "Option Buyer vs Seller risk", "back": "Buyer: max loss = premium paid (defined). Seller: max profit = premium received, but faces large/unlimited loss.", "tags": ["risk"] },
+    { "id": "fob-fc7", "front": "Open Interest (OI)", "back": "Total number of outstanding option contracts. Rising OI with rising price = bullish strength. Used to gauge market positioning.", "tags": ["option-chain"] },
+    { "id": "fob-fc8", "front": "Put option as insurance", "back": "Buy put at current stock price (ATM put). If stock crashes, put gains value offsetting loss. Premium = insurance cost.", "tags": ["hedging", "put-option"] }
+  ],
+  "project": {
+    "brief": "**Options Strategy Design:** Infosys (INFY) is trading at ₹1,800. Results announcement is in 2 weeks. You believe results will be good but you're not sure about the magnitude. You're considering three approaches:\n\n1. Buy 1900 CE (OTM Call) at ₹30 premium\n2. Buy 1800 CE (ATM Call) at ₹80 premium\n3. Buy shares outright at ₹1,800\n\nLot size = 400. Analyze the risk-reward of all three approaches. What happens to each if: (a) stock rises 8%? (b) stock falls 5%? (c) stock stays flat despite good results (IV crush scenario)?",
+    "checklist": [
+      { "id": "p1", "text": "Calculate P&L for all 3 approaches in each price scenario", "weight": 30 },
+      { "id": "p2", "text": "Explain why IV crush can hurt option buyers even when right on direction", "weight": 20 },
+      { "id": "p3", "text": "Compare leverage and risk profile of OTM vs ATM options", "weight": 20 },
+      { "id": "p4", "text": "Choose your preferred approach and justify with risk appetite logic", "weight": 15 },
+      { "id": "p5", "text": "Describe an exit plan if the trade goes against you", "weight": 15 }
+    ],
+    "hints": [
+      "For (c): think about what happens to time value when the 'uncertainty event' passes.",
+      "Leverage = capital at risk for options is just the premium, but exposure is on full lot value.",
+      "Break-even for call buyer = Strike + Premium paid."
+    ]
+  }
+}
+

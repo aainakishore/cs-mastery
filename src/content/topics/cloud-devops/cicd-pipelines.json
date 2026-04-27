@@ -1,0 +1,130 @@
+{
+  "id": "cicd-pipelines",
+  "unit": 5,
+  "order": 31,
+  "title": "CI-CD Pipelines",
+  "summary": "Master CI-CD Pipelines: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "git-fundamentals",
+    "docker"
+  ],
+  "guide": "# CI/CD Pipelines\n\nCI/CD (Continuous Integration / Continuous Delivery/Deployment) automates the process of building, testing, and deploying software.\n\n## CI vs CD vs CD\n\n```\nContinuous Integration:\n  Every commit \u2192 automated build + test\n  Goal: catch bugs early, merge frequently, never have broken main branch\n\nContinuous Delivery:\n  Every passing commit \u2192 packaged, ready to deploy at any time\n  Deployment triggered manually by team\n\nContinuous Deployment:\n  Every passing commit \u2192 automatically deployed to production\n  No human gate \u2014 requires high test coverage and feature flags\n```\n\n## A Typical Pipeline\n\n```\nPush to feature branch:\n  \u251c\u2500\u2500 Install dependencies\n  \u251c\u2500\u2500 Lint (ESLint, Prettier)\n  \u251c\u2500\u2500 Unit tests (Jest, JUnit)\n  \u251c\u2500\u2500 Integration tests\n  \u2514\u2500\u2500 Build artifact / Docker image\n\nMerge to main:\n  \u251c\u2500\u2500 All above +\n  \u251c\u2500\u2500 Security scan (Snyk, Trivy)\n  \u251c\u2500\u2500 Docker build + push to registry\n  \u251c\u2500\u2500 Deploy to staging\n  \u2514\u2500\u2500 E2E tests on staging\n\nTag / release:\n  \u2514\u2500\u2500 Deploy to production (auto or manual gate)\n```\n\n## GitHub Actions Example\n\n```yaml\n# .github/workflows/ci.yml\nname: CI/CD\non:\n  push:\n    branches: [main, 'feature/**']\n  pull_request:\n    branches: [main]\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with: { node-version: '20' }\n      - run: npm ci\n      - run: npm run lint\n      - run: npm test -- --coverage\n      - uses: codecov/codecov-action@v4\n\n  build-and-push:\n    needs: test\n    runs-on: ubuntu-latest\n    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v4\n      - uses: docker/login-action@v3\n        with:\n          registry: ghcr.io\n          username: ${{ github.actor }}\n          password: ${{ secrets.GITHUB_TOKEN }}\n      - uses: docker/build-push-action@v5\n        with:\n          push: true\n          tags: ghcr.io/myorg/myapp:${{ github.sha }}\n\n  deploy-staging:\n    needs: build-and-push\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          kubectl set image deployment/api api=ghcr.io/myorg/myapp:${{ github.sha }}\n```\n\n## Feature Flags and Progressive Delivery\n\n```\nFeature flags decouple deployment from release:\n  Deploy code \u2192 feature off by default\n  Turn on for 1% of users \u2192 10% \u2192 50% \u2192 100%\n\nTools: LaunchDarkly, Unleash, OpenFeature\n\nProgressive delivery:\n  Canary: new version for 5% of traffic \u2192 monitor error rate \u2192 promote\n  Blue/Green: two environments, switch DNS \u2192 instant rollback\n  Shadow: copy of traffic to new version but discard responses \u2192 validate\n```\n\n## Common Pitfalls\n- **Slow pipelines** \u2014 slow CI kills developer flow. Target < 10 min for PR validation. Parallelize, cache dependencies.\n- **No test gates** \u2014 deploying without tests defeats CI. Minimum: unit tests, lint, security scan.\n- **Secrets in code** \u2014 never commit secrets. Use secrets management (GitHub Secrets, Vault, AWS SM). Rotate on exposure.\n- **No rollback strategy** \u2014 always define how to roll back. For K8s: `kubectl rollout undo deployment/api`.\n",
+  "questions": [
+    {
+      "id": "cicd-q1",
+      "type": "mcq",
+      "prompt": "Continuous Deployment vs Continuous Delivery \u2014 key difference?",
+      "choices": [
+        "Same term",
+        "Continuous Delivery: pipeline produces ready-to-deploy artifact, deployment is MANUAL decision. Continuous Deployment: passing pipeline automatically deploys to production with no human gate",
+        "Delivery is older",
+        "Continuous Deployment deploys to staging only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Delivery: humans decide when to release (but can deploy anytime). Deployment: automation decides (releases on every green build). CD requires high confidence in tests and feature flags for safe auto-deployment.",
+      "tags": [
+        "CI/CD",
+        "continuous-deployment",
+        "continuous-delivery"
+      ]
+    },
+    {
+      "id": "cicd-q2",
+      "type": "mcq",
+      "prompt": "Feature flags decouple what from what in CI/CD?",
+      "choices": [
+        "Build from test",
+        "Deployment from release \u2014 code can be merged and deployed with the feature disabled, then gradually enabled for subsets of users. This allows safe continuous deployment without feature risk",
+        "Docker from Kubernetes",
+        "Test from build"
+      ],
+      "answerIndex": 1,
+      "explanation": "Deploy dark (feature off) \u2192 enable for 1% \u2192 measure error rate \u2192 10% \u2192 100%. If issues: turn off flag instantly without rollback. Features ship to production unfinished; flags control activation.",
+      "tags": [
+        "CI/CD",
+        "feature-flags"
+      ]
+    },
+    {
+      "id": "cicd-q3",
+      "type": "mcq",
+      "prompt": "A canary deployment routes 5% of traffic to the new version. What must you monitor?",
+      "choices": [
+        "Build time",
+        "Error rate and latency for the canary vs baseline. If canary has higher error rate or latency \u2192 stop rollout automatically. Only if metrics match do you promote to 100%",
+        "Memory usage of CI runner",
+        "Test coverage"
+      ],
+      "answerIndex": 1,
+      "explanation": "Canary = gradual rollout with real traffic. Automated monitoring compares canary error rate and p99 latency to stable deployment. Fluentd/Prometheus/Datadog with alert rules can automate the pass/fail decision.",
+      "tags": [
+        "CI/CD",
+        "canary",
+        "deployment"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "cicd-fc1",
+      "front": "CI pipeline stages",
+      "back": "Checkout \u2192 Install \u2192 Lint \u2192 Unit test \u2192 Build \u2192 Security scan \u2192 Push artifact. All on every PR/push. Fast (target <10min). Gates: all must pass before merge.",
+      "tags": [
+        "CI/CD"
+      ]
+    },
+    {
+      "id": "cicd-fc2",
+      "front": "Deployment strategies",
+      "back": "Rolling: pods updated one at a time (K8s default, zero downtime). Blue/Green: two envs, switch DNS (instant rollback). Canary: 5%\u219250%\u2192100% with monitoring. Shadow: test with real traffic discarded.",
+      "tags": [
+        "CI/CD",
+        "deployment"
+      ]
+    },
+    {
+      "id": "cicd-fc3",
+      "front": "Feature flags",
+      "back": "Deploy code disabled \u2192 flag on for subset \u2192 monitor \u2192 promote. Decouples deploy from release. Tools: LaunchDarkly, Unleash. Enables continuous deployment safely.",
+      "tags": [
+        "CI/CD",
+        "feature-flags"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using CI-CD Pipelines\n\nDesign a realistic production service with CI-CD Pipelines at its core. No code required:\n\n1. Why CI-CD Pipelines over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "cicd-pipelines-pc1",
+        "text": "Justified use of CI-CD Pipelines for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "cicd-pipelines-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does CI-CD Pipelines remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

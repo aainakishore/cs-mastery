@@ -1,0 +1,140 @@
+{
+  "id": "relational-databases",
+  "unit": 1,
+  "order": 3,
+  "title": "Relational Databases and SQL",
+  "summary": "Master Relational Databases and SQL: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "linux-essentials"
+  ],
+  "guide": "# Relational Databases\n\nRelational databases store data in tables with rows and columns, enforce ACID properties, and use SQL for querying. They are the backbone of most transactional applications.\n\n## ACID Properties\n\n```\nAtomicity:   Transaction completes fully or not at all\n             (debit user AND credit account \u2014 no half-transfer)\n\nConsistency: DB always moves from one valid state to another\n             (foreign keys, constraints honored after every transaction)\n\nIsolation:   Concurrent transactions behave as if sequential\n             (no dirty reads, phantom reads with appropriate level)\n\nDurability:  Committed transaction persists even through crash\n             (written to WAL, disk \u2014 not just memory)\n```\n\n## Isolation Levels (Weakest \u2192 Strongest)\n\n```\nRead Uncommitted:  See uncommitted changes from other txns (dirty reads) \u2014 almost never use\nRead Committed:    Only see committed data \u2014 prevents dirty reads (PostgreSQL default)\nRepeatable Read:   Same rows same values throughout transaction \u2014 prevents non-repeatable reads\nSerializable:      Fully isolated, as if run sequentially \u2014 prevents phantom reads (slowest)\n\nPhantom read example:\n  Txn A: SELECT * FROM orders WHERE status='pending' \u2014 5 rows\n  Txn B: INSERT INTO orders ... (new pending order)  \u2014 commits\n  Txn A: SELECT * WHERE status='pending' \u2014 6 rows!   \u2190 phantom\n  Serializable prevents this.\n```\n\n## Indexing\n\n```sql\n-- B-Tree index (default) \u2014 range queries, equality, ORDER BY\nCREATE INDEX idx_orders_user_id ON orders(user_id);\nCREATE INDEX idx_orders_date ON orders(created_at);\n\n-- Composite index \u2014 order matters (leftmost prefix rule)\nCREATE INDEX idx_orders_user_date ON orders(user_id, created_at);\n-- Efficient: WHERE user_id = 1                       (leftmost prefix)\n-- Efficient: WHERE user_id = 1 AND created_at > '2024'\n-- Inefficient: WHERE created_at > '2024'             (skips leftmost!)\n\n-- Covering index \u2014 all needed columns in index (no table lookup)\nCREATE INDEX idx_covering ON orders(user_id) INCLUDE (amount, status);\n\n-- Explain plan\nEXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 123;\n-- Look for: \"Index Scan\" (good) vs \"Seq Scan\" (bad for large tables)\n```\n\n## N+1 Query Problem\n\n```javascript\n// BAD \u2014 N+1\nconst orders = await db.query('SELECT * FROM orders LIMIT 100');\nfor (const order of orders) {\n  order.user = await db.query('SELECT * FROM users WHERE id = $1', [order.userId]);\n  // 100 orders = 101 total queries!\n}\n\n// GOOD \u2014 JOIN\nconst orders = await db.query(`\n  SELECT o.*, u.name, u.email\n  FROM orders o\n  JOIN users u ON u.id = o.user_id\n  LIMIT 100\n`);\n// 1 query\n```\n\n## Common Pitfalls\n- **No indexes on foreign keys or frequent WHERE columns** \u2014 full table scan on every query.\n- **N+1 queries** \u2014 ORM lazy loading silently creates N+1 patterns. Use eager loading or explicit JOINs.\n- **Ignoring EXPLAIN ANALYZE** \u2014 run EXPLAIN on slow queries before adding indexes blindly.\n- **Too many indexes** \u2014 indexes slow DOWN writes (index must be updated on every INSERT/UPDATE/DELETE). Only index what's queried.\n",
+  "questions": [
+    {
+      "id": "rdb-q1",
+      "type": "mcq",
+      "prompt": "ACID atomicity in a bank transfer means:",
+      "choices": [
+        "The transfer is fast",
+        "BOTH debit from sender AND credit to recipient happen or neither does \u2014 no partial transfer that leaves money in limbo",
+        "Only one account is updated",
+        "Transfers are queued"
+      ],
+      "answerIndex": 1,
+      "explanation": "Atomicity: all-or-nothing. A transfer that debits but never credits is worse than doing nothing. The database guarantees both operations succeed or both roll back.",
+      "tags": [
+        "RDBMS",
+        "ACID",
+        "atomicity"
+      ]
+    },
+    {
+      "id": "rdb-q2",
+      "type": "mcq",
+      "prompt": "N+1 query problem: 100 blog posts, fetch author for each \u2014 how many queries?",
+      "choices": [
+        "1",
+        "101 \u2014 1 for posts + 1 per post for the author. This is N+1",
+        "100",
+        "2"
+      ],
+      "answerIndex": 1,
+      "explanation": "If author is lazily loaded: 1 SELECT * FROM posts + 100 SELECT * FROM users WHERE id=? = 101 queries. Fix: JOIN posts with users, or ORM eager loading (.include(['author'])).",
+      "tags": [
+        "RDBMS",
+        "N+1",
+        "performance"
+      ]
+    },
+    {
+      "id": "rdb-q3",
+      "type": "mcq",
+      "prompt": "Composite index on (user_id, created_at). When is it NOT used efficiently?",
+      "choices": [
+        "WHERE user_id = 1 AND created_at > '2024'",
+        "WHERE user_id = 1",
+        "WHERE created_at > '2024' (without user_id filter)",
+        "ORDER BY user_id, created_at"
+      ],
+      "answerIndex": 2,
+      "explanation": "Leftmost prefix rule: composite index (A, B) supports queries on A alone, or A+B together. Queries on B alone cannot use the index (no A prefix). Solution: add a separate index on created_at if needed.",
+      "tags": [
+        "RDBMS",
+        "indexing",
+        "composite-index"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rdb-fc1",
+      "front": "ACID explained",
+      "back": "Atomicity: all-or-nothing. Consistency: valid state transitions only. Isolation: concurrent txns don't interfere (levels). Durability: committed = persisted to disk (WAL).",
+      "tags": [
+        "RDBMS",
+        "ACID"
+      ]
+    },
+    {
+      "id": "rdb-fc2",
+      "front": "Isolation levels",
+      "back": "Read uncommitted: dirty reads. Read committed: no dirty reads (PG default). Repeatable read: no non-repeatable reads. Serializable: no phantoms. Higher = more consistent, lower throughput.",
+      "tags": [
+        "RDBMS",
+        "isolation"
+      ]
+    },
+    {
+      "id": "rdb-fc3",
+      "front": "Composite index leftmost prefix rule",
+      "back": "Index (A, B, C) works for: A, A+B, A+B+C queries. Does NOT work for: B alone, C alone, B+C. Order columns by query frequency and filter selectivity.",
+      "tags": [
+        "RDBMS",
+        "indexing"
+      ]
+    },
+    {
+      "id": "rdb-fc4",
+      "front": "N+1 fix",
+      "back": "Use JOIN (single query returns all data). ORM: eager/include loading. GraphQL: dataloader batching. N+1 = 100 posts \u2192 101 queries. JOIN = 1 query. Always check query count in development.",
+      "tags": [
+        "RDBMS",
+        "N+1"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Relational Databases and SQL\n\nDesign a realistic production service with Relational Databases and SQL at its core. No code required:\n\n1. Why Relational Databases and SQL over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "relational-databases-pc1",
+        "text": "Justified use of Relational Databases and SQL for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "relational-databases-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "relational-databases-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "relational-databases-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "relational-databases-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Relational Databases and SQL remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

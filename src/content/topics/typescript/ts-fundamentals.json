@@ -1,0 +1,365 @@
+{
+  "id": "ts-fundamentals",
+  "unit": 10,
+  "order": 80,
+  "title": "TypeScript Fundamentals",
+  "summary": "Types, type inference, union/intersection types, and the narrowing mental model that makes TypeScript safe.",
+  "prereqs": [],
+  "guide": "# TypeScript Fundamentals\n\nTypeScript is JavaScript with a **static type layer** that lives entirely at compile time. Think of TypeScript as a strict code reviewer who reads your code before it runs and refuses to compile anything that could blow up at runtime. The reviewer is erased when you ship — the output is plain JavaScript.\n\n```\nYour .ts source\n      │\n      ▼  tsc (TypeScript compiler)\n Plain .js output   ← types completely gone at runtime\n      │\n      ▼  Node / browser\n Runs as usual JS\n```\n\n## The Type System — a contract, not a cage\n\nEvery value in TypeScript has a **type** — a set of possible shapes. You can declare it explicitly or let TypeScript **infer** it from context.\n\n```ts\n// Explicit annotation\nlet age: number = 25;\n\n// Inferred — TS figures out 'string' from the literal\nlet name = 'Alice';      // type: string (inferred)\nname = 42;               // ✗ Error: Type 'number' is not assignable to 'string'\n\n// Function: annotate parameters, return type is inferred\nfunction greet(person: string): string {\n  return `Hello, ${person}`;\n}\n```\n\n## Primitive Types\n\n```ts\nlet n: number   = 3.14;\nlet s: string   = 'hello';\nlet b: boolean  = true;\nlet u: undefined = undefined;\nlet nl: null    = null;\nlet big: bigint = 9007199254740991n;\nlet sym: symbol = Symbol('id');\n\n// Special widened types\nlet anything: any    = 'start';  // escapes type system — avoid\nanything = 42;                   // no error (any accepts all)\nlet safe: unknown    = fetch();  // must narrow before use\n```\n\n## Type Inference — TypeScript reads your code\n\n```\nlet items = [1, 2, 3];     ← TypeScript sees number literals\n             │\n             ▼  infers\n     items: number[]\n\nlet pair = [1, 'hello'];  ← mixed literals\n             │\n             ▼  infers\n     pair: (number | string)[]\n\nconst PI = 3.14;          ← const + literal → literal type\n             │\n             ▼  infers\n     PI: 3.14   (not 'number' — the exact value)\n```\n\n## Union and Intersection Types\n\n```ts\n// Union: either A or B\ntype StringOrNumber = string | number;\nfunction format(x: StringOrNumber): string {\n  return String(x);\n}\n\n// Intersection: must be both A and B simultaneously\ntype Named   = { name: string };\ntype Aged    = { age: number };\ntype Person  = Named & Aged;    // { name: string; age: number }\n\nconst p: Person = { name: 'Alice', age: 30 };  // must have both\n```\n\n## Type Narrowing — the detective model\n\nNarrowing is TypeScript tracking what a type *must* be at a specific point in code based on your checks. Think of it as TypeScript playing detective: each `if` or `typeof` gives it more evidence.\n\n```\nfunction printId(id: string | number) {\n                    ▲\n                    │  wide: could be either\n  if (typeof id === 'string') {\n                    ▼  narrowed to string\n    console.log(id.toUpperCase());  // ✓ safe\n  } else {\n                    ▼  narrowed to number\n    console.log(id.toFixed(2));     // ✓ safe\n  }\n}\n```\n\n**Narrowing guards:**\n\n```ts\ntypeof x === 'string'        // primitive check\nx instanceof Date            // class instance check\nx !== null && x !== undefined // nullish check\n'prop' in x                  // shape check\nArray.isArray(x)             // array check\n\n// Custom type guard — you promise TS what the type is\nfunction isString(x: unknown): x is string {\n  return typeof x === 'string';\n}\n```\n\n## Literal Types and `const` Assertions\n\n```ts\n// Without const: widened to 'string'\nlet direction = 'north';           // type: string\n\n// With const: literal type\nconst direction = 'north';         // type: 'north'\n\n// as const — freeze the entire shape as literals\nconst config = { host: 'localhost', port: 3000 } as const;\n// config.host: 'localhost'  (not string)\n// config.port: 3000         (not number)\n// config is readonly — can't mutate\n```\n\n## `unknown` vs `any` — the safety switch\n\n```\n          any                    unknown\n   ┌─────────────┐          ┌─────────────┐\n   │ Accept all  │          │ Accept all  │\n   │ Allow all   │          │ Must narrow │\n   │ operations  │          │ before use  │\n   └─────────────┘          └─────────────┘\n   Turns off type           Stays type safe\n   checking entirely        until proven\n\n// any — danger zone\nfunction riskyProcess(x: any) {\n  x.doAnything();   // no error — but crashes at runtime if x has no method\n}\n\n// unknown — safe zone\nfunction safeProcess(x: unknown) {\n  x.doAnything();  // ✗ Error: can't call method on unknown\n  if (typeof x === 'object' && x !== null && 'doAnything' in x) {\n    (x as { doAnything: () => void }).doAnything();  // now safe\n  }\n}\n```\n\n## `never` — the impossible type\n\n`never` is the type of values that can **never exist**. A function that always throws returns `never`. An exhaustive switch after all cases have been handled leaves a `never`-typed variable.\n\n```ts\nfunction fail(msg: string): never {\n  throw new Error(msg);  // never returns normally\n}\n\ntype Shape = 'circle' | 'square';\nfunction area(s: Shape): number {\n  switch (s) {\n    case 'circle': return Math.PI;\n    case 'square': return 1;\n    default:\n      const _exhaustive: never = s;  // TS error if Shape gets a new case\n      return _exhaustive;\n  }\n}\n```\n\n## Complexity Cheatsheet\n\n| Concept | Key rule |\n|---|---|\n| `let` inference | Widens to base type (e.g. `string`) |\n| `const` inference | Narrows to literal type (e.g. `'north'`) |\n| `any` | Turns off checking — avoid in production |\n| `unknown` | Safe any — must prove type before use |\n| `never` | Unreachable code marker |\n| Union `A \\| B` | Either A or B — narrow to use specific ops |\n| Intersection `A & B` | Both A and B — adds all properties |\n\n## Common Pitfalls\n- Reaching for `any` when `unknown` would keep you safe\n- Forgetting that `typeof null === 'object'` — always check `x !== null` before using `in`\n- Implicit `any` in function parameters — enable `strict: true` in tsconfig to catch these\n- Mutating a `const` assertion object — `as const` makes it deeply readonly at the type level\n- Thinking TypeScript's types exist at runtime — they are 100% erased; `instanceof` on a TS interface fails\n\n## Connections\n- **ts-interfaces-types** — deeper shapes with interface and type alias\n- **ts-generics** — parameterise types like array functions\n- **ts-advanced-types** — conditional and mapped types build on narrowing\n- **react-fundamentals** — TypeScript props typing makes React components airtight",
+  "questions": [
+    {
+      "id": "tsf-q1",
+      "type": "mcq",
+      "prompt": "TypeScript types exist at runtime and can be checked with instanceof:",
+      "choices": [
+        "True — TS compiles types into runtime metadata",
+        "False — types are erased at compile time; only JS class constructors can use instanceof",
+        "Only interface types survive",
+        "Only generic types survive"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript is structurally erased. Interfaces, type aliases, unions — none exist at runtime. Only JavaScript constructs (class, typeof, in) work at runtime.",
+      "tags": ["type-erasure", "fundamentals"]
+    },
+    {
+      "id": "tsf-q2",
+      "type": "codeOutput",
+      "prompt": "What type does TypeScript infer for `result`?",
+      "code": "const result = [1, 'hello', true];",
+      "choices": [
+        "any[]",
+        "(number | string | boolean)[]",
+        "object[]",
+        "[number, string, boolean]"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript infers an array of the union of all literal types present in the literal. A tuple type [number, string, boolean] would only be inferred with `as const`.",
+      "tags": ["inference", "arrays"]
+    },
+    {
+      "id": "tsf-q3",
+      "type": "mcq",
+      "prompt": "What is the type of `PI` after `const PI = 3.14`?",
+      "choices": [
+        "number",
+        "float",
+        "3.14",
+        "readonly number"
+      ],
+      "answerIndex": 2,
+      "explanation": "`const` causes TypeScript to infer the literal type `3.14` rather than the widened type `number`. `let PI = 3.14` would infer `number`.",
+      "tags": ["inference", "literal-types"]
+    },
+    {
+      "id": "tsf-q4",
+      "type": "codeOutput",
+      "prompt": "What does TypeScript report on line 3?",
+      "code": "let name = 'Alice';\nname = 42;\n// line 3: console.log(name);",
+      "choices": [
+        "No error — name is now 42",
+        "Error on line 2: Type 'number' is not assignable to type 'string'",
+        "Error on line 3: name is undefined",
+        "Error: const required"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript inferred `name: string` from the string literal. Assigning `42` (a number) violates the inferred contract — error on line 2, not line 3.",
+      "tags": ["inference", "type-errors"]
+    },
+    {
+      "id": "tsf-q5",
+      "type": "mcq",
+      "prompt": "`unknown` differs from `any` in that `unknown`:",
+      "choices": [
+        "Cannot hold null or undefined",
+        "Must be narrowed before performing operations on it",
+        "Is only for function return types",
+        "Is the same as any but slower"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both accept any value. The difference is `any` turns off checking; `unknown` keeps it on — you must prove the type (via typeof, instanceof, type guard) before calling methods.",
+      "tags": ["unknown", "any", "safety"]
+    },
+    {
+      "id": "tsf-q6",
+      "type": "codeOutput",
+      "prompt": "What happens?",
+      "code": "function process(x: unknown) {\n  return x.toUpperCase();\n}",
+      "choices": [
+        "Compiles fine — unknown is compatible with string",
+        "Runtime error only",
+        "TypeScript compile error: Property 'toUpperCase' does not exist on type 'unknown'",
+        "Works if x is actually a string at runtime"
+      ],
+      "answerIndex": 2,
+      "explanation": "`unknown` blocks all method access until narrowed. You must first do `if (typeof x === 'string')` before calling string methods.",
+      "tags": ["unknown", "narrowing"]
+    },
+    {
+      "id": "tsf-q7",
+      "type": "mcq",
+      "prompt": "Given `type A = { x: number } & { y: string }`, a value of type A:",
+      "choices": [
+        "Can have either x or y",
+        "Must have both x: number and y: string",
+        "Is only valid if x equals y",
+        "Is the same as { x: number } | { y: string }"
+      ],
+      "answerIndex": 1,
+      "explanation": "Intersection `&` means ALL properties from both sides are required. It is more restrictive than union `|`, which means AT LEAST ONE side.",
+      "tags": ["intersection", "union"]
+    },
+    {
+      "id": "tsf-q8",
+      "type": "mcq",
+      "prompt": "What is the return type of a function that always throws an error?",
+      "choices": [
+        "void",
+        "undefined",
+        "null",
+        "never"
+      ],
+      "answerIndex": 3,
+      "explanation": "`never` means the function never successfully returns. It is different from `void` (returns but with no value). `never` signals unreachable / always-throws.",
+      "tags": ["never", "fundamentals"]
+    },
+    {
+      "id": "tsf-q9",
+      "type": "multi",
+      "prompt": "Which narrowing guards are valid in TypeScript?",
+      "choices": [
+        "typeof x === 'string'",
+        "x instanceof Date",
+        "x is string (in regular code, not a type guard function)",
+        "'prop' in x"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`x is string` is only valid as the return type annotation of a type predicate function, not as a standalone expression. The other three are standard JavaScript runtime checks TypeScript recognises.",
+      "tags": ["narrowing", "type-guards"]
+    },
+    {
+      "id": "tsf-q10",
+      "type": "codeOutput",
+      "prompt": "What is the type of `config.port` after `const config = { port: 3000 } as const`?",
+      "code": "const config = { port: 3000 } as const;\ntype T = typeof config.port;",
+      "choices": [
+        "number",
+        "3000",
+        "readonly number",
+        "const"
+      ],
+      "answerIndex": 1,
+      "explanation": "`as const` freezes all values to their literal types. `config.port` becomes the literal type `3000`, not the wide type `number`. The object is also readonly.",
+      "tags": ["const-assertion", "literal-types"]
+    },
+    {
+      "id": "tsf-q11",
+      "type": "mcq",
+      "prompt": "Why does TypeScript widen `let x = 'north'` to `string` but not `const x = 'north'`?",
+      "choices": [
+        "let is slower so TS uses a simpler type",
+        "let allows reassignment so the value could change — any string is valid. const cannot be reassigned so the literal is locked.",
+        "This is a bug in TypeScript",
+        "Both infer the literal type 'north'"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript widens `let` to the base type because you could later write `x = 'south'` — keeping the literal type would immediately break. `const` guarantees the value never changes so the literal type is safe.",
+      "tags": ["inference", "widening", "literal-types"]
+    },
+    {
+      "id": "tsf-q12",
+      "type": "mcq",
+      "prompt": "`typeof null` in JavaScript (and therefore TypeScript at runtime) evaluates to:",
+      "choices": [
+        "'null'",
+        "'object'",
+        "'undefined'",
+        "'symbol'"
+      ],
+      "answerIndex": 1,
+      "explanation": "This is a famous JavaScript bug that TypeScript inherits. `typeof null === 'object'`, so you must ALSO check `x !== null` when narrowing objects. `null` is NOT an object in TS's type system but is at runtime.",
+      "tags": ["narrowing", "null", "gotcha"]
+    },
+    {
+      "id": "tsf-q13",
+      "type": "codeOutput",
+      "prompt": "What does TypeScript infer for return type?",
+      "code": "function add(a: number, b: number) {\n  return a + b;\n}",
+      "choices": [
+        "any",
+        "number",
+        "void",
+        "string"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript infers the return type from the body. `number + number` is `number`, so the return type is inferred as `number` — no annotation needed.",
+      "tags": ["inference", "functions"]
+    },
+    {
+      "id": "tsf-q14",
+      "type": "mcq",
+      "prompt": "Which TypeScript feature acts as a compile-time exhaustiveness check for switch statements?",
+      "choices": [
+        "unknown default case",
+        "Assigning the default variable to type never — TS errors if a case is unhandled",
+        "throw in default",
+        "The noImplicitReturns compiler flag"
+      ],
+      "answerIndex": 1,
+      "explanation": "After all union members are handled, what remains is `never`. Assigning it to a `never`-typed variable is harmless if exhaustive — but if you add a new union member later without a case, TS will error with 'not assignable to never'.",
+      "tags": ["never", "exhaustiveness", "narrowing"]
+    },
+    {
+      "id": "tsf-q15",
+      "type": "mcq",
+      "prompt": "A custom type guard function returns `x is string`. When TypeScript sees this function return true:",
+      "choices": [
+        "It trusts the JavaScript runtime result",
+        "It narrows x to string in the true branch of the caller",
+        "It ignores the return type — only typeof works",
+        "It checks the assertion at runtime"
+      ],
+      "answerIndex": 1,
+      "explanation": "A type predicate `x is string` tells TypeScript: 'wherever you see this function return true, narrow the argument to string'. It is a compile-time contract, not a runtime check.",
+      "tags": ["type-guards", "narrowing"]
+    },
+    {
+      "id": "tsf-q16",
+      "type": "multi",
+      "prompt": "Which of these are erased at compile time (do not exist in the JS output)?",
+      "choices": [
+        "interface definitions",
+        "type alias declarations",
+        "class declarations",
+        "union type annotations"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Interfaces and type aliases exist only at compile time. Class declarations ARE emitted as JavaScript (they are runtime values). Union annotations are purely compile-time.",
+      "tags": ["type-erasure", "runtime"]
+    },
+    {
+      "id": "tsf-q17",
+      "type": "codeOutput",
+      "prompt": "After this code, what is the type of `items`?",
+      "code": "const items = [] as string[];",
+      "choices": [
+        "never[]",
+        "any[]",
+        "string[]",
+        "unknown[]"
+      ],
+      "answerIndex": 2,
+      "explanation": "The `as string[]` assertion overrides the default inference of `never[]` for an empty array literal. Without the assertion, TS infers `never[]` because it has no evidence of element type.",
+      "tags": ["inference", "arrays", "assertions"]
+    },
+    {
+      "id": "tsf-q18",
+      "type": "mcq",
+      "prompt": "What does enabling `strict: true` in tsconfig.json actually enable?",
+      "choices": [
+        "Only strictNullChecks",
+        "A set of flags including strictNullChecks, noImplicitAny, strictFunctionTypes, and others",
+        "Only noImplicitAny",
+        "Prevents any from being used"
+      ],
+      "answerIndex": 1,
+      "explanation": "`strict: true` is a shorthand that enables: strictNullChecks, noImplicitAny, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis, and alwaysStrict. It is the recommended default.",
+      "tags": ["tsconfig", "strict"]
+    },
+    {
+      "id": "tsf-q19",
+      "type": "mcq",
+      "prompt": "Why does `let x: any = 5; x.toUpperCase()` not produce a TypeScript error but crashes at runtime?",
+      "choices": [
+        "TypeScript has a bug",
+        "any disables all type checking — TS trusts you completely, so no static error is raised even for invalid operations",
+        "toUpperCase exists on numbers",
+        "Runtime errors cannot be predicted"
+      ],
+      "answerIndex": 1,
+      "explanation": "`any` is an escape hatch that tells TypeScript 'I know what I'm doing'. It disables every check. The blame at runtime is yours, not TypeScript's — this is why `any` should be avoided.",
+      "tags": ["any", "safety", "runtime"]
+    },
+    {
+      "id": "tsf-q20",
+      "type": "codeOutput",
+      "prompt": "What is the type of `x` inside the else branch?",
+      "code": "function fn(x: string | number | boolean) {\n  if (typeof x === 'string') { /* string */ }\n  else if (typeof x === 'number') { /* number */ }\n  else {\n    // what is x here?\n  }\n}",
+      "choices": [
+        "string | number | boolean",
+        "boolean",
+        "never",
+        "unknown"
+      ],
+      "answerIndex": 1,
+      "explanation": "After ruling out string and number, only boolean remains. TypeScript's narrowing tracks what has been eliminated — the else branch gets boolean, not the full union.",
+      "tags": ["narrowing", "union", "control-flow"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "tsf-fc1",
+      "front": "let vs const inference",
+      "back": "`let x = 'a'` infers `string` (widened). `const x = 'a'` infers `'a'` (literal). Use const for config values you never reassign.",
+      "tags": ["inference"]
+    },
+    {
+      "id": "tsf-fc2",
+      "front": "unknown vs any",
+      "back": "Both accept any value. `unknown` requires narrowing before use. `any` skips all checks. Default to `unknown` for external data; never use `any` in new code.",
+      "tags": ["unknown", "any"]
+    },
+    {
+      "id": "tsf-fc3",
+      "front": "never type — when does it appear?",
+      "back": "Functions that always throw, exhaustive switch defaults, and intersection of incompatible types. Use it as the sentinel in exhaustiveness checks.",
+      "tags": ["never"]
+    },
+    {
+      "id": "tsf-fc4",
+      "front": "Type narrowing guards (5)",
+      "back": "`typeof`, `instanceof`, `in`, `Array.isArray`, custom type predicate (`x is T`). TypeScript tracks each guard's effect on the type in each branch.",
+      "tags": ["narrowing", "type-guards"]
+    },
+    {
+      "id": "tsf-fc5",
+      "front": "as const",
+      "back": "Freezes all values to their literal types and makes the object deeply readonly. Use for config objects, lookup tables, and discriminated union tag arrays.",
+      "tags": ["const-assertion", "literal-types"]
+    },
+    {
+      "id": "tsf-fc6",
+      "front": "typeof null at runtime",
+      "back": "`typeof null === 'object'` — JavaScript legacy bug. Always pair an object check with `x !== null` when narrowing nullable references.",
+      "tags": ["null", "narrowing", "gotcha"]
+    },
+    {
+      "id": "tsf-fc7",
+      "front": "strict: true enables",
+      "back": "strictNullChecks, noImplicitAny, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis. Enable from day one — retrofitting strict is painful.",
+      "tags": ["tsconfig", "strict"]
+    },
+    {
+      "id": "tsf-fc8",
+      "front": "Union vs Intersection",
+      "back": "`A | B` = either A or B (OR). `A & B` = both A and B (AND). Unions widen; intersections constrain. Narrow unions before calling type-specific methods.",
+      "tags": ["union", "intersection"]
+    }
+  ],
+  "project": {
+    "brief": "Design the type system for a small API client library in TypeScript. The library fetches user data from a REST endpoint that can return: a User object, an Error object, or null (not found). Define: 1) the union type for all three response shapes, 2) a type guard function for each case, 3) a processResponse function that uses narrowing to handle each case without any `any`. Write out the types, guards, and function signature — no implementation needed. Then explain: why is `unknown` the right type for the raw JSON before parsing? What would break if you used `any` instead?",
+    "checklist": [
+      { "id": "c1", "text": "Defines a discriminated union or tagged union for the three response shapes", "weight": 1 },
+      { "id": "c2", "text": "Writes a type guard (x is User, x is ApiError) for each shape", "weight": 1 },
+      { "id": "c3", "text": "processResponse is fully typed with no any or non-null assertions", "weight": 1 },
+      { "id": "c4", "text": "Explains why unknown is safer than any for raw JSON input", "weight": 1 },
+      { "id": "c5", "text": "Identifies what breaks if any is used (missed null case, wrong method calls)", "weight": 1 }
+    ],
+    "hints": [
+      "A discriminated union uses a shared literal field (like `type: 'user' | 'error' | 'not-found'`) so narrowing is predictable.",
+      "A type guard function returns `x is User` — TypeScript narrows in the true branch of every caller.",
+      "unknown accepted BUT operations blocked: you must parse/validate before calling .name or .message.",
+      "any accepted AND all operations allowed: a typo like `.nme` compiles fine, explodes at runtime."
+    ]
+  }
+}
+

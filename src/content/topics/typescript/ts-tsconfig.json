@@ -1,0 +1,361 @@
+{
+  "id": "ts-tsconfig",
+  "unit": 10,
+  "order": 87,
+  "title": "TypeScript tsconfig and Compiler Options",
+  "summary": "tsconfig.json structure, strict mode flags, target/module/moduleResolution settings, and project references.",
+  "prereqs": ["ts-modules"],
+  "guide": "# TypeScript tsconfig and Compiler Options\n\n`tsconfig.json` is the **blueprint that tells TypeScript how to analyse and compile your project**. Think of it as the contract between you and the TypeScript compiler — it defines what files to include, what rules to enforce, and how to transform your code.\n\n```\ntsconfig.json\n   │\n   ├── compilerOptions    ← the main settings\n   │      ├── target      ← ES output version\n   │      ├── module      ← module format\n   │      ├── strict      ← strictness level\n   │      └── ...more\n   │\n   ├── include    ← which files to compile\n   ├── exclude    ← which to skip\n   └── extends    ← inherit from another tsconfig\n```\n\n## The Most Important Flags\n\n```json\n{\n  \"compilerOptions\": {\n    // --- What JavaScript to emit ---\n    \"target\": \"ES2022\",            // Compiled JS uses ES2022 features\n    \"lib\": [\"ES2022\", \"DOM\"],       // Which type definitions to include\n    \"module\": \"ESNext\",            // Use ES module syntax in output\n    \"moduleResolution\": \"bundler\", // How to resolve imports (for Vite etc.)\n\n    // --- Strictness ---\n    \"strict\": true,                // Enables all strict checks (recommended)\n    \"noImplicitAny\": true,         // Errors on implicit any\n    \"strictNullChecks\": true,      // null/undefined are not assignable everywhere\n\n    // --- Output ---\n    \"outDir\": \"./dist\",            // Where to put compiled files\n    \"rootDir\": \"./src\",            // Root of your source files\n    \"declaration\": true,           // Emit .d.ts files for consumers\n    \"sourceMap\": true,             // Emit .js.map for debugging\n\n    // --- Interop ---\n    \"esModuleInterop\": true,       // Clean default imports from CJS modules\n    \"allowSyntheticDefaultImports\": true, // Pair with esModuleInterop\n\n    // --- Paths ---\n    \"baseUrl\": \".\",\n    \"paths\": { \"@/*\": [\"src/*\"] }   // TypeScript alias resolution\n  }\n}\n```\n\n## strict mode — what it actually enables\n\n`\"strict\": true` is a shorthand for enabling all of these individually:\n\n```\n\"strict\": true  →  equivalent to:\n  ├── \"noImplicitAny\": true\n  │      Errors on: function(x) { return x.length; }  // x is implicitly any\n  │\n  ├── \"strictNullChecks\": true\n  │      Errors on: const s: string = null;  // null not assignable to string\n  │      Forces: const s = maybeNull?.toUpperCase() ?? 'default';\n  │\n  ├── \"strictFunctionTypes\": true\n  │      Stricter function parameter contravariance checking\n  │\n  ├── \"strictBindCallApply\": true\n  │      Type checks for bind/call/apply methods\n  │\n  ├── \"strictPropertyInitialization\": true\n  │      Class properties must be initialized in constructor\n  │\n  ├── \"noImplicitThis\": true\n  │      this in functions must have explicit type\n  │\n  └── \"useUnknownInCatchVariables\": true\n         catch (e) { e is unknown, not any }\n```\n\n## target and lib explained\n\n```\ntarget: what JS version your OUTPUT uses\n\n  target: 'ES5'   → TypeScript downgrades arrow functions, classes,\n                    const/let, etc. to ES5 equivalents\n\n  target: 'ES2022' → Output can use class fields, logical assignment,\n                     top-level await, etc. — no downgrade needed\n\nlib: which TYPE DEFINITIONS are available\n\n  lib: ['ES2022', 'DOM']  →  TypeScript knows about:\n    - Promise, Array.flatMap, String.replaceAll  (ES2022)\n    - document, window, HTMLElement              (DOM)\n\n  Without 'DOM': document.querySelector errors — not defined\n  Without 'ES2022': Array.at() errors — not in lib\n\n  ⚠️ lib does NOT affect what you can use at runtime —\n     your target environment must support it.\n     lib just tells TypeScript to STOP COMPLAINING.\n```\n\n## module and moduleResolution\n\n```\nmodule: what module syntax the OUTPUT uses\n  'CommonJS' → require() / module.exports (Node.js default)\n  'ESNext'   → import / export  (browser / bundler)\n  'NodeNext' → ESM with .js extensions for Node 18+\n\nmoduleResolution: how TypeScript FINDS imported files\n  'node'    → classic Node.js algorithm (legacy)\n  'node16'  → modern Node.js — requires .js extensions in imports\n  'bundler' → for Vite/webpack — extensionless imports OK\n\nCommon pairings:\n  Vite / browser:    module: 'ESNext', moduleResolution: 'bundler'\n  Node.js library:   module: 'NodeNext', moduleResolution: 'NodeNext'\n  Legacy Node.js:    module: 'CommonJS', moduleResolution: 'node'\n```\n\n## noEmit and isolatedModules\n\n```json\n// When TypeScript is ONLY used for type checking (Vite handles compilation):\n{\n  \"compilerOptions\": {\n    \"noEmit\": true,           // Don't generate JS files — Vite does that\n    \"isolatedModules\": true   // Each file compiled in isolation — required by\n                              // Vite/Babel/SWC which don't do full-project analysis\n  }\n}\n```\n\n`isolatedModules: true` enforces rules so each file can be safely transpiled independently:\n- Bans `export { Type }` without `export type { Type }` (type-only exports must be marked)\n- Bans const enum in non-ambient positions (evaluated values need project-wide info)\n\n## Project References — multi-package monorepos\n\n```json\n// Root tsconfig.json in a monorepo:\n{\n  \"references\": [\n    { \"path\": \"./packages/shared\" },\n    { \"path\": \"./packages/api\" },\n    { \"path\": \"./packages/web\" }\n  ]\n}\n\n// packages/web/tsconfig.json:\n{\n  \"compilerOptions\": {\n    \"composite\": true  // Required for project references\n  },\n  \"references\": [\n    { \"path\": \"../shared\" }  // web depends on shared\n  ]\n}\n```\n\n## extends — inherit and override\n\n```json\n// Base config (tsconfig.base.json):\n{\n  \"compilerOptions\": { \"strict\": true, \"target\": \"ES2022\" }\n}\n\n// App config extends base and overrides:\n{\n  \"extends\": \"./tsconfig.base.json\",\n  \"compilerOptions\": {\n    \"module\": \"ESNext\",   // different from base\n    \"outDir\": \"./dist\"\n  },\n  \"include\": [\"src/**/*\"]\n}\n// Effective: strict + target from base, module + outDir + include from here\n```\n\n## Key Flags Quick Reference\n\n| Flag | Default | What it does |\n|---|---|---|\n| strict | false | All strict checks on |\n| noImplicitAny | false | Error on implicit any |\n| strictNullChecks | false | null/undefined checked |\n| noUncheckedIndexedAccess | false | arr[0] includes undefined |\n| exactOptionalPropertyTypes | false | ? means absent, not undefined |\n| noImplicitReturns | false | All paths must return |\n| noFallthroughCasesInSwitch | false | All switch cases break/return |\n| isolatedModules | false | Each file transpilable alone |\n| declaration | false | Emit .d.ts files |\n| sourceMap | false | Emit .js.map files |\n\n## Common Pitfalls\n- Running `tsc` in a Vite project — use `tsc --noEmit` for type checking and let Vite do the actual compilation\n- Mismatching `outDir` and `rootDir` causing TypeScript to mirror folder structure in unexpected ways\n- `paths` in tsconfig doesn't affect the bundler — always configure both\n- `lib` including `DOM` on a Node.js server causes window/document to appear defined — use `lib: ['ES2022']` for Node\n- `isolatedModules` breaking `const enum` — use regular `enum` or `declare const enum` as a workaround\n\n## Connections\n- **ts-modules** — moduleResolution, paths, esModuleInterop all live in tsconfig\n- **ts-decorators** — experimentalDecorators and emitDecoratorMetadata in tsconfig\n- **react-performance** — noEmit + isolatedModules is the standard Vite React config",
+  "questions": [
+    {
+      "id": "tstc-q1",
+      "type": "mcq",
+      "prompt": "What does `\"strict\": true` in tsconfig actually enable?",
+      "choices": [
+        "Only noImplicitAny",
+        "A collection of strict checks including noImplicitAny, strictNullChecks, strictFunctionTypes, strictPropertyInitialization, and more",
+        "The strictest possible TypeScript version only",
+        "Prevents any use of JavaScript files"
+      ],
+      "answerIndex": 1,
+      "explanation": "`strict: true` is a shorthand umbrella that enables a set of stricter checks simultaneously. You can still override individual flags (e.g., `strict: true, noImplicitAny: false`) to selectively relax specific rules.",
+      "tags": ["tsconfig", "strict", "compiler-options"]
+    },
+    {
+      "id": "tstc-q2",
+      "type": "mcq",
+      "prompt": "The difference between `target` and `lib` in tsconfig is:",
+      "choices": [
+        "They are the same — both control the JS version",
+        "target controls the ES version of the EMITTED JavaScript. lib controls what TYPE DEFINITIONS TypeScript uses for checking (which APIs it 'knows about')",
+        "lib controls the output; target controls type checking",
+        "target is for modules; lib is for classes"
+      ],
+      "answerIndex": 1,
+      "explanation": "target: 'ES5' means TypeScript downconverts your code to ES5 syntax (IIFEs for classes, etc.). lib: ['ES2022', 'DOM'] means TypeScript allows you to use ES2022 methods and DOM APIs in your code without errors — but it's YOUR responsibility to ensure the runtime environment supports them.",
+      "tags": ["tsconfig", "target", "lib"]
+    },
+    {
+      "id": "tstc-q3",
+      "type": "mcq",
+      "prompt": "Why would you set `\"noEmit\": true` in a Vite project's tsconfig?",
+      "choices": [
+        "To prevent TypeScript from reading any files",
+        "Because Vite handles the JavaScript compilation — you only want TypeScript for type checking. noEmit tells tsc not to write any .js output files",
+        "To disable source maps",
+        "Required for hot module replacement"
+      ],
+      "answerIndex": 1,
+      "explanation": "In Vite projects, TypeScript transpilation is done by Vite (via esbuild). `tsc` is only run for type checking (usually as `tsc --noEmit`). This separates concerns: Vite for speed, tsc for correctness.",
+      "tags": ["tsconfig", "noEmit", "vite"]
+    },
+    {
+      "id": "tstc-q4",
+      "type": "mcq",
+      "prompt": "What does `\"strictNullChecks\": true` change?",
+      "choices": [
+        "Prevents using null anywhere in your code",
+        "Makes null and undefined their own distinct types — they are no longer assignable to string, number, etc. without explicit annotation",
+        "Converts null to undefined automatically",
+        "Required for optional chaining"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without strictNullChecks: `const s: string = null` is valid. With it: error. You must explicitly type as `string | null` if null is possible. This catches a huge class of null-related runtime errors at compile time.",
+      "tags": ["tsconfig", "strictNullChecks", "strict"]
+    },
+    {
+      "id": "tstc-q5",
+      "type": "codeOutput",
+      "prompt": "With `isolatedModules: true`, this code causes an error:",
+      "code": "// types.ts\nexport type { User } from './user';\n\n// OR:\nexport { User } from './user';  // where User is a type",
+      "choices": [
+        "Both are fine — isolatedModules doesn't affect this",
+        "The second form errors — re-exporting a type without `type` keyword is not allowed under isolatedModules",
+        "Neither compiles — types cannot be re-exported",
+        "The first form errors — type re-exports require value imports"
+      ],
+      "answerIndex": 1,
+      "explanation": "`isolatedModules: true` requires type-only re-exports to use `export type`. Without this, a transpiler operating on one file at a time (esbuild, Babel) can't know if `User` is a type or value — it might leave a broken export. `export type { User }` is always safe.",
+      "tags": ["tsconfig", "isolatedModules", "modules"]
+    },
+    {
+      "id": "tstc-q6",
+      "type": "mcq",
+      "prompt": "Which `moduleResolution` setting is recommended for projects using Vite or webpack?",
+      "choices": [
+        "'node' — the classic setting",
+        "'bundler' — matches how bundlers resolve modules; allows extensionless imports and tsx files",
+        "'node16' — for all modern projects",
+        "'nodenext' — the most modern option"
+      ],
+      "answerIndex": 1,
+      "explanation": "`moduleResolution: 'bundler'` was added in TypeScript 5.0 specifically for bundler-based projects. It allows the import patterns bundlers support (no file extensions, tsx/jsx resolution). `node16`/`nodenext` require explicit `.js` extensions in imports, which is for native ESM Node.js.",
+      "tags": ["tsconfig", "moduleResolution"]
+    },
+    {
+      "id": "tstc-q7",
+      "type": "mcq",
+      "prompt": "What does `\"declaration\": true` in tsconfig do?",
+      "choices": [
+        "Enables TypeScript declarations (type annotations)",
+        "Generates `.d.ts` type declaration files alongside the compiled JavaScript — needed when publishing a library so consumers get type information",
+        "Requires all variables to be declared before use",
+        "Enables `declare` keyword in source files"
+      ],
+      "answerIndex": 1,
+      "explanation": "When building a library for npm: `declaration: true` emits `.d.ts` files. Consumers installing your package get type checking without needing your source TypeScript files. Without it, your package appears untyped to TypeScript consumers.",
+      "tags": ["tsconfig", "declaration", "library"]
+    },
+    {
+      "id": "tstc-q8",
+      "type": "multi",
+      "prompt": "Which flags are included when `\"strict\": true` is set?",
+      "choices": [
+        "noImplicitAny",
+        "strictNullChecks",
+        "noUnusedLocals",
+        "strictPropertyInitialization"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`strict` includes: noImplicitAny, strictNullChecks, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis, useUnknownInCatchVariables. `noUnusedLocals` is NOT part of strict — it's a separate flag.",
+      "tags": ["tsconfig", "strict"]
+    },
+    {
+      "id": "tstc-q9",
+      "type": "mcq",
+      "prompt": "What does `\"noUncheckedIndexedAccess\": true` change about array/object access?",
+      "choices": [
+        "Makes arrays immutable",
+        "Array index access and object index signatures return `T | undefined` instead of just `T` — forcing you to handle the case where the index doesn't exist",
+        "Prevents runtime index out of bounds errors",
+        "Requires all arrays to be typed"
+      ],
+      "answerIndex": 1,
+      "explanation": "With `noUncheckedIndexedAccess: true`, `arr[0]` has type `T | undefined`. Without it: `T`. This is more correct — `arr[100]` on a 3-element array really does return `undefined`. This flag is NOT part of `strict: true` — you opt in separately.",
+      "tags": ["tsconfig", "noUncheckedIndexedAccess"]
+    },
+    {
+      "id": "tstc-q10",
+      "type": "codeOutput",
+      "prompt": "In a monorepo with project references, what does `\"composite\": true` do?",
+      "code": "// packages/shared/tsconfig.json\n{\n  \"compilerOptions\": {\n    \"composite\": true\n  }\n}",
+      "choices": [
+        "Enables all strict flags",
+        "Required marker for project references — enables incremental builds and makes TypeScript produce build info files for cross-package type checking",
+        "Merges multiple tsconfigs",
+        "Enables composite patterns like mixins"
+      ],
+      "answerIndex": 1,
+      "explanation": "`composite: true` is required when a package is referenced via project references. It forces `declaration: true`, enables incremental compilation (`.tsbuildinfo`), and ensures TypeScript can type-check dependent packages without recompiling the entire graph.",
+      "tags": ["tsconfig", "composite", "project-references"]
+    },
+    {
+      "id": "tstc-q11",
+      "type": "mcq",
+      "prompt": "`\"extends\": \"./tsconfig.base.json\"` in a tsconfig means:",
+      "choices": [
+        "All settings are copied and cannot be overridden",
+        "The current tsconfig inherits all settings from tsconfig.base.json; any settings in the current file override the inherited ones",
+        "The base file's include/exclude patterns are combined",
+        "An error — tsconfig cannot extend other configs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Extending works like object merging — base settings are inherited, then overridden by current file settings. Top-level keys like `include` and `exclude` are NOT merged — they completely replace the base's values. `compilerOptions` properties ARE merged individually.",
+      "tags": ["tsconfig", "extends", "inheritance"]
+    },
+    {
+      "id": "tstc-q12",
+      "type": "mcq",
+      "prompt": "If you add `\"lib\": [\"ES2022\"]` without `\"DOM\"` to a Node.js server project, what happens?",
+      "choices": [
+        "TypeScript will error on all code",
+        "TypeScript no longer knows about `window`, `document`, `HTMLElement` — DOM APIs will error as undefined. Correct for a server that has no DOM",
+        "The DOM still works — lib doesn't affect the DOM",
+        "TypeScript uses a default lib that includes DOM"
+      ],
+      "answerIndex": 1,
+      "explanation": "Correct! Node.js servers have no DOM. Including `DOM` in lib would make TypeScript silently accept `document.querySelector()` — which crashes at runtime on a server. Removing DOM from lib catches these bugs.",
+      "tags": ["tsconfig", "lib", "node"]
+    },
+    {
+      "id": "tstc-q13",
+      "type": "mcq",
+      "prompt": "`\"exactOptionalPropertyTypes\": true` makes a distinction that `strictNullChecks` alone does not:",
+      "choices": [
+        "Makes all optional properties required",
+        "Distinguishes `{ x?: string }` (x absent OR string) from `{ x: string | undefined }` (x present but possibly undefined) — prevents explicitly setting an optional property to undefined",
+        "Removes the ? syntax",
+        "Requires explicit undefined in optional types"
+      ],
+      "answerIndex": 1,
+      "explanation": "With `exactOptionalPropertyTypes`, setting `obj.x = undefined` on `{ x?: string }` is a type error. The property can be absent but if present, it must be string. Without this flag: `obj.x = undefined` is accepted (since ? includes undefined). A subtle but important distinction.",
+      "tags": ["tsconfig", "exactOptionalPropertyTypes", "optional"]
+    },
+    {
+      "id": "tstc-q14",
+      "type": "multi",
+      "prompt": "Which are valid top-level keys in tsconfig.json?",
+      "choices": [
+        "compilerOptions",
+        "include",
+        "references",
+        "dependencies"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "`compilerOptions`, `include`, `exclude`, `files`, `extends`, and `references` are all valid tsconfig top-level keys. `dependencies` is a key in `package.json`, not `tsconfig.json`.",
+      "tags": ["tsconfig", "structure"]
+    },
+    {
+      "id": "tstc-q15",
+      "type": "mcq",
+      "prompt": "What does `\"noImplicitReturns\": true` enforce?",
+      "choices": [
+        "All functions must return void",
+        "Every code path in a function with a non-void return type must return a value — no implicit undefined return at end of function",
+        "Prevents returning undefined explicitly",
+        "Disables the return keyword"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without `noImplicitReturns`, a function can silently return `undefined` at the end. With it: if any path returns a value, ALL paths must return — preventing subtle bugs where a function returns `undefined` in some branches.",
+      "tags": ["tsconfig", "noImplicitReturns"]
+    },
+    {
+      "id": "tstc-q16",
+      "type": "mcq",
+      "prompt": "Which module setting should a Node.js library targeting Node 18+ native ESM use?",
+      "choices": [
+        "module: 'CommonJS'",
+        "module: 'NodeNext', moduleResolution: 'NodeNext'",
+        "module: 'ESNext', moduleResolution: 'bundler'",
+        "module: 'ES2020'"
+      ],
+      "answerIndex": 1,
+      "explanation": "`NodeNext`/`nodenext` is the correct setting for Node.js 18+ native ESM. It requires explicit `.js` extensions in imports, uses the package.json `exports` field, and correctly handles `.cts`/`.mts` file extensions. `ESNext + bundler` is for browser/Vite, not Node.js.",
+      "tags": ["tsconfig", "module", "moduleResolution", "node"]
+    },
+    {
+      "id": "tstc-q17",
+      "type": "mcq",
+      "prompt": "The `\"sourceMap\": true` setting causes TypeScript to emit:",
+      "choices": [
+        "A visual map of your component tree",
+        "`.js.map` files that map minified/compiled JavaScript back to original TypeScript source — needed for readable stack traces and debugger step-through",
+        "An HTML page showing types",
+        "A dependency graph"
+      ],
+      "answerIndex": 1,
+      "explanation": "Source maps enable browser DevTools and Node.js to show TypeScript source in stack traces and the debugger, even though the actual runtime runs JavaScript. Without source maps, errors point to compiled JS line numbers — often useless.",
+      "tags": ["tsconfig", "sourceMap", "debugging"]
+    },
+    {
+      "id": "tstc-q18",
+      "type": "codeOutput",
+      "prompt": "This tsconfig has `lib: ['ES2022']` but no 'DOM'. The code does `document.querySelector('body')`. TypeScript:",
+      "code": "// tsconfig.json: \"lib\": [\"ES2022\"]\nconst body = document.querySelector('body');",
+      "choices": [
+        "Compiles — TypeScript infers document from the environment",
+        "Errors — 'document' is not defined in the 'ES2022' lib; DOM types must be included explicitly",
+        "Compiles but warns",
+        "Errors only at runtime"
+      ],
+      "answerIndex": 1,
+      "explanation": "`document` is defined in the `DOM` lib. Without it, TypeScript doesn't know `document` exists — it's a compile error. This is intentional for server projects that shouldn't use DOM APIs. Add `'DOM'` to lib for browser projects.",
+      "tags": ["tsconfig", "lib", "DOM"]
+    },
+    {
+      "id": "tstc-q19",
+      "type": "mcq",
+      "prompt": "What is the effect of `\"skipLibCheck\": true`?",
+      "choices": [
+        "Skips checking files imported from node_modules",
+        "Skips type checking in .d.ts declaration files — often used to avoid errors in type definitions of third-party libraries",
+        "Makes TypeScript ignore errors in your own code",
+        "Disables strict mode"
+      ],
+      "answerIndex": 1,
+      "explanation": "`skipLibCheck: true` disables type checking of ALL `.d.ts` files (including your own). It's used to suppress errors from poorly-typed third-party packages. It speeds up compilation but can hide real mismatches between library type definitions. Most React project templates ship with it enabled.",
+      "tags": ["tsconfig", "skipLibCheck"]
+    },
+    {
+      "id": "tstc-q20",
+      "type": "mcq",
+      "prompt": "In a React + Vite project, the recommended tsconfig approach with JSX is:",
+      "choices": [
+        "\"jsx\": \"react\" — classic React.createElement transform",
+        "\"jsx\": \"react-jsx\" — modern automatic transform (no need to import React for JSX)",
+        "\"jsx\": \"preserve\" — for Next.js and SWC",
+        "JSX config is irrelevant — Vite handles it entirely"
+      ],
+      "answerIndex": 1,
+      "explanation": "`jsx: 'react-jsx'` (React 17+) uses the automatic JSX transform — no `import React from 'react'` needed in every file. TypeScript emits `_jsx(...)` calls instead of `React.createElement(...)`. `preserve` keeps JSX for bundlers (like Next.js with SWC) to handle.",
+      "tags": ["tsconfig", "jsx", "react"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "tstc-fc1",
+      "front": "strict: true — what it enables",
+      "back": "Enables: noImplicitAny, strictNullChecks, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis, useUnknownInCatchVariables. NOT included: noUnusedLocals, noUncheckedIndexedAccess.",
+      "tags": ["tsconfig", "strict"]
+    },
+    {
+      "id": "tstc-fc2",
+      "front": "target vs lib",
+      "back": "target = ES version of emitted JS (downcompiles if needed). lib = which type definitions TypeScript uses (APIs it knows about). lib: ['ES2022', 'DOM'] for browser. lib: ['ES2022'] for Node.",
+      "tags": ["tsconfig", "target", "lib"]
+    },
+    {
+      "id": "tstc-fc3",
+      "front": "noEmit + isolatedModules (Vite pattern)",
+      "back": "`noEmit: true` — tsc only type-checks, doesn't write JS (Vite does that). `isolatedModules: true` — each file compilable alone; required by esbuild/Babel/SWC.",
+      "tags": ["tsconfig", "vite", "noEmit", "isolatedModules"]
+    },
+    {
+      "id": "tstc-fc4",
+      "front": "moduleResolution: bundler",
+      "back": "For Vite/webpack projects. Allows extensionless imports. Supports .tsx/.jsx. Introduced in TypeScript 5.0. Use 'NodeNext' for Node.js native ESM libraries.",
+      "tags": ["tsconfig", "moduleResolution"]
+    },
+    {
+      "id": "tstc-fc5",
+      "front": "declaration: true",
+      "back": "Emits `.d.ts` files alongside compiled JS. Required when publishing a TypeScript library to npm so consumers get type checking without your source files.",
+      "tags": ["tsconfig", "declaration"]
+    },
+    {
+      "id": "tstc-fc6",
+      "front": "tsconfig extends",
+      "back": "Inherits settings from another file. compilerOptions merged per-key. include/exclude/files REPLACE (not merge). Good for monorepos: base config + per-package overrides.",
+      "tags": ["tsconfig", "extends"]
+    },
+    {
+      "id": "tstc-fc7",
+      "front": "noUncheckedIndexedAccess",
+      "back": "NOT in strict. arr[0] returns `T | undefined`. Forces you to handle missing index before reading. Catches common runtime errors especially with string maps.",
+      "tags": ["tsconfig", "noUncheckedIndexedAccess"]
+    },
+    {
+      "id": "tstc-fc8",
+      "front": "skipLibCheck: true",
+      "back": "Skips type checking ALL .d.ts files. Speeds build, suppresses third-party type errors. Most React templates ship with it. Downside: can hide conflicts between @types packages.",
+      "tags": ["tsconfig", "skipLibCheck"]
+    }
+  ],
+  "project": {
+    "brief": "You are setting up a new full-stack TypeScript monorepo with three packages: `packages/shared` (types and utilities shared by both), `packages/api` (Node.js Express server, no DOM), and `packages/web` (Vite React SPA). Design the full tsconfig setup: 1) Write a `tsconfig.base.json` with shared strict compiler options. 2) Write `packages/api/tsconfig.json` — Node.js target, no DOM, noEmit false, CommonJS or NodeNext modules. 3) Write `packages/web/tsconfig.json` — browser target, DOM lib, noEmit true, isolatedModules true, react-jsx, moduleResolution bundler. 4) Write `packages/shared/tsconfig.json` — must have composite: true and emit declarations. 5) Explain what breaks if you accidentally include DOM in the api tsconfig.",
+    "checklist": [
+      { "id": "c1", "text": "base config has strict, target ES2022, no lib or module (per-package concern)", "weight": 1 },
+      { "id": "c2", "text": "api tsconfig: lib ES2022 only (no DOM), module CommonJS or NodeNext, outDir configured, noEmit false", "weight": 1 },
+      { "id": "c3", "text": "web tsconfig: lib ES2022+DOM, noEmit true, isolatedModules true, jsx react-jsx, moduleResolution bundler", "weight": 1 },
+      { "id": "c4", "text": "shared tsconfig: composite true, declaration true, extends base", "weight": 1 },
+      { "id": "c5", "text": "Explains DOM in api: window/document appear defined, accidental DOM usage compiles but crashes at runtime on the server", "weight": 1 }
+    ],
+    "hints": [
+      "base: `{ strict: true, target: 'ES2022', esModuleInterop: true, skipLibCheck: true }`",
+      "api: lib: ['ES2022'], module: 'CommonJS', moduleResolution: 'node' or 'NodeNext'",
+      "web: lib: ['ES2022','DOM'], noEmit: true, isolatedModules: true, jsx: 'react-jsx', moduleResolution: 'bundler'",
+      "shared: composite: true, declaration: true — required so other packages can reference it in project references."
+    ]
+  }
+}
+

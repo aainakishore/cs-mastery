@@ -1,0 +1,434 @@
+{
+  "id": "dsa-java-arrays",
+  "unit": 9,
+  "order": 60,
+  "title": "Arrays in Java",
+  "summary": "Array operations, 2D arrays, and common interview patterns such as prefix sums and Kadane's algorithm.",
+  "prereqs": [],
+  "guide": "# Arrays in Java\n\nAn array is a **contiguous block of memory** holding elements of the same type. Picture a row of numbered mailboxes: box 0, box 1, box 2 \u2026 Each box is the same size, so the CPU finds any box in one step \u2014 no searching needed.\n\n```\nIndex:  0    1    2    3    4\n       \u250c\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2510\nValue: \u2502  7 \u2502  3 \u2502 12 \u2502  1 \u2502  9 \u2502\n       \u2514\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2518\n        \u2191                        \u2191\n        base address             base + 4 \u00d7 (element size)\n```\n\n## Declaration and Initialisation\n\n```java\nint[] arr = new int[5];          // [0, 0, 0, 0, 0] \u2014 primitives default to 0\nint[] arr = {7, 3, 12, 1, 9};   // inline initialisation\nint[][] grid = new int[3][4];   // 3 rows, 4 cols \u2014 each row is its own array object\n```\n\n## Access, Update, Length\n\n```java\nint x = arr[2];        // O(1) \u2014 direct offset computation\narr[2] = 99;           // O(1) \u2014 same mechanism\nint n = arr.length;    // field (not method) \u2014 no parentheses\n```\n\n## Prefix Sum \u2014 answer range queries in O(1)\n\nBuild the prefix array once, then any subarray sum is a single subtraction.\n\n```\nOriginal:  [1,  2,  3,  4,  5]\nPrefix:    [0,  1,  3,  6, 10, 15]\n           \u2191 extra 0 at index 0 simplifies the formula\n\nsum(l, r) = prefix[r+1] - prefix[l]\nsum(1, 3) = prefix[4]  - prefix[1] = 10 - 1 = 9  \u2713  (2+3+4)\n```\n\n```java\nint[] pref = new int[n + 1];\nfor (int i = 0; i < n; i++) pref[i+1] = pref[i] + arr[i];\nint rangeSum = pref[r+1] - pref[l];   // O(1)\n```\n\n## Kadane's Algorithm \u2014 Maximum Subarray Sum O(n)\n\nAt each index decide: 'Is it better to extend the existing run, or start fresh here?'\n\n```\narr:         [-2,  1, -3,  4, -1,  2,  1, -5,  4]\ncurrentSum:  [-2,  1, -2,  4,  3,  5,  6,  1,  5]\nmaxSum:      [-2,  1,  1,  4,  4,  5,  6,  6,  6]  \u2190 answer = 6\n```\n\n```java\nint maxSum = arr[0], cur = arr[0];\nfor (int i = 1; i < arr.length; i++) {\n    cur    = Math.max(arr[i], cur + arr[i]);   // extend or restart\n    maxSum = Math.max(maxSum, cur);\n}\n```\n\n## Two-Pointer on Sorted Array \u2014 Two Sum O(n)\n\n```\nSorted: [1, 2, 3, 7, 11, 15]   target = 9\n         l                  r   sum=16 > 9 \u2192 r--\n         l              r       sum=12 > 9 \u2192 r--\n         l          r           sum= 8 < 9 \u2192 l++\n            l       r           sum=11 > 9 \u2192 r--\n            l   r               sum= 9 == 9 \u2713\n```\n\n## Dutch National Flag \u2014 Sort 0s/1s/2s O(n) O(1)\n\nThree active zones maintained by three pointers:\n\n```\n[confirmed 0s | confirmed 1s | unsorted | confirmed 2s]\n              low            mid        high\n```\n\n```java\nint low = 0, mid = 0, high = n - 1;\nwhile (mid <= high) {\n    if      (arr[mid] == 0) swap(arr, low++, mid++);\n    else if (arr[mid] == 1) mid++;\n    else                    swap(arr, mid, high--);  // mid NOT incremented\n}\n```\n\n## 2D Arrays \u2014 Spiral Traversal\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  1  2  3  4  5  \u2502  \u2190 top row left\u2192right\n\u2502 16 17 18 19  6  \u2502\n\u2502 15 24 25 20  7  \u2502\n\u2502 14 23 22 21  8  \u2502\n\u2502 13 12 11 10  9  \u2502  \u2190 bottom row right\u2192left\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nMaintain 4 boundaries: top, bottom, left, right \u2014 shrink after each direction.\n```\n\n## Complexity Cheatsheet\n\n| Operation | Time | Notes |\n|---|---|---|\n| Access arr[i] | O(1) | Direct memory offset |\n| Search (unsorted) | O(n) | Linear scan |\n| Insert at end (ArrayList) | O(1) amortised | Resize doubles capacity |\n| Insert at middle | O(n) | Must shift elements |\n| Prefix sum query | O(1) + O(n) preprocess | Space O(n) |\n| Kadane's max subarray | O(n) | Space O(1) |\n\n## Common Pitfalls\n- Off-by-one: `< arr.length` not `<= arr.length`\n- `arr2 = arr1` copies the **reference** \u2014 both point to same array; use `Arrays.copyOf`\n- `int` overflow when summing many large values \u2014 cast to `long`\n- `arr.length` is a field, `list.size()` is a method \u2014 don't mix them up\n\n## Connections\n- **Strings** \u2014 `char[]` is an array; many string algorithms use array indexing\n- **Sliding Window** \u2014 subarray problems extend prefix sums and two-pointer\n- **Sorting** \u2014 many array patterns require sorted input first\n- **Two Pointers** \u2014 converging pointers work on sorted arrays\n",
+  "questions": [
+    {
+      "id": "dja-q1",
+      "type": "mcq",
+      "prompt": "What is the time complexity of arr[i] access?",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n log n)"
+      ],
+      "answerIndex": 0,
+      "explanation": "Array index access is direct offset computation.",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-q2",
+      "type": "mcq",
+      "prompt": "What is the default value in a new int[3]?",
+      "choices": [
+        "null",
+        "0",
+        "undefined",
+        "garbage"
+      ],
+      "answerIndex": 1,
+      "explanation": "Primitive int array cells default to 0.",
+      "tags": [
+        "java",
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-q3",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "int[] a = {4, 5, 6};\nSystem.out.println(a.length);",
+      "choices": [
+        "2",
+        "3",
+        "4",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "length is the number of elements.",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-q4",
+      "type": "mcq",
+      "prompt": "Prefix sums are mainly used to answer which query quickly?",
+      "choices": [
+        "Range sum",
+        "Sorting",
+        "Hash collision",
+        "Tree height"
+      ],
+      "answerIndex": 0,
+      "explanation": "After preprocessing, range sums are O(1).",
+      "tags": [
+        "prefix-sum"
+      ]
+    },
+    {
+      "id": "dja-q5",
+      "type": "multi",
+      "prompt": "Which are common array patterns?",
+      "choices": [
+        "Two pointers",
+        "Prefix sum",
+        "Kadane",
+        "DNS lookup"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "All three are standard array problem patterns.",
+      "tags": [
+        "patterns"
+      ]
+    },
+    {
+      "id": "dja-q6",
+      "type": "mcq",
+      "prompt": "Kadane's algorithm solves:",
+      "choices": [
+        "Sorting",
+        "Maximum subarray sum",
+        "Binary search",
+        "Graph traversal"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kadane finds max contiguous subarray sum in O(n).",
+      "tags": [
+        "kadane"
+      ]
+    },
+    {
+      "id": "dja-q7",
+      "type": "mcq",
+      "prompt": "In Java, arrays are:",
+      "choices": [
+        "Value types",
+        "Objects on heap",
+        "Always sorted",
+        "Dynamic size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arrays are objects, variable holds reference.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "dja-q8",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "int[] arr = new int[3];\nSystem.out.println(arr[1]);",
+      "choices": [
+        "null",
+        "0",
+        "undefined",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Primitive int defaults to 0.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "dja-q9",
+      "type": "mcq",
+      "prompt": "Two-pointer on sorted array for two-sum is:",
+      "choices": [
+        "O(n^2)",
+        "O(n log n)",
+        "O(n)",
+        "O(1)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each pointer moves once through array = O(n).",
+      "tags": [
+        "two-pointers"
+      ]
+    },
+    {
+      "id": "dja-q10",
+      "type": "mcq",
+      "prompt": "Dutch National Flag sorts 0s/1s/2s in:",
+      "choices": [
+        "O(n log n)",
+        "O(n^2)",
+        "O(n)",
+        "O(n) space"
+      ],
+      "answerIndex": 2,
+      "explanation": "3-pointer single pass = O(n) time O(1) space.",
+      "tags": [
+        "dutch-flag"
+      ]
+    },
+    {
+      "id": "dja-q11",
+      "type": "mcq",
+      "prompt": "Array rotation by k using reverse takes:",
+      "choices": [
+        "O(n^2)",
+        "O(n) time O(1) space",
+        "O(n) space",
+        "O(k)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Three reversal passes in-place.",
+      "tags": [
+        "rotation"
+      ]
+    },
+    {
+      "id": "dja-q12",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "int[][] m = {{1,2},{3,4}};\nSystem.out.println(m[1][0]);",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answerIndex": 2,
+      "explanation": "m[1][0] = row 1, col 0 = 3.",
+      "tags": [
+        "2d-arrays"
+      ]
+    },
+    {
+      "id": "dja-q13",
+      "type": "mcq",
+      "prompt": "Find duplicate in array (1 to n) with O(1) space:",
+      "choices": [
+        "Sort",
+        "HashMap",
+        "Floyd cycle",
+        "Binary search"
+      ],
+      "answerIndex": 2,
+      "explanation": "Treat values as pointers for cycle detection.",
+      "tags": [
+        "floyd"
+      ]
+    },
+    {
+      "id": "dja-q14",
+      "type": "mcq",
+      "prompt": "Arrays.sort() uses:",
+      "choices": [
+        "Bubble",
+        "Merge for primitives",
+        "Dual-pivot quicksort for primitives",
+        "Heap"
+      ],
+      "answerIndex": 2,
+      "explanation": "Java uses dual-pivot quicksort for primitives.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dja-q15",
+      "type": "mcq",
+      "prompt": "arr[5] on int[5] throws:",
+      "choices": [
+        "NullPointer",
+        "ArrayIndexOutOfBounds",
+        "IllegalArgument",
+        "StackOverflow"
+      ],
+      "answerIndex": 1,
+      "explanation": "Valid indices 0-4, index 5 is out of bounds.",
+      "tags": [
+        "exceptions"
+      ]
+    },
+    {
+      "id": "dja-q16",
+      "type": "mcq",
+      "prompt": "To copy array properly:",
+      "choices": [
+        "arr2 = arr1",
+        "Arrays.copyOf(arr, len)",
+        "clone always works",
+        "arraycopy deep copies"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arrays.copyOf creates independent copy.",
+      "tags": [
+        "copying"
+      ]
+    },
+    {
+      "id": "dja-q17",
+      "type": "mcq",
+      "prompt": "Merge intervals: first step is:",
+      "choices": [
+        "Sort by end",
+        "Sort by start",
+        "Sort by length",
+        "Use stack"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sort by start, then merge overlapping.",
+      "tags": [
+        "intervals"
+      ]
+    },
+    {
+      "id": "dja-q18",
+      "type": "mcq",
+      "prompt": "Prefix sum space complexity:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Stores n+1 values = O(n) space.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "dja-q19",
+      "type": "mcq",
+      "prompt": "int[] vs Integer[]:",
+      "choices": [
+        "Same",
+        "int[] primitive, Integer[] objects",
+        "Just naming",
+        "Both on stack"
+      ],
+      "answerIndex": 1,
+      "explanation": "int[] cache-friendly, Integer[] boxed objects.",
+      "tags": [
+        "types"
+      ]
+    },
+    {
+      "id": "dja-q20",
+      "type": "mcq",
+      "prompt": "Arrays.sort() best case:",
+      "choices": [
+        "O(1)",
+        "O(n)",
+        "O(n log n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Primitive quicksort is O(n log n) even when sorted.",
+      "tags": [
+        "complexity"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "dja-fc1",
+      "front": "Array access complexity",
+      "back": "O(1) by index.",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc2",
+      "front": "Unsorted array search",
+      "back": "O(n).",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc3",
+      "front": "2D row count",
+      "back": "matrix.length.",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc4",
+      "front": "2D column count",
+      "back": "matrix[0].length when rectangular.",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc5",
+      "front": "Prefix sum formula",
+      "back": "sum(l,r)=pref[r+1]-pref[l].",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc6",
+      "front": "Kadane's algorithm",
+      "back": "Max subarray: currentSum = max(arr[i], currentSum+arr[i]).",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc7",
+      "front": "Dutch flag pattern",
+      "back": "3 pointers: low, mid, high for 0/1/2 sorting.",
+      "tags": [
+        "arrays"
+      ]
+    },
+    {
+      "id": "dja-fc8",
+      "front": "Array rotation trick",
+      "back": "Rotate by k: reverse all, reverse[0,k), reverse[k,n).",
+      "tags": [
+        "arrays"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Build an ArrayPatterns.java utility with prefix sums, rotate-by-k, max subarray, and spiral traversal.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Implements prefix sum range queries",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Implements rotate by k using reversals",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Implements Kadane's algorithm",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Handles empty/small inputs",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "Normalize k with k %= n.",
+      "Kadane should initialize from nums[0] when non-empty."
+    ]
+  }
+}

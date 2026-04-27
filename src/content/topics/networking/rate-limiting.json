@@ -1,0 +1,97 @@
+{
+  "id": "rate-limiting",
+  "unit": 3,
+  "order": 16,
+  "title": "Rate Limiting",
+  "summary": "Token bucket, leaky bucket, fixed/sliding window algorithms and when to use each.",
+  "prereqs": [
+    "long-polling"
+  ],
+  "guide": "# Rate Limiting\n\nRate limiting **caps the number of requests** a client can make to an API or service within a time window. It protects against abuse, DDoS, and runaway clients.\n\n## Common Algorithms\n\n```\nToken Bucket:\n  Tokens fill at a fixed rate (e.g., 10/sec).\n  Each request consumes 1 token.\n  Burst allowed up to bucket capacity.\n  Tokens= min(capacity, lastTokens + rate*(now-lastTime))\n\nLeaky Bucket:\n  Queue with fixed outflow rate.\n  All variability smoothed to constant output.\n  Excess requests dropped or queued.\n\nFixed Window:\n  Counter resets every minute/hour.\n  Weakness: burst at window boundary\n  (100 reqs in last second of window + 100 in first second = 200 instant)\n\nSliding Window Log:\n  Keep timestamps of requests in a rolling window.\n  Exact (no boundary burst) but memory-intensive.\n\nSliding Window Counter:\n  Approximation: current_window_count + prev_window_count * (1 - elapsed/window)\n  Low memory, no boundary burst, slightly approximate.\n```\n\n## HTTP Response Headers\n\n```\nX-RateLimit-Limit: 1000\nX-RateLimit-Remaining: 942\nX-RateLimit-Reset: 1714521600   (Unix timestamp when counter resets)\nRetry-After: 3600               (seconds to wait \u2014 on 429 response)\n\nHTTP 429 Too Many Requests\n```\n\n## Implementation Layers\n\n```\nWhere to rate limit:\n  1. API Gateway (Kong, NGINX, AWS API GW) \u2014 best for cross-service limits\n  2. Application-level middleware          \u2014 per-route granularity\n  3. Load balancer                        \u2014 gross traffic control\n\nWhat to rate-limit by:\n  - IP address (easy to bypass via proxies)\n  - User ID / API key (more accurate)\n  - Endpoint (protect expensive ones more strictly)\n  - Global (service-wide quota)\n```\n\n## Distributed Rate Limiting\n\nSingle server: simple in-memory counter.\nMultiple servers: share state via Redis.\n\n```javascript\n// Redis sliding window counter\nasync function isAllowed(userId, limit, windowSec) {\n  const key = `ratelimit:${userId}`;\n  const now = Date.now();\n  const window = now - windowSec * 1000;\n\n  const multi = redis.multi();\n  multi.zremrangebyscore(key, 0, window);            // remove old entries\n  multi.zcard(key);                                   // count in window\n  multi.zadd(key, now, now.toString());              // add current request\n  multi.expire(key, windowSec);\n\n  const results = await multi.exec();\n  const count = results[1];\n  return count < limit;\n}\n```\n\n## Common Pitfalls\n- **Fixed window boundary bursts** \u2014 double the intended rate is possible at window boundaries. Use sliding window.\n- **Per-IP limiting bypassed by proxies** \u2014 use API key / user ID for important limits.\n- **Not communicating limits** \u2014 always return X-RateLimit-* headers so clients can self-throttle.\n- **Cascading failures** \u2014 if downstream service rate-limits you, implement exponential backoff + jitter in the caller.\n",
+  "questions": [
+    {
+      "id": "rl-q1",
+      "type": "mcq",
+      "prompt": "Token bucket vs fixed window \u2014 main advantage of token bucket?",
+      "choices": [
+        "Token bucket is simpler",
+        "Token bucket allows controlled bursting up to bucket capacity while maintaining a long-term average rate. Fixed window creates boundary bursts where 2x the limit can flow at window boundaries",
+        "Fixed window is less accurate",
+        "Token bucket requires more memory"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fixed window: reset at the minute boundary means 100 reqs at 11:59 + 100 at 12:00 = 200 in 2 seconds. Token bucket allows bursts explicitly (up to bucket size) while enforcing the average rate over time.",
+      "tags": [
+        "rate-limiting",
+        "algorithms"
+      ]
+    },
+    {
+      "id": "rl-q2",
+      "type": "mcq",
+      "prompt": "HTTP status code for rate limit exceeded?",
+      "choices": [
+        "400",
+        "401",
+        "403",
+        "429"
+      ],
+      "answerIndex": 3,
+      "explanation": "HTTP 429 Too Many Requests. Include Retry-After header with seconds to wait, and X-RateLimit-Reset with when the window resets.",
+      "tags": [
+        "rate-limiting",
+        "HTTP"
+      ]
+    },
+    {
+      "id": "rl-q3",
+      "type": "mcq",
+      "prompt": "Why use Redis for rate limiting in a distributed system?",
+      "choices": [
+        "Redis is faster",
+        "Multiple application servers share the rate limit counter \u2014 without Redis, each server has its own counter and the limit effectively multiplies by server count",
+        "Redis is the only option",
+        "In-memory is insufficient"
+      ],
+      "answerIndex": 1,
+      "explanation": "3 servers each with a 100 req/sec limit = 300 req/sec total. Shared Redis counter enforces the limit globally across all instances.",
+      "tags": [
+        "rate-limiting",
+        "distributed"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rl-fc1",
+      "front": "Rate limiting algorithms",
+      "back": "Token bucket: fill at rate, burst allowed. Leaky bucket: smooth output, no burst. Fixed window: simple but boundary burst. Sliding window: accurate, no burst, more memory.",
+      "tags": [
+        "rate-limiting"
+      ]
+    },
+    {
+      "id": "rl-fc2",
+      "front": "Rate limit HTTP headers",
+      "back": "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset (when resets). On limit: 429 Too Many Requests + Retry-After header.",
+      "tags": [
+        "rate-limiting",
+        "HTTP"
+      ]
+    },
+    {
+      "id": "rl-fc3",
+      "front": "Distributed rate limiting",
+      "back": "Use Redis with ZADD/ZCARD (sliding window) or INCR+EXPIRE (fixed window) for shared counters across multiple app servers.",
+      "tags": [
+        "rate-limiting",
+        "redis"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "TODO: author project brief for Rate Limiting",
+    "checklist": [],
+    "hints": []
+  }
+}

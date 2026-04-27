@@ -1,0 +1,128 @@
+{
+  "id": "kubernetes",
+  "unit": 5,
+  "order": 27,
+  "title": "Kubernetes",
+  "summary": "Master Kubernetes: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "docker"
+  ],
+  "guide": "# Kubernetes\n\nKubernetes (K8s) is an **open-source container orchestration system** that automates deployment, scaling, and management of containerized applications.\n\n## Core Objects\n\n```\nPod:         Smallest deployable unit \u2014 1+ containers sharing network/storage\nDeployment:  Manages ReplicaSet \u2014 declares desired pod count + rolling updates\nService:     Stable network endpoint for a set of pods (load balances across pods)\nIngress:     HTTP routing from outside cluster \u2192 services (L7 routing)\nConfigMap:   Non-secret configuration (key/value or files)\nSecret:      Sensitive data (passwords, tokens) \u2014 base64 encoded in etcd\nNamespace:   Virtual cluster isolation (dev/staging/prod in same cluster)\n```\n\n## Deployment Example\n\n```yaml\n# deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-server\nspec:\n  replicas: 3                     # 3 pods running\n  selector:\n    matchLabels:\n      app: api-server\n  template:\n    metadata:\n      labels:\n        app: api-server\n    spec:\n      containers:\n      - name: api\n        image: myrepo/api:v1.2.3  # always pin a tag, never 'latest' in prod\n        ports:\n        - containerPort: 3000\n        resources:\n          requests: { cpu: \"100m\", memory: \"128Mi\" }\n          limits:   { cpu: \"500m\", memory: \"512Mi\" }\n        readinessProbe:\n          httpGet: { path: /health, port: 3000 }\n          initialDelaySeconds: 5\n        livenessProbe:\n          httpGet: { path: /health, port: 3000 }\n          periodSeconds: 10\n```\n\n## Service + Ingress\n\n```yaml\n# ClusterIP service \u2014 internal load balancer across pods\napiVersion: v1\nkind: Service\nmetadata: { name: api-service }\nspec:\n  selector: { app: api-server }\n  ports: [{ port: 80, targetPort: 3000 }]\n---\n# Ingress \u2014 external HTTP routing\napiVersion: networking.k8s.io/v1\nkind: Ingress\nspec:\n  rules:\n  - host: api.example.com\n    http:\n      paths:\n      - path: /api\n        backend:\n          service: { name: api-service, port: { number: 80 } }\n```\n\n## Key Concepts\n\n```\nRolling update (default):\n  Update pods one at a time \u2014 zero downtime.\n  New pod starts \u2192 health check passes \u2192 old pod terminated.\n\nHorizontal Pod Autoscaler (HPA):\n  Scale pods based on CPU/memory or custom metrics.\n  kubectl autoscale deployment api-server --min=2 --max=20 --cpu-percent=70\n\nNode vs Pod:\n  Node: physical/VM machine running kubelet\n  Pod: one or more containers on a node\n  Cluster: collection of nodes managed by control plane\n```\n\n## Common Pitfalls\n- **Using image:latest** \u2014 latest is mutable. Always pin to an immutable tag (git SHA or semver). Same tag, different image breaks reproducibility.\n- **No resource requests/limits** \u2014 noisy neighbor problem. One pod starves others. Always set CPU/memory requests.\n- **Missing readiness probe** \u2014 K8s sends traffic to pods that are starting up. Readiness probe says \"pod is ready to receive traffic.\"\n- **Storage in pods** \u2014 pod storage is ephemeral. Use PersistentVolumeClaim for stateful data.\n",
+  "questions": [
+    {
+      "id": "k8s-q1",
+      "type": "mcq",
+      "prompt": "Difference between a K8s Deployment and a Pod?",
+      "choices": [
+        "Same thing",
+        "Deployment: controller that manages a ReplicaSet of pods \u2014 declares desired count, handles rolling updates, restarts crashed pods. Pod: actual running container. You almost never create bare pods in production",
+        "Deployments are for databases only",
+        "Pods are larger"
+      ],
+      "answerIndex": 1,
+      "explanation": "A Deployment is the management layer. It creates a ReplicaSet that maintains the desired number of pods. Pod crashes \u2192 Deployment-managed ReplicaSet recreates it. Bare pods don't self-heal.",
+      "tags": [
+        "kubernetes",
+        "deployment",
+        "pod"
+      ]
+    },
+    {
+      "id": "k8s-q2",
+      "type": "mcq",
+      "prompt": "Why should you never use image:latest in production?",
+      "choices": [
+        "latest is slower",
+        "latest is a mutable tag \u2014 different engineers or CI runs can pull different images with the same tag. This makes deployments non-reproducible and debugging impossible. Always pin: myimage:v1.2.3 or git-sha",
+        "K8s rejects latest",
+        "latest lacks security"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tags can be overwritten. latest today might be v1.2.3; latest tomorrow v1.3.0. If a rollback is needed, 'latest' may point to the broken version. Immutable tags (SHA or semver) ensure you know exactly what's running.",
+      "tags": [
+        "kubernetes",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "k8s-q3",
+      "type": "mcq",
+      "prompt": "Readiness probe vs liveness probe \u2014 difference?",
+      "choices": [
+        "Same thing",
+        "Readiness: is the pod ready to receive traffic? (excludes from service LB until ready). Liveness: is the pod still alive? (restarts it if unhealthy). Both are needed \u2014 readiness prevents premature traffic; liveness prevents stuck pods",
+        "Liveness is newer",
+        "Only liveness is needed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Readiness probe: pod is starting/loading cache \u2192 not ready \u2192 no traffic until health check passes. Liveness probe: pod is deadlocked (running but broken) \u2192 K8s kills and restarts. Both protect users.",
+      "tags": [
+        "kubernetes",
+        "probes"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "k8s-fc1",
+      "front": "K8s core objects",
+      "back": "Pod: 1+ containers. Deployment: manages ReplicaSet (desired count, rolling update, self-heal). Service: stable endpoint + LB across pods. Ingress: HTTP routing to services. ConfigMap/Secret: config injection.",
+      "tags": [
+        "kubernetes"
+      ]
+    },
+    {
+      "id": "k8s-fc2",
+      "front": "Readiness vs Liveness probe",
+      "back": "Readiness: pod not in LB rotation until passes. Use for startup warming. Liveness: K8s restarts pod if fails. Use for detecting deadlocks. Both: httpGet or exec. Configure initialDelaySeconds.",
+      "tags": [
+        "kubernetes",
+        "probes"
+      ]
+    },
+    {
+      "id": "k8s-fc3",
+      "front": "Resource requests and limits",
+      "back": "requests: minimum guaranteed CPU/memory. limits: maximum allowed. Pod with no requests = noisy neighbor. Pod hitting CPU limit = throttled. Pod hitting memory limit = OOMKilled. Always set both.",
+      "tags": [
+        "kubernetes",
+        "resources"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Kubernetes\n\nDesign a realistic production service with Kubernetes at its core. No code required:\n\n1. Why Kubernetes over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "kubernetes-pc1",
+        "text": "Justified use of Kubernetes for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "kubernetes-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "kubernetes-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "kubernetes-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "kubernetes-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Kubernetes remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

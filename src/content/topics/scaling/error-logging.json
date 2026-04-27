@@ -1,0 +1,127 @@
+{
+  "id": "error-logging",
+  "unit": 5,
+  "order": 32,
+  "title": "Error Logging and Observability",
+  "summary": "Master Error Logging and Observability: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "docker"
+  ],
+  "guide": "# Error Logging & Observability\n\nObservability is the ability to understand what a system is doing by examining its outputs. The three pillars are **logs, metrics, and traces**.\n\n## The Three Pillars\n\n```\nLogs:    Discrete events with context\n  ERROR 2024-01-15T14:23:11Z userId=123 action=checkout\n        message=\"Payment failed\" code=402 duration=342ms\n\nMetrics: Aggregated numerical data over time\n  api.requests.total{endpoint=\"/checkout\", status=\"500\"} = 14\n  api.response_time.p99{service=\"payment\"} = 842ms\n\nTraces: End-to-end request flow across services\n  Trace ID: abc123\n  \u251c\u2500\u2500 API Gateway     45ms\n  \u251c\u2500\u2500 Order Service   120ms\n  \u2502   \u251c\u2500\u2500 DB Query    95ms\n  \u2502   \u2514\u2500\u2500 Cache get   3ms\n  \u2514\u2500\u2500 Payment Service 380ms  \u2190 bottleneck\n```\n\n## Structured Logging\n\n```javascript\n// Bad \u2014 unstructured, hard to query\nconsole.error(\"Payment failed for user \" + userId);\n\n// Good \u2014 structured JSON\nlogger.error({\n  event: \"payment_failed\",\n  userId: 123,\n  orderId: \"order-456\",\n  errorCode: 402,\n  provider: \"stripe\",\n  duration: 342,\n  traceId: req.headers['x-trace-id']\n});\n```\n\nStructured logs can be queried: `event=payment_failed AND provider=stripe AND duration > 300`\n\n## Log Levels\n\n```\nDEBUG:   Verbose dev info \u2014 never in production (volume too high)\nINFO:    Normal operations \u2014 \"Order 123 created\"\nWARN:    Unexpected but recoverable \u2014 \"Retry #2 for order 123\"\nERROR:   Unexpected failure \u2014 \"Payment failed for order 123\"\nFATAL:   System cannot continue \u2014 \"Database unreachable\"\n\nRule: production minimum = INFO. Alerts on ERROR+.\n```\n\n## Error Rate Alerting (RED Method)\n\n```\nRate:    Requests per second\nErrors:  Error rate (errors/total requests)\nDuration: Response time distribution (p50, p95, p99)\n\nError rate SLO: < 0.1% errors\nAlert when:\n  error_rate > 1%                    \u2192 PagerDuty wake-up\n  p99_latency > 2s for 5min          \u2192 Slack warning\n  error_rate > 5%                    \u2192 Immediate page\n```\n\n## Distributed Tracing (OpenTelemetry)\n\n```javascript\n// Each service propagates trace context\nconst tracer = trace.getTracer('order-service');\n\nasync function createOrder(req) {\n  const span = tracer.startSpan('create_order');\n  span.setAttribute('userId', req.userId);\n  span.setAttribute('orderId', orderId);\n\n  try {\n    await paymentService.charge(req);   // auto-propagates trace context\n    span.setStatus({ code: SpanStatusCode.OK });\n  } catch (e) {\n    span.recordException(e);\n    span.setStatus({ code: SpanStatusCode.ERROR });\n    throw e;\n  } finally {\n    span.end();\n  }\n}\n```\n\n## Common Pitfalls\n- **Logging sensitive data** \u2014 never log passwords, tokens, or full credit card numbers. Log last 4 digits, truncated tokens.\n- **Unstructured logs** \u2014 plain text can't be queried. Use JSON. Include correlation IDs.\n- **Too verbose in production** \u2014 DEBUG logs in production cause storage costs + signal-to-noise problem. Use log sampling for high-volume.\n- **No alerting** \u2014 logs without alerting are archaeology. Set up error-rate and latency alerts upfront.\n",
+  "questions": [
+    {
+      "id": "log-q1",
+      "type": "mcq",
+      "prompt": "Why is structured logging (JSON) better than plain text?",
+      "choices": [
+        "JSON is smaller",
+        "Structured logs can be indexed and queried \u2014 filter by userId, orderId, error_code. Plain text requires regex or grep. Tools like Splunk, Datadog, Loki query structured fields natively",
+        "JSON is required by Kubernetes",
+        "Structured logs are human-readable"
+      ],
+      "answerIndex": 1,
+      "explanation": "Unstructured: 'Error for user 123 on order 456'. Structured: {userId:123, orderId:'456', event:'payment_failed'}. The latter can be queried, aggregated, and alerted on programmatically.",
+      "tags": [
+        "logging",
+        "structured"
+      ]
+    },
+    {
+      "id": "log-q2",
+      "type": "mcq",
+      "prompt": "The three pillars of observability?",
+      "choices": [
+        "CPU, memory, disk",
+        "Logs, metrics, traces \u2014 each serves a different debugging need: what happened (logs), how much/fast (metrics), where it slowed (traces)",
+        "Errors, warnings, info",
+        "Monitoring, alerting, dashboards"
+      ],
+      "answerIndex": 1,
+      "explanation": "Logs: discrete events with context. Metrics: aggregated numbers over time (rate, count, latency). Traces: visualize request path across multiple services. All three needed together for full observability.",
+      "tags": [
+        "observability",
+        "logging",
+        "metrics",
+        "tracing"
+      ]
+    },
+    {
+      "id": "log-q3",
+      "type": "mcq",
+      "prompt": "What is distributed tracing used for?",
+      "choices": [
+        "Log storage",
+        "Follow a single request's path across multiple microservices \u2014 shows which service is slow, which downstream call is failing, the full call graph with durations",
+        "Monitor CPU",
+        "Aggregate errors"
+      ],
+      "answerIndex": 1,
+      "explanation": "In microservices, a request touches 5+ services. Tracing assigns a trace ID that propagates through all services \u2014 a flame graph shows the full journey and where time is spent.",
+      "tags": [
+        "tracing",
+        "microservices"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "log-fc1",
+      "front": "Three pillars of observability",
+      "back": "Logs: discrete events (what happened and why). Metrics: numeric aggregations over time (how often, how fast). Traces: request-level cross-service flow (where it's slow). All three together = full observability.",
+      "tags": [
+        "observability"
+      ]
+    },
+    {
+      "id": "log-fc2",
+      "front": "Structured logging",
+      "back": "JSON format with consistent fields: timestamp, level, event, userId, traceId, duration. Queryable by log aggregation tools. Always include correlation (traceId) to link logs across services.",
+      "tags": [
+        "logging"
+      ]
+    },
+    {
+      "id": "log-fc3",
+      "front": "Log levels in production",
+      "back": "DEBUG: dev only. INFO: normal ops. WARN: unexpected but recoverable. ERROR: failure. FATAL: system down. Production: INFO minimum. Alert on ERROR+.",
+      "tags": [
+        "logging"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Error Logging and Observability\n\nDesign a realistic production service with Error Logging and Observability at its core. No code required:\n\n1. Why Error Logging and Observability over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "error-logging-pc1",
+        "text": "Justified use of Error Logging and Observability for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "error-logging-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Error Logging and Observability remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

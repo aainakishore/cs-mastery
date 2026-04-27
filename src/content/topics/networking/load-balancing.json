@@ -1,0 +1,127 @@
+{
+  "id": "load-balancing",
+  "unit": 3,
+  "order": 18,
+  "title": "Load Balancing",
+  "summary": "Master Load Balancing: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "firewalls"
+  ],
+  "guide": "# Load Balancing\n\nA load balancer **distributes incoming traffic** across multiple backend servers to maximize availability, prevent any single server from being overwhelmed, and enable horizontal scaling.\n\n## Load Balancing Algorithms\n\n```\nRound Robin:\n  Requests cycle through servers in order: A, B, C, A, B, C...\n  Simple, assumes servers are equivalent.\n\nWeighted Round Robin:\n  Servers get traffic proportional to weight: A(weight=2) gets 2x B(weight=1).\n  Useful when servers have different capacity.\n\nLeast Connections:\n  Route to server with fewest active connections.\n  Good for long-lived connections (WebSockets, DB).\n\nIP Hash / Sticky Sessions:\n  Hash client IP \u2192 always route to same server.\n  Required for stateful apps without shared session storage.\n\nLeast Response Time:\n  Route to fastest-responding server.\n  Accounts for varying server load and health.\n\nRandom:\n  Route to a random server.\n  Surprisingly effective for stateless services at scale.\n```\n\n## Layer 4 vs Layer 7 Load Balancing\n\n```\nL4 (Transport Layer \u2014 TCP/UDP):\n  Routes based on IP + port only\n  No content inspection \u2014 fast, low overhead\n  Can't route based on URL path or HTTP headers\n  Example: AWS NLB, HAProxy in TCP mode\n\nL7 (Application Layer \u2014 HTTP):\n  Inspects HTTP headers, path, host, cookies\n  Can route /api/* to API servers, /static/* to CDN\n  SSL termination (decrypt once at LB)\n  Example: AWS ALB, NGINX, HAProxy in HTTP mode\n\nTypical: L7 LB in front \u2192 L4 LBs in back \u2192 servers\n```\n\n## Health Checks\n\n```\nLoad balancer continuously tests backend health:\n  HTTP: GET /health \u2192 expect 200\n  TCP:  can it connect to port 80?\n  Interval: every 5-30 seconds\n  Threshold: 2 consecutive failures \u2192 mark unhealthy\n\nUnhealthy server removed from rotation.\nNo downtime \u2014 traffic shifts to remaining healthy servers.\n```\n\n## Common Pitfalls\n- **Forgetting to remove unhealthy servers** \u2014 configure health checks with short intervals.\n- **Session affinity vs horizontal scaling tension** \u2014 sticky sessions work but prevent seamless server removal. Prefer stateless backends with common session storage (Redis).\n- **SSL termination security** \u2014 traffic from LB to backend servers may be unencrypted (HTTP). Ensure the internal network is trusted or re-encrypt.\n- **Single load balancer = single point of failure** \u2014 use LB pairs (primary/standby) or DNS round-robin for HA.\n",
+  "questions": [
+    {
+      "id": "lb-q1",
+      "type": "mcq",
+      "prompt": "Least Connections algorithm is better than Round Robin for:",
+      "choices": [
+        "Stateless REST APIs",
+        "Long-lived connections (WebSockets, database connections) where each connection has different duration and a server may be saturated even with fewer connection count",
+        "Static file serving",
+        "Read-heavy workloads"
+      ],
+      "answerIndex": 1,
+      "explanation": "Round Robin assumes all connections are equivalent. With long-lived WebSocket connections, a server with 10 old connections might be more loaded than one with 50 new short-lived connections. Least-connections tracks active load better.",
+      "tags": [
+        "load-balancing",
+        "algorithms"
+      ]
+    },
+    {
+      "id": "lb-q2",
+      "type": "mcq",
+      "prompt": "L7 load balancer advantage over L4?",
+      "choices": [
+        "L7 is faster",
+        "L7 inspects HTTP content \u2014 can route based on URL path, host header, cookies; can do SSL termination and content-based routing. L4 only routes by IP+port",
+        "L7 requires no configuration",
+        "L4 is less secure"
+      ],
+      "answerIndex": 1,
+      "explanation": "L7 enables: /api \u2192 API servers, /static \u2192 CDN, subdomain-based routing, A/B traffic splitting, WAF integration. At the cost of more CPU (unpacking HTTP packets).",
+      "tags": [
+        "load-balancing",
+        "L7",
+        "L4"
+      ]
+    },
+    {
+      "id": "lb-q3",
+      "type": "mcq",
+      "prompt": "Sticky sessions solve what problem and at what cost?",
+      "choices": [
+        "They improve performance",
+        "Sticky sessions ensure the same user always hits the same server \u2014 needed for stateful apps storing session in memory. Cost: can't remove a server without losing active sessions, may create hotspots",
+        "Not useful in production",
+        "They reduce latency"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sticky sessions (IP hash or cookie-based) work for stateful apps but create coupling. Preferred solution: stateless backends + shared session storage (Redis) \u2014 all servers can serve any user.",
+      "tags": [
+        "load-balancing",
+        "sticky-sessions"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "lb-fc1",
+      "front": "Load balancing algorithms",
+      "back": "Round Robin: cyclic, equal traffic. Weighted RR: proportional to server capacity. Least Connections: route to least-loaded (best for WS). IP Hash: sticky sessions. Least Response Time: adaptive.",
+      "tags": [
+        "load-balancing"
+      ]
+    },
+    {
+      "id": "lb-fc2",
+      "front": "L4 vs L7 load balancing",
+      "back": "L4: routes by IP+port, no inspection, fast. L7: inspects HTTP headers/path/cookies, enables content routing, SSL termination, WAF. L7 has more overhead but more capability.",
+      "tags": [
+        "load-balancing"
+      ]
+    },
+    {
+      "id": "lb-fc3",
+      "front": "Health checks",
+      "back": "LB polls /health every 5-30s. 2 consecutive failures \u2192 server removed from rotation. Zero-downtime removal. Critical for production reliability.",
+      "tags": [
+        "load-balancing",
+        "health-checks"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Load Balancing\n\nDesign a realistic production service with Load Balancing at its core. No code required:\n\n1. Why Load Balancing over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "load-balancing-pc1",
+        "text": "Justified use of Load Balancing for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "load-balancing-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "load-balancing-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "load-balancing-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "load-balancing-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Load Balancing remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

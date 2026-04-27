@@ -17,6 +17,7 @@ import { Stats } from './routes/Stats'
 import { getSettings } from './lib/storage'
 import { getDueTopicIds } from './lib/scheduler'
 import type { Achievement } from './lib/achievements'
+import { requestPermission, scheduleNudges } from './lib/notificationService'
 
 const BREAK_INTERVAL_MS = 20 * 60 * 1000 // 20 minutes of VISIBLE use
 
@@ -64,6 +65,19 @@ function AppShell() {
   useEffect(() => {
     const s = getSettings()
     document.documentElement.classList.toggle('light-mode', s.theme === 'light')
+  }, [])
+
+  // Nudge notifications — request permission after 10s, then check every 30 min
+  useEffect(() => {
+    const initTimer = setTimeout(async () => {
+      await requestPermission()
+      scheduleNudges()
+    }, 10_000)
+    const nudgeInterval = setInterval(scheduleNudges, 30 * 60 * 1000)
+    return () => {
+      clearTimeout(initTimer)
+      clearInterval(nudgeInterval)
+    }
   }, [])
 
   // Schedule review notifications once per session

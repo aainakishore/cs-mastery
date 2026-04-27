@@ -1,0 +1,126 @@
+{
+  "id": "rabbitmq",
+  "unit": 4,
+  "order": 23,
+  "title": "RabbitMQ",
+  "summary": "Master RabbitMQ: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "kafka"
+  ],
+  "guide": "# RabbitMQ \u2014 Message Broker\n\nRabbitMQ is an **AMQP-based message broker** that decouples producers and consumers using queues, exchanges, and routing keys.\n\n## Core Concepts\n\n```\nProducer \u2192 Exchange \u2192 [Routing] \u2192 Queue \u2192 Consumer\n\nExchanges route messages TO queues based on routing rules.\nQueues store messages until consumers process them.\nBindings link exchanges to queues (with optional routing key filter).\n\nKey AMQP types:\n  Direct  exchange: route by exact routing key match\n  Topic   exchange: route by routing key pattern (*.order.#)\n  Fanout  exchange: broadcast to ALL bound queues (ignore routing key)\n  Headers exchange: route by message headers\n```\n\n## Direct Exchange Example\n\n```\nProducer sends to exchange \"orders\" with routing key \"new\":\n  channel.publish('orders', 'new', Buffer.from(JSON.stringify(order)));\n\nQueue \"order-processor\" bound to exchange \"orders\" with key \"new\":\n  \u2192 receives message\n\nQueue \"shipping\" bound with key \"new\":\n  \u2192 also receives the message (multiple consumers)\n\nQueue \"refunds\" bound with key \"refund\":\n  \u2192 does NOT receive \"new\" messages\n```\n\n## Node.js Producer/Consumer\n\n```javascript\nconst amqplib = require('amqplib');\n\n// Producer\nconst conn   = await amqplib.connect('amqp://localhost');\nconst ch     = await conn.createChannel();\nawait ch.assertExchange('orders', 'direct', { durable: true });\nch.publish('orders', 'new', Buffer.from(JSON.stringify({ id: 123 })), { persistent: true });\n\n// Consumer\nconst ch     = await conn.createChannel();\nawait ch.assertQueue('order-processor', { durable: true });\nawait ch.bindQueue('order-processor', 'orders', 'new');\nch.prefetch(1);     // Only 1 unacked message at a time \u2014 fair dispatch\n\nch.consume('order-processor', async (msg) => {\n  const order = JSON.parse(msg.content.toString());\n  await processOrder(order);\n  ch.ack(msg);           // ACK = remove from queue\n  // ch.nack(msg, false, true); // NACK + requeue on failure\n});\n```\n\n## Acknowledgements and Dead Letter Queues\n\n```\nAcknowledgement modes:\n  Auto-ack: message removed on delivery (risky \u2014 lost if consumer crashes)\n  Manual ack: consumer explicitly acks after processing (safe)\n  Negative ack (nack): processing failed \u2014 requeue or discard\n\nDead Letter Queue (DLQ):\n  Failed messages (nacked/expired/exceeded max retries) \u2192 DLQ\n  Human review or automated retry logic processes DLQ\n\nConfig:\n  x-dead-letter-exchange: 'dlx'\n  x-message-ttl: 30000   (ms before message expires)\n  x-max-retries: 3\n```\n\n## Common Pitfalls\n- **Auto-ack data loss** \u2014 if consumer crashes between delivery and processing, message is gone. Always use manual ack.\n- **Unlimited queue growth** \u2014 set `x-max-length` or `x-message-ttl` to prevent memory exhaustion from slow consumers.\n- **Prefetch=0 (default)** \u2014 RabbitMQ floods a single consumer with ALL unprocessed messages. Set prefetch to 1 for fair dispatch.\n- **Missing DLQ** \u2014 without a DLQ, messages that fail processing are silently dropped after max retries.\n",
+  "questions": [
+    {
+      "id": "rmq-q1",
+      "type": "mcq",
+      "prompt": "RabbitMQ exchange vs queue \u2014 what does each do?",
+      "choices": [
+        "Same thing",
+        "Exchange: receives messages from producers and routes them to queues based on routing rules. Queue: stores messages until consumers process them. Exchange never stores messages",
+        "Queue routes, exchange stores",
+        "Queues connect to producers directly"
+      ],
+      "answerIndex": 1,
+      "explanation": "Exchange is the routing layer (decides WHICH queues get the message based on routing key/headers/fanout). Queue is the storage layer (holds messages). Decoupling them allows flexible many-to-many routing.",
+      "tags": [
+        "rabbitmq",
+        "architecture"
+      ]
+    },
+    {
+      "id": "rmq-q2",
+      "type": "mcq",
+      "prompt": "Why use manual acknowledgement instead of auto-ack?",
+      "choices": [
+        "Manual is faster",
+        "Auto-ack removes message from queue on delivery. If consumer crashes during processing, the message is lost. Manual ack removes message ONLY after successful processing \u2014 ensures at-least-once delivery",
+        "Auto-ack is deprecated",
+        "Manual prevents duplicates"
+      ],
+      "answerIndex": 1,
+      "explanation": "At-least-once delivery guarantee: message stays in queue until consumer explicitly acks it. If consumer dies during processing, RabbitMQ requeues to another consumer. Auto-ack = at-most-once (data loss risk).",
+      "tags": [
+        "rabbitmq",
+        "acknowledgement"
+      ]
+    },
+    {
+      "id": "rmq-q3",
+      "type": "mcq",
+      "prompt": "What does `channel.prefetch(1)` do?",
+      "choices": [
+        "Sends 1 test message",
+        "Limits unacknowledged messages per consumer to 1 \u2014 fair dispatch. Without it, RabbitMQ floods one consumer with all messages, starving others",
+        "Requires proto1",
+        "Sets message size limit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without prefetch, a fast consumer might get 1000 messages while others get 0. prefetch(1): consumer gets one message, processes it, acks, then gets the next. Enables fair work distribution across consumers.",
+      "tags": [
+        "rabbitmq",
+        "prefetch"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rmq-fc1",
+      "front": "Exchange types",
+      "back": "Direct: exact routing key match. Topic: wildcard patterns (*.order.#). Fanout: broadcast to all bound queues. Headers: route by message headers. All defined in channel.assertExchange().",
+      "tags": [
+        "rabbitmq"
+      ]
+    },
+    {
+      "id": "rmq-fc2",
+      "front": "Acknowledgements",
+      "back": "ack(): processing succeeded, remove from queue. nack(msg, multiple, requeue): failed, requeue or discard. auto-ack: dangerous (data loss on crash). Always use manual ack for reliability.",
+      "tags": [
+        "rabbitmq"
+      ]
+    },
+    {
+      "id": "rmq-fc3",
+      "front": "Dead Letter Queue (DLQ)",
+      "back": "Messages that expire (TTL), exceed max retries, or are nacked without requeue go to DLQ. Use for human review, alerting, or delayed retry. Config: x-dead-letter-exchange.",
+      "tags": [
+        "rabbitmq",
+        "DLQ"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using RabbitMQ\n\nDesign a realistic production service with RabbitMQ at its core. No code required:\n\n1. Why RabbitMQ over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "rabbitmq-pc1",
+        "text": "Justified use of RabbitMQ for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "rabbitmq-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "rabbitmq-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "rabbitmq-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "rabbitmq-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does RabbitMQ remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

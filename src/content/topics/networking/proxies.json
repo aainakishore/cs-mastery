@@ -1,0 +1,127 @@
+{
+  "id": "proxies",
+  "unit": 3,
+  "order": 12,
+  "title": "Proxies - Forward and Reverse",
+  "summary": "Master Proxies - Forward and Reverse: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "firewalls"
+  ],
+  "guide": "# Proxies \u2014 Forward and Reverse\n\nA **proxy** is a server that acts as an intermediary between clients and backend servers. Forward proxies sit in front of clients; reverse proxies sit in front of servers.\n\n## Forward Proxy vs Reverse Proxy\n\n```\nForward Proxy:\n  Client \u2192 Forward Proxy \u2192 Internet (servers)\n\n  Client knows about the proxy.\n  Server sees proxy's IP not client's.\n  Uses: bypass geo-restrictions, corporate filtering, anonymity, caching.\n\nReverse Proxy:\n  Internet (clients) \u2192 Reverse Proxy \u2192 Backend Servers\n\n  Client talks to proxy thinking it's the origin.\n  Client doesn't know about backend servers.\n  Uses: load balancing, SSL termination, caching, DDoS protection, WAF.\n```\n\n## What a Reverse Proxy Does\n\n```\nIncoming HTTPS request \u2192 Reverse Proxy:\n  \u2713 SSL termination (decrypt; re-encrypt to backend or use HTTP internally)\n  \u2713 Routing (/api/* to API servers, /* to static web server)\n  \u2713 Rate limiting and WAF rule enforcement\n  \u2713 Response caching (cache GET /products until TTL expires)\n  \u2713 Compression (gzip responses)\n  \u2713 Add security headers (HSTS, CSP, etc.)\n  \u2713 A/B testing (route 10% of traffic to a new version)\n  \u2713 Authentication offloading (JWT validation at proxy)\n```\n\n## NGINX as Reverse Proxy (Config Example)\n\n```nginx\nserver {\n  listen 443 ssl;\n  server_name api.example.com;\n\n  ssl_certificate /etc/ssl/cert.pem;\n  ssl_certificate_key /etc/ssl/key.pem;\n\n  location /api/ {\n    proxy_pass http://api-upstream;\n    proxy_set_header X-Real-IP $remote_addr;\n    proxy_set_header Host $host;\n  }\n\n  location /static/ {\n    root /var/www;\n    expires 30d;\n  }\n}\n\nupstream api-upstream {\n  least_conn;\n  server 10.0.0.1:8080;\n  server 10.0.0.2:8080;\n}\n```\n\n## Common Proxy Patterns\n\n| Pattern | Tool | Purpose |\n|---|---|---|\n| Edge proxy / CDN | Cloudflare, CloudFront | Global distribution, DDoS, caching |\n| API Gateway | Kong, AWS API GW | Auth, rate limiting, routing |\n| Service mesh sidecar | Envoy (Istio) | mTLS, observability, circuit breaking |\n| Forward proxy | Squid, corporate proxies | Content filtering, caching |\n\n## Common Pitfalls\n- **Losing the client IP** \u2014 reverse proxy rewrites the source IP. Use X-Forwarded-For or X-Real-IP headers. Configure the app to trust them.\n- **Double SSL** \u2014 terminating at proxy but not re-encrypting to backend leaks data on internal network if not trusted. Configure backend SSL or ensure private network.\n- **Proxy caching stale data** \u2014 aggressive caching can serve outdated responses. Set appropriate Cache-Control and vary headers.\n",
+  "questions": [
+    {
+      "id": "px-q1",
+      "type": "mcq",
+      "prompt": "Forward proxy vs reverse proxy \u2014 where each sits in the architecture?",
+      "choices": [
+        "Same location",
+        "Forward: in front of CLIENTS (client knows about it). Reverse: in front of SERVERS (client is unaware, thinks it's talking to origin)",
+        "Both sit in the DMZ",
+        "Reverse is for UDP only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Forward proxy represents the client to the internet (anonymity, filtering). Reverse proxy represents the server to the internet (load balancing, SSL, routing) \u2014 fundamental architectural difference.",
+      "tags": [
+        "proxies",
+        "architecture"
+      ]
+    },
+    {
+      "id": "px-q2",
+      "type": "mcq",
+      "prompt": "Why does a reverse proxy need to pass X-Forwarded-For header?",
+      "choices": [
+        "For authentication",
+        "The proxy rewrites the source IP of requests. Backend apps see the proxy's IP. X-Forwarded-For carries the original client IP so the app can log it, rate-limit correctly, and geo-locate",
+        "Required by HTTP spec",
+        "For caching"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without X-Forwarded-For, all traffic appears to come from the proxy (e.g., 10.0.0.1). Logging, rate limiting, and fraud detection break completely. Apps must be configured to trust the proxy and use X-Forwarded-For.",
+      "tags": [
+        "proxies",
+        "headers"
+      ]
+    },
+    {
+      "id": "px-q3",
+      "type": "mcq",
+      "prompt": "SSL termination at the reverse proxy means:",
+      "choices": [
+        "HTTPS is impossible behind the proxy",
+        "SSL is decrypted at the proxy. Traffic from proxy to backend may be plain HTTP (faster, less overhead). Only justified if the internal network is trusted or backend also encrypts",
+        "The certificate lives on the backend",
+        "Clients connect with HTTP"
+      ],
+      "answerIndex": 1,
+      "explanation": "Centralized SSL termination: one certificate to renew, all traffic encrypted externally, backends handle HTTP. For stricter security, re-encrypt proxy\u2192backend (mTLS). Common in AWS ALB + ECS architectures.",
+      "tags": [
+        "proxies",
+        "SSL",
+        "termination"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "px-fc1",
+      "front": "Forward vs Reverse Proxy",
+      "back": "Forward: client-side, client knows about it, server sees proxy IP. Uses: filtering, anonymity, corporate caching. Reverse: server-side, client unaware. Uses: LB, SSL termination, WAF, caching.",
+      "tags": [
+        "proxies"
+      ]
+    },
+    {
+      "id": "px-fc2",
+      "front": "Reverse proxy capabilities",
+      "back": "SSL termination, load balancing, routing, caching, compression, rate limiting, WAF, A/B testing, security headers, auth offloading.",
+      "tags": [
+        "proxies"
+      ]
+    },
+    {
+      "id": "px-fc3",
+      "front": "X-Forwarded-For",
+      "back": "Header carrying original client IP through proxy chain. Apps must trust the proxy and read X-Forwarded-For for rate limiting, logging, geo-location. Without it: all traffic looks like it comes from proxy.",
+      "tags": [
+        "proxies",
+        "headers"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Proxies - Forward and Reverse\n\nDesign a realistic production service with Proxies - Forward and Reverse at its core. No code required:\n\n1. Why Proxies - Forward and Reverse over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "proxies-pc1",
+        "text": "Justified use of Proxies - Forward and Reverse for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "proxies-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "proxies-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "proxies-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "proxies-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Proxies - Forward and Reverse remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

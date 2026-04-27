@@ -1,0 +1,448 @@
+{
+  "id": "dsa-java-sliding-window",
+  "unit": 9,
+  "order": 76,
+  "title": "Sliding Window in Java",
+  "summary": "Fixed-size and variable-size window patterns, max/min subarray, longest substring with constraints, and the shrink-when-invalid template.",
+  "prereqs": [
+    "dsa-java-arrays",
+    "dsa-java-strings"
+  ],
+  "guide": "# Sliding Window in Java\n\nThe sliding window technique replaces a naive O(n\u00b2) nested loop with a single O(n) pass by maintaining a 'window' \u2014 a contiguous subarray or substring \u2014 and **sliding** it across the input. Instead of recomputing everything from scratch for each position, you add the new right element and remove the old left element, updating your answer incrementally.\n\n## Fixed-size window \u2014 the moving frame\n```java\n// Problem: maximum sum of any k consecutive elements.\n//\n// Picture: a frame of width k sliding right one step at a time.\n// [1  3  -1 | -3  5  3  6  7]   window sum = 3\n//  [1  3  -1  -3 | 5  3  6  7]  slide: add 5, remove 1\n//\nint maxSumFixedWindow(int[] nums, int k) {\n    int windowSum = 0, maxSum = Integer.MIN_VALUE;\n    for (int r = 0; r < nums.length; r++) {\n        windowSum += nums[r];                    // expand right\n        if (r >= k) windowSum -= nums[r - k];   // shrink left (evict oldest)\n        if (r >= k - 1) maxSum = Math.max(maxSum, windowSum);\n    }\n    return maxSum;\n}\n// Time: O(n)   Space: O(1)\n```\n\n## Variable-size window \u2014 the elastic frame\n```java\n// Problem: longest substring without repeating characters.\n//\n// The window EXPANDS right whenever possible.\n// The window SHRINKS from the left whenever a constraint is violated.\n//\n// Picture hand holding a rubber band over the string:\n//   a b c a b c b b\n//   [a b c]            valid, expand\n//   [a b c a]          'a' duplicate! shrink from left until valid\n//     [b c a]          valid again, keep expanding\n//\nint lengthOfLongestSubstring(String s) {\n    Map<Character, Integer> freq = new HashMap<>();\n    int l = 0, maxLen = 0;\n    for (int r = 0; r < s.length(); r++) {\n        char c = s.charAt(r);\n        freq.merge(c, 1, Integer::sum);           // add right char\n        while (freq.get(c) > 1) {                 // constraint violated\n            char leftChar = s.charAt(l++);\n            freq.merge(leftChar, -1, Integer::sum); // shrink left\n        }\n        maxLen = Math.max(maxLen, r - l + 1);\n    }\n    return maxLen;\n}\n```\n\n## Template: shrink-when-invalid\n```java\n// Universal variable window skeleton:\n//\n// int l = 0;\n// State state = initial;\n// int answer = initial;\n//\n// for (int r = 0; r < n; r++) {\n//     update(state, nums[r]);         // 1. incorporate right element\n//     while (invalid(state)) {        // 2. shrink until valid\n//         remove(state, nums[l++]);\n//     }\n//     answer = best(answer, r-l+1);   // 3. window is valid \u2014 update answer\n// }\n//\n// The 'state' might be: a frequency map, a running sum, a count of distinct chars, etc.\n// The key insight: because r only moves right and l only moves right, each element\n// enters and leaves the window at most once \u2192 O(n) total.\n```\n\n## Minimum window substring \u2014 classic hard variant\n```java\n// Find shortest substring of s containing all chars of t.\n// State: how many chars of t are 'satisfied' (count >= needed).\nString minWindow(String s, String t) {\n    int[] need = new int[128], have = new int[128];\n    for (char c : t.toCharArray()) need[c]++;\n    int satisfied = 0, required = 0;\n    for (int x : need) if (x > 0) required++;\n    int l = 0, minLen = Integer.MAX_VALUE, start = 0;\n    for (int r = 0; r < s.length(); r++) {\n        char rc = s.charAt(r);\n        have[rc]++;\n        if (need[rc] > 0 && have[rc] == need[rc]) satisfied++; // newly met\n        while (satisfied == required) {           // all chars covered \u2014 try shrink\n            if (r - l + 1 < minLen) { minLen = r - l + 1; start = l; }\n            char lc = s.charAt(l++);\n            have[lc]--;\n            if (need[lc] > 0 && have[lc] < need[lc]) satisfied--;\n        }\n    }\n    return minLen == Integer.MAX_VALUE ? \"\" : s.substring(start, start + minLen);\n}\n```\n\n## Key decisions before coding\nWhen you see a sliding-window problem, answer these three questions:\n1. **What is my window state?**  (sum, frequency map, distinct-count, \u2026)\n2. **When is the window valid/invalid?**  (sum < target, duplicate present, more than k distinct chars, \u2026)\n3. **Am I maximising or minimising the window size?**\n   - Maximise \u2192 while(invalid) shrink, then update answer\n   - Minimise \u2192 while(valid) record answer then shrink\n\n## Common Pitfalls\n- Fixed window: using if (r >= k-1) windowSum -= nums[r-k+1] with wrong offset \u2014 always verify the eviction index\n- Variable window: updating the answer INSIDE the while-shrink loop instead of after it\n- Not using a frequency map when the constraint involves character counts \u2014 a simple int[] won't track multiplicity correctly\n- Using two nested for-loops instead of the l/r two-pointer approach \u2014 same idea but O(n\u00b2)\n- Minimise-window: forgetting to record the answer BEFORE shrinking (the moment the window is valid)\n\n## Connections\n- **Arrays/Strings**: the input is almost always a contiguous array or string\n- **Two Pointers**: sliding window IS a two-pointer technique \u2014 l and r both move rightward\n- **Hashing**: frequency maps inside the window state are HashMap or int[] depending on character set\n- **Deque**: sliding-window maximum uses a monotonic deque for O(n) max within each window position",
+  "questions": [
+    {
+      "id": "djsw-q1",
+      "type": "mcq",
+      "prompt": "Sliding window improves nested-loop O(n\u00b2) to O(n) because:",
+      "choices": [
+        "It uses binary search",
+        "Each element enters and leaves the window at most once \u2014 l and r only move right",
+        "It sorts the array first",
+        "It uses extra O(n) space always"
+      ],
+      "answerIndex": 1,
+      "explanation": "l only increments, r only increments \u2014 total moves across both pointers \u2264 2n = O(n).",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djsw-q2",
+      "type": "mcq",
+      "prompt": "Fixed-size window: to evict the oldest element when window size exceeds k, remove:",
+      "choices": [
+        "nums[r]",
+        "nums[l]",
+        "nums[r - k]  (element that is now k positions behind r)",
+        "The smallest element"
+      ],
+      "answerIndex": 2,
+      "explanation": "When r=k, the element that fell out is nums[r-k] = nums[0]. Pattern: windowSum -= nums[r-k].",
+      "tags": [
+        "fixed-window"
+      ]
+    },
+    {
+      "id": "djsw-q3",
+      "type": "codeOutput",
+      "prompt": "Max sum of window k=3 on [2,1,5,1,3,2]:",
+      "code": "// windows: [2,1,5]=8  [1,5,1]=7  [5,1,3]=9  [1,3,2]=6",
+      "choices": [
+        "8",
+        "7",
+        "9",
+        "6"
+      ],
+      "answerIndex": 2,
+      "explanation": "Window [5,1,3] gives sum 9 \u2014 the maximum.",
+      "tags": [
+        "fixed-window",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djsw-q4",
+      "type": "mcq",
+      "prompt": "Variable window: the window shrinks when:",
+      "choices": [
+        "r reaches the end",
+        "The window state violates the problem constraint",
+        "The window is larger than k",
+        "Always after every expansion"
+      ],
+      "answerIndex": 1,
+      "explanation": "Shrink left until the window becomes valid again \u2014 then expand right and repeat.",
+      "tags": [
+        "variable-window"
+      ]
+    },
+    {
+      "id": "djsw-q5",
+      "type": "mcq",
+      "prompt": "Longest substring without repeating characters \u2014 window state is:",
+      "choices": [
+        "Running sum",
+        "Frequency map of characters in the window",
+        "Max element seen",
+        "Count of vowels"
+      ],
+      "answerIndex": 1,
+      "explanation": "A character is 'repeating' when its frequency in the window exceeds 1.",
+      "tags": [
+        "variable-window"
+      ]
+    },
+    {
+      "id": "djsw-q6",
+      "type": "codeOutput",
+      "prompt": "Longest substring without repeats in 'abcabcbb':",
+      "code": "// windows: abc(3), bca(3), cab(3), abc(3), bcb(3)\u2192shrink, cb(2), b(1)\n// max length:",
+      "choices": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "answerIndex": 1,
+      "explanation": "The longest window without a repeat is 'abc' = length 3.",
+      "tags": [
+        "variable-window",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djsw-q7",
+      "type": "mcq",
+      "prompt": "Window size formula using left and right pointers:",
+      "choices": [
+        "r - l",
+        "r - l + 1",
+        "r + l",
+        "r * l"
+      ],
+      "answerIndex": 1,
+      "explanation": "A window from index l to r (inclusive) contains r - l + 1 elements.",
+      "tags": [
+        "mechanics"
+      ]
+    },
+    {
+      "id": "djsw-q8",
+      "type": "mcq",
+      "prompt": "When minimising window size (e.g. minimum window substring), update the answer:",
+      "choices": [
+        "Before expanding right",
+        "Inside the shrink loop \u2014 each valid window that fits is a candidate minimum",
+        "After the outer loop",
+        "Only when l == 0"
+      ],
+      "answerIndex": 1,
+      "explanation": "Every time the window is valid (all required chars present), check if it is smaller than the current best, then try shrinking more.",
+      "tags": [
+        "minimise"
+      ]
+    },
+    {
+      "id": "djsw-q9",
+      "type": "mcq",
+      "prompt": "When maximising window size, update the answer:",
+      "choices": [
+        "Inside the shrink loop",
+        "After the shrink loop \u2014 when the window is as large as it can be while still valid",
+        "Before expanding",
+        "Only at r = n-1"
+      ],
+      "answerIndex": 1,
+      "explanation": "After shrinking to restore validity, the window is the largest valid window ending at r.",
+      "tags": [
+        "maximise"
+      ]
+    },
+    {
+      "id": "djsw-q10",
+      "type": "mcq",
+      "prompt": "Maximum number of vowels in a substring of length k uses:",
+      "choices": [
+        "Variable window",
+        "Fixed window of exactly size k",
+        "Binary search on answer",
+        "Two separate arrays"
+      ],
+      "answerIndex": 1,
+      "explanation": "Window size is fixed at k \u2014 slide it and count vowels entering/leaving.",
+      "tags": [
+        "fixed-window"
+      ]
+    },
+    {
+      "id": "djsw-q11",
+      "type": "mcq",
+      "prompt": "Minimum size subarray sum >= target variable window expands right until sum >= target, then:",
+      "choices": [
+        "Stops",
+        "Records length and shrinks left to find a smaller valid window",
+        "Resets l to 0",
+        "Doubles k"
+      ],
+      "answerIndex": 1,
+      "explanation": "While sum >= target: record current window length as candidate minimum, then remove left element.",
+      "tags": [
+        "minimise"
+      ]
+    },
+    {
+      "id": "djsw-q12",
+      "type": "codeOutput",
+      "prompt": "Min subarray length with sum >= 7 on [2,3,1,2,4,3]:",
+      "code": "// [4,3]=7 len=2  \u2190 minimum\n// [2,3,1,2]=8 len=4\n// [3,1,2,4]=10 etc.",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answerIndex": 1,
+      "explanation": "Subarray [4,3] sums to 7 with length 2 \u2014 the minimum.",
+      "tags": [
+        "minimise",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djsw-q13",
+      "type": "mcq",
+      "prompt": "Sliding window maximum (max of every k-width window) optimal solution:",
+      "choices": [
+        "Sort each window O(nk)",
+        "Fixed window O(n) with prefix max",
+        "Monotonic deque O(n) \u2014 front always holds max of current window",
+        "Binary search on sorted windows"
+      ],
+      "answerIndex": 2,
+      "explanation": "Deque stores candidate indices in decreasing value order; front = current window max. Each element pushed/popped once = O(n).",
+      "tags": [
+        "deque"
+      ]
+    },
+    {
+      "id": "djsw-q14",
+      "type": "mcq",
+      "prompt": "Fruit Into Baskets (at most 2 distinct fruit types, max fruits collected) maps to:",
+      "choices": [
+        "Fixed window of size 2",
+        "Variable window: longest subarray with at most 2 distinct values",
+        "Counting sort",
+        "Greedy pick-largest"
+      ],
+      "answerIndex": 1,
+      "explanation": "State = frequency map of fruits in window. Shrink when distinct count > 2.",
+      "tags": [
+        "variable-window",
+        "applications"
+      ]
+    },
+    {
+      "id": "djsw-q15",
+      "type": "mcq",
+      "prompt": "Minimum window substring 'satisfied' counter tracks:",
+      "choices": [
+        "How many characters of t are in the window",
+        "How many distinct characters of t have their required frequency met",
+        "Window length",
+        "Number of chars in s scanned"
+      ],
+      "answerIndex": 1,
+      "explanation": "satisfied increments only when have[c] exactly reaches need[c] \u2014 not on every occurrence.",
+      "tags": [
+        "min-window"
+      ]
+    },
+    {
+      "id": "djsw-q16",
+      "type": "multi",
+      "prompt": "Which problems are solved with a variable sliding window?",
+      "choices": [
+        "Longest substring with at most k distinct chars",
+        "Maximum sum subarray of fixed size k",
+        "Minimum window containing all target chars",
+        "Longest subarray with sum at most S"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Fixed-size max sum uses fixed window. The other three have a variable constraint requiring dynamic resizing.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djsw-q17",
+      "type": "mcq",
+      "prompt": "Character frequency tracking inside a window uses int[128] (ASCII) instead of HashMap when:",
+      "choices": [
+        "Window is small",
+        "Character set is limited to ASCII \u2014 array gives O(1) access with less overhead",
+        "HashMap is deprecated",
+        "The string is sorted"
+      ],
+      "answerIndex": 1,
+      "explanation": "For known bounded character sets (ASCII, lowercase letters), int[] is faster and simpler than HashMap.",
+      "tags": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "djsw-q18",
+      "type": "mcq",
+      "prompt": "After adding nums[r] to the window and shrinking (if needed), window [l, r] is guaranteed:",
+      "choices": [
+        "Maximum possible size",
+        "The largest valid window ending at index r",
+        "Sorted order",
+        "Size exactly k"
+      ],
+      "answerIndex": 1,
+      "explanation": "l was moved just enough to restore validity \u2014 making [l,r] the biggest valid window with right boundary r.",
+      "tags": [
+        "invariant"
+      ]
+    },
+    {
+      "id": "djsw-q19",
+      "type": "codeOutput",
+      "prompt": "Longest subarray with sum <= 5 on [3,1,2,4,1]:",
+      "code": "// l=0,r=0: sum=3 ok, len=1\n// r=1: sum=4 ok, len=2\n// r=2: sum=6 > 5 \u2192 shrink: remove 3 \u2192 sum=3, l=1, len=2\n// r=3: sum=7 > 5 \u2192 shrink: remove 1 \u2192 sum=6 > 5 \u2192 remove 2 \u2192 sum=4, l=3, len=1\n// r=4: sum=5 ok, len=2\n// max len:",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answerIndex": 1,
+      "explanation": "Maximum valid window length seen is 2 (e.g. [3,1] or [1,4] after shrink or [4,1]).",
+      "tags": [
+        "variable-window",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djsw-q20",
+      "type": "mcq",
+      "prompt": "Sliding window is NOT the right technique when:",
+      "choices": [
+        "Array elements are positive",
+        "You need a non-contiguous subsequence or the subproblem structure is not monotonic",
+        "The array is sorted",
+        "Window state is a running sum"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sliding window requires: contiguous window AND monotonic validity (adding elements only makes constraint harder/easier, not arbitrary). Non-contiguous problems use DP.",
+      "tags": [
+        "when-not-to-use"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djsw-fc1",
+      "front": "Fixed window template",
+      "back": "Add nums[r]. If r >= k: remove nums[r-k]. If r >= k-1: update answer.",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc2",
+      "front": "Variable window template",
+      "back": "Expand r. While invalid: shrink l. Update answer after while loop.",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc3",
+      "front": "Window size",
+      "back": "r - l + 1 elements when window spans indices [l, r] inclusive.",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc4",
+      "front": "O(n) guarantee",
+      "back": "l and r each move right at most n times \u2014 total work is O(n).",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc5",
+      "front": "Maximise vs minimise",
+      "back": "Maximise: update after shrink. Minimise: update INSIDE while(valid) then shrink.",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc6",
+      "front": "State choices",
+      "back": "Running sum (int), frequency map (int[128] or HashMap), distinct count (int).",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc7",
+      "front": "Sliding window max",
+      "back": "Monotonic decreasing deque of indices. Front = current window maximum.",
+      "tags": [
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djsw-fc8",
+      "front": "Monotonicity requirement",
+      "back": "Sliding window works when adding elements monotonically tightens/loosens constraint.",
+      "tags": [
+        "sliding-window"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write SlidingWindowLab.java with:\n1. maxSumFixed(int[] nums, int k) \u2192 int\n2. lengthOfLongestSubstringKDistinct(String s, int k) \u2192 int\n3. minSizeSubarraySum(int[] nums, int target) \u2192 int  (return 0 if none)\n4. maxSlidingWindow(int[] nums, int k) \u2192 int[]  (monotonic deque)\n5. minWindowSubstring(String s, String t) \u2192 String\nInclude main() tests: k=1, k=n, target larger than total sum, t longer than s.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "maxSumFixed handles k > nums.length gracefully",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "lengthOfLongestSubstringKDistinct shrinks until distinct count <= k",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "minSizeSubarraySum returns 0 when no subarray meets target",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "maxSlidingWindow evicts front when index out of window, back when value smaller than new element",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "minWindowSubstring uses satisfied counter \u2014 only increments when frequency exactly meets requirement",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "maxSlidingWindow: evict dq.peekFirst() when dq.peekFirst() < r - k + 1.",
+      "minWindowSubstring: have[c]-- then check if have[c] < need[c] AFTER the decrement before deciding to decrement satisfied.",
+      "lengthOfLongestSubstringKDistinct: remove from map when count reaches 0 to keep map.size() == distinct count."
+    ]
+  }
+}

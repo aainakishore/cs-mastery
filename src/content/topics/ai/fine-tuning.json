@@ -1,0 +1,465 @@
+{
+  "id": "fine-tuning",
+  "unit": 6,
+  "order": 35,
+  "title": "Fine-Tuning LLMs",
+  "summary": "Master Fine-Tuning LLMs: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "llms"
+  ],
+  "guide": "# Fine-Tuning LLMs\n\nFine-tuning adapts a pre-trained LLM to a **specific domain, task, or style** by continuing training on domain-specific data.\n\n## When to Fine-Tune vs Prompt Engineering\n\n```\nTry in this order (cheapest first):\n  1. Prompt engineering (zero/few-shot) — free, immediate\n  2. RAG — add knowledge without retraining\n  3. Fine-tuning — when you need style/format/domain adaptation\n  4. Train from scratch — almost never\n\nFine-tune when:\n  ✓ Consistent output format (always produce JSON schema X)\n  ✓ Domain vocabulary (medical abbreviations, legal lingo)\n  ✓ Brand voice / style that's hard to describe in prompts\n  ✓ Reducing inference cost (small fine-tuned model vs large base model)\n  ✗ Don't fine-tune for knowledge — use RAG instead\n```\n\n## Parameter-Efficient Fine-Tuning (PEFT / LoRA)\n\nFull fine-tuning updates all model weights — expensive (billions of params).\nLoRA (Low-Rank Adaptation) freezes all weights and trains a tiny adapter:\n\n```\nRegular: update all W params (billions)    // too expensive\n\nLoRA:    freeze W, add small ΔW = A × B   // A and B are small matrices\n         W' = W + α(A × B)\n         Only train A and B — often <1% of model params\n\nResult: ~same performance as full fine-tuning, 1000× less compute.\n\nPEFT library (Hugging Face):\nfrom peft import get_peft_model, LoraConfig\nconfig = LoraConfig(r=16, lora_alpha=32, target_modules=[\"q_proj\",\"v_proj\"])\nmodel  = get_peft_model(base_model, config)\n```\n\n## Training Data Format (OpenAI Fine-Tune)\n\n```jsonl\n// JSONL format — one example per line\n{\"messages\": [\n  {\"role\": \"system\", \"content\": \"You are a SQL assistant.\"},\n  {\"role\": \"user\",   \"content\": \"Get all users older than 30\"},\n  {\"role\": \"assistant\", \"content\": \"SELECT * FROM users WHERE age > 30;\"}\n]}\n{\"messages\": [\n  {\"role\": \"system\", \"content\": \"You are a SQL assistant.\"},\n  {\"role\": \"user\",   \"content\": \"Count orders per user\"},\n  {\"role\": \"assistant\", \"content\": \"SELECT user_id, COUNT(*) FROM orders GROUP BY user_id;\"}\n]}\n// Minimum 50 examples; 100-1000 for good results\n```\n\n## Evaluation\n\n```\nBefore fine-tuning: baseline metrics on eval set\nAfter fine-tuning: compare on same eval set\n\nMetrics for different tasks:\n  Classification: accuracy, F1\n  SQL generation: execution accuracy (does it run? does it return correct row?)\n  Summarization: ROUGE, human eval\n\nAlways: hold out 10-20% of data as eval (never train on eval).\n```\n\n## Common Pitfalls\n- **Fine-tuning for knowledge** — the model won't reliably learn facts from small datasets. Use RAG for knowledge injection.\n- **Too few examples** — < 50 examples often yields no improvement. Minimum 50-100; more is better.\n- **Training on eval data** — data leakage. Never include eval samples in training.\n- **Overfitting** — a fine-tuned model that performs great on training data but poorly on novel inputs. Use validation loss as the metric to stop training.\n\n\n## LoRA — Low-Rank Adaptation\n\n```\nFull fine-tune:\n  Update all W (7B params × fp32 = 28GB gradients)\n  Cost: 8× A100s, days\n\nLoRA:\n  Freeze W, learn small ΔW = A × B  (rank r = 8–64)\n  A: (d × r), B: (r × d) — total params: 2 × d × r  (tiny!)\n  Forward: h = (W + AB)x = Wx + ABx\n\nMemory: 100× less than full fine-tune. Runs on 1× A100.\n```\n\n## Instruction Fine-tuning Format\n\n```json\n{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a financial analyst.\"},\n    {\"role\": \"user\",   \"content\": \"What is EBITDA?\"},\n    {\"role\": \"assistant\",\"content\": \"EBITDA = Earnings Before Interest, Taxes, Depreciation and Amortisation...\"}\n  ]\n}\n```\nEach training example = one conversation. 1000–10000 high-quality examples typically suffice.\n\n## RLHF Pipeline\n\n```\nStep 1: Supervised Fine-tuning (SFT)\n  Training data: human-written ideal responses\n\nStep 2: Reward Model\n  Human preferences: rank completions A > B > C\n  Train RM to predict human scores\n\nStep 3: PPO (Proximal Policy Optimisation)\n  LLM generates responses → RM scores → gradient update\n  Penalty term (KL divergence) keeps model close to SFT base\n\nResult: ChatGPT-style helpfulness and safety alignment\n```\n\n## When Is Fine-tuning the Right Choice?\n\n```\n✓ Use fine-tuning when:\n  - Consistent style/persona required\n  - Domain vocabulary not in base model\n  - Latency sensitive (no long system prompt)\n  - Small model needed (distillation)\n\n✗ Don't fine-tune when:\n  - You just need to inject facts → use RAG\n  - You need up-to-date knowledge → RAG + retrieval\n  - You have < 100 examples → few-shot prompting\n  - Budget is tight → prompt engineering first\n```\n\n## References & Further Learning\n- 📄 **LoRA paper**: \"LoRA: Low-Rank Adaptation of Large Language Models\" — Hu et al. (arxiv.org/abs/2106.09685)\n- 📄 **RLHF paper**: \"Training language models to follow instructions with human feedback\" — Ouyang et al. (InstructGPT, arxiv.org/abs/2203.02155)\n- 📄 **QLoRA**: \"QLoRA: Efficient Finetuning of Quantized LLMs\" (arxiv.org/abs/2305.14314)\n- 🎥 **Andrej Karpathy** \"Let's build the GPT Tokenizer\" + \"nanoGPT\" — foundational understanding\n- 🎥 **HuggingFace** — \"Fine-tuning a language model\" tutorial series (YouTube + Docs)\n- 📖 **HuggingFace TRL docs** — SFT, RLHF, DPO trainers: huggingface.co/docs/trl\n- 🖼️ **Diagram**: LoRA matrix decomposition — search \"LoRA low rank adaptation diagram\"\n",
+  "questions": [
+    {
+      "id": "ft-q1",
+      "type": "mcq",
+      "prompt": "What is LoRA (Low-Rank Adaptation) and why is it important?",
+      "choices": [
+        "A fine-tuning dataset format",
+        "Parameter-efficient fine-tuning: freezes all original weights, adds tiny low-rank adapter matrices (A × B). Updates only the adapters — <1% of parameters — achieving near full fine-tune performance at 1000× less compute",
+        "A regularization technique",
+        "Required for OpenAI fine-tuning"
+      ],
+      "answerIndex": 1,
+      "explanation": "Full fine-tuning a 70B model requires terabytes of GPU memory. LoRA: original weights frozen, small adapters trained. Final model: original weights + adapters. Merge for inference. Enables fine-tuning on a single A100 instead of a 100-GPU cluster.",
+      "tags": [
+        "fine-tuning",
+        "LoRA",
+        "PEFT"
+      ]
+    },
+    {
+      "id": "ft-q2",
+      "type": "mcq",
+      "prompt": "You want the model to always output valid JSON in a specific schema. Fine-tune or prompt?",
+      "choices": [
+        "RAG",
+        "Fine-tuning — consistent output format (structure) is exactly where fine-tuning excels. Prompt engineering alone often produces inconsistent JSON with hallucinated fields",
+        "Not possible",
+        "System prompt only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Use case: structured output (always JSON, always this schema). Training 100 examples of input → correct schema JSON fine-tunes the model to produce reliable format. Prompt engineering struggles to reliably enforce complex schemas.",
+      "tags": [
+        "fine-tuning",
+        "use-cases"
+      ]
+    },
+    {
+      "id": "ft-q3",
+      "type": "mcq",
+      "prompt": "Minimum recommended number of fine-tuning examples for consistent improvement?",
+      "choices": [
+        "5",
+        "50-100 minimum; 500-1000 for robust results. Below 50 examples, fine-tuning often leaves the model virtually unchanged",
+        "10",
+        "1000 required always"
+      ],
+      "answerIndex": 1,
+      "explanation": "Small datasets cause the model to overfit or not learn the pattern at all. 50-100 examples: model starts adapting. 500+: reliable, generalizable. Use data augmentation if you can't collect a large dataset.",
+      "tags": [
+        "fine-tuning",
+        "data"
+      ]
+    },
+    {
+      "id": "ft-q4",
+      "type": "mcq",
+      "prompt": "LoRA reduces fine-tuning cost by:",
+      "choices": [
+        "Reducing the number of training steps",
+        "Freezing the original weights and only training small low-rank matrices ΔW = A×B",
+        "Using 8-bit quantization",
+        "Distilling into a smaller model"
+      ],
+      "answerIndex": 1,
+      "explanation": "LoRA inserts trainable rank-r matrices alongside frozen weights. Instead of updating billions of params, you update millions. Memory drops ~100×.",
+      "tags": [
+        "fine-tuning",
+        "LoRA"
+      ]
+    },
+    {
+      "id": "ft-q5",
+      "type": "mcq",
+      "prompt": "What is catastrophic forgetting?",
+      "choices": [
+        "Model loses weights on disk",
+        "Fine-tuned model loses general capabilities in areas not covered by training data",
+        "Training loss diverges",
+        "GPU memory exhaustion"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fine-tuning on narrow data can overwrite general knowledge. Mitigations: LoRA (original weights frozen), regularization, replay of general data.",
+      "tags": [
+        "fine-tuning",
+        "overfitting"
+      ]
+    },
+    {
+      "id": "ft-q6",
+      "type": "mcq",
+      "prompt": "RLHF uses a reward model for:",
+      "choices": [
+        "Evaluating code syntax",
+        "Scoring completions based on learned human preferences to guide PPO training",
+        "Blocking harmful content",
+        "Reducing hallucination directly"
+      ],
+      "answerIndex": 1,
+      "explanation": "The reward model is trained on human pairwise preferences (A>B). It then scores the LLM's outputs during PPO — the LLM learns to maximize these scores.",
+      "tags": [
+        "fine-tuning",
+        "RLHF"
+      ]
+    },
+    {
+      "id": "ft-q7",
+      "type": "mcq",
+      "prompt": "When should you use RAG instead of fine-tuning?",
+      "choices": [
+        "When you want style consistency",
+        "When you need to inject up-to-date or large factual knowledge — fine-tuning can't store documents",
+        "When latency is critical",
+        "When using a small model"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fine-tuning teaches style and behavior. RAG teaches facts at inference time. Knowledge that changes frequently (company docs, news) belongs in a retrieval system, not weights.",
+      "tags": [
+        "fine-tuning",
+        "RAG"
+      ]
+    },
+    {
+      "id": "ft-q8",
+      "type": "mcq",
+      "prompt": "Why split training data into train/validation sets for fine-tuning?",
+      "choices": [
+        "Required by the framework",
+        "To detect overfitting — training loss drops but validation loss rising = memorization, not generalization",
+        "To speed up training",
+        "Validation used for RLHF only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Train loss measures performance on seen data. Val loss measures generalization. Early stopping when val loss stops improving prevents overfitting.",
+      "tags": [
+        "fine-tuning",
+        "overfitting"
+      ]
+    },
+    {
+      "id": "ft-q9",
+      "type": "mcq",
+      "prompt": "Data contamination in fine-tuning means:",
+      "choices": [
+        "Noisy labels",
+        "Evaluation examples included in training data — inflates benchmark scores falsely",
+        "Duplicate examples",
+        "Missing labels"
+      ],
+      "answerIndex": 1,
+      "explanation": "If eval examples appear in training, the model 'memorized' the answer. Always keep a held-out test set the model never trained on.",
+      "tags": [
+        "fine-tuning",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "ft-q10",
+      "type": "mcq",
+      "prompt": "QLoRA combines LoRA with:",
+      "choices": [
+        "RLHF",
+        "4-bit quantization of the base model — reducing memory further while maintaining trainable LoRA adapters",
+        "Distillation",
+        "Mixture of Experts"
+      ],
+      "answerIndex": 1,
+      "explanation": "QLoRA: base model in 4-bit NF4 quantization (inference only), trainable LoRA adapters in bf16. Allows 70B fine-tuning on a single 48GB GPU.",
+      "tags": [
+        "fine-tuning",
+        "QLoRA"
+      ]
+    },
+    {
+      "id": "ft-q11",
+      "type": "mcq",
+      "prompt": "DPO (Direct Preference Optimization) replaces which RLHF component?",
+      "choices": [
+        "SFT",
+        "PPO + Reward Model — directly optimizes on preference pairs without separate RM training",
+        "The tokenizer",
+        "LoRA"
+      ],
+      "answerIndex": 1,
+      "explanation": "DPO bypasses the RM+PPO loop. It directly optimizes a classification objective on (chosen, rejected) pairs. Simpler, more stable, competitive results.",
+      "tags": [
+        "fine-tuning",
+        "RLHF",
+        "DPO"
+      ]
+    },
+    {
+      "id": "ft-q12",
+      "type": "multi",
+      "prompt": "Which signs indicate overfitting during fine-tuning?",
+      "choices": [
+        "Training loss decreasing",
+        "Validation loss increasing while training loss decreases",
+        "Model generates training examples verbatim",
+        "Validation loss also decreasing"
+      ],
+      "answerIndexes": [
+        1,
+        2
+      ],
+      "explanation": "Overfitting: val loss rises while train loss falls. Verbatim training example reproduction = pure memorization. Both are stop signals.",
+      "tags": [
+        "fine-tuning",
+        "overfitting"
+      ]
+    },
+    {
+      "id": "ft-q13",
+      "type": "mcq",
+      "prompt": "How many examples are typically needed for LoRA instruction fine-tuning?",
+      "choices": [
+        "10–50",
+        "1,000–10,000 high-quality examples — quality > quantity",
+        "100,000+",
+        "Millions (same as pretraining)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fine-tuning adapts behavior, not knowledge. 1K–10K well-formatted instruction pairs from your domain are typically sufficient with LoRA.",
+      "tags": [
+        "fine-tuning",
+        "data"
+      ]
+    },
+    {
+      "id": "ft-q14",
+      "type": "mcq",
+      "prompt": "The KL divergence penalty in PPO training does what?",
+      "choices": [
+        "Prevents gradient explosion",
+        "Keeps the RLHF-trained model close to the SFT base — prevents reward hacking / policy collapse",
+        "Speeds up training",
+        "Measures validation loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without KL penalty, the model optimizes the reward model excessively — reward hacking. KL penalty anchors the policy near the original SFT model's distribution.",
+      "tags": [
+        "fine-tuning",
+        "RLHF"
+      ]
+    },
+    {
+      "id": "ft-q15",
+      "type": "mcq",
+      "prompt": "What is the SFT stage in RLHF?",
+      "choices": [
+        "Self-supervised pretraining",
+        "Supervised Fine-Tuning on human-written ideal responses — teaches the base format before RM+PPO",
+        "Sparse Feature Transfer",
+        "Safety Filter Training"
+      ],
+      "answerIndex": 1,
+      "explanation": "SFT = first RLHF stage. Train on high-quality (prompt, ideal_response) pairs to give the model a sensible starting policy before RL optimization.",
+      "tags": [
+        "fine-tuning",
+        "RLHF"
+      ]
+    },
+    {
+      "id": "ft-q16",
+      "type": "mcq",
+      "prompt": "LoRA rank r=4 vs r=64 — trade-off is:",
+      "choices": [
+        "r=4 is more accurate",
+        "Lower r = fewer params, faster training, less expressive. Higher r = more capacity but closer to full fine-tune cost.",
+        "r=64 = same as full fine-tune",
+        "r has no effect on quality"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rank controls expressiveness. r=8 is a common default. Increase for complex tasks; keep low for quick domain adaptation.",
+      "tags": [
+        "fine-tuning",
+        "LoRA"
+      ]
+    },
+    {
+      "id": "ft-q17",
+      "type": "mcq",
+      "prompt": "Instruction fine-tuning data format requires:",
+      "choices": [
+        "Raw text paragraphs",
+        "Input-output pairs formatted as conversations — system prompt, user message, assistant response",
+        "Just the assistant responses",
+        "Code files only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Instruction models are trained on (system, user, assistant) conversation triples. The model learns to follow the user instruction given the system context.",
+      "tags": [
+        "fine-tuning",
+        "data"
+      ]
+    },
+    {
+      "id": "ft-q18",
+      "type": "mcq",
+      "prompt": "What metric should you monitor during fine-tuning to decide when to stop?",
+      "choices": [
+        "Training loss only",
+        "Validation loss — stop when it stops improving (early stopping) to prevent overfitting",
+        "Reward model score",
+        "Token throughput"
+      ],
+      "answerIndex": 1,
+      "explanation": "Train loss always decreases. Validation loss reveals generalization. Use early stopping when val loss plateaus or increases.",
+      "tags": [
+        "fine-tuning",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "ft-q19",
+      "type": "mcq",
+      "prompt": "Fine-tuning vs prompting: when is fine-tuning worth the cost?",
+      "choices": [
+        "Always prefer fine-tuning",
+        "When: consistent format needed, long system prompts hurt latency, domain vocab absent from base model, smaller model required",
+        "When you have < 10 examples",
+        "Only for code generation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fine-tuning has significant upfront cost (data, compute). It pays off when repeated inference cost savings or latency needs outweigh training cost, or when prompt engineering is insufficient.",
+      "tags": [
+        "fine-tuning"
+      ]
+    },
+    {
+      "id": "ft-q20",
+      "type": "mcq",
+      "prompt": "Merging LoRA adapters back to the base model at inference time:",
+      "choices": [
+        "Impossible — must keep separate",
+        "Can be done: merged_W = W + AB. Result: single weight matrix, no adapter overhead at inference",
+        "Degrades quality",
+        "Requires retraining"
+      ],
+      "answerIndex": 1,
+      "explanation": "LoRA adapters can be merged: W_merged = W_frozen + A×B. After merging, deployment is a standard model with no latency overhead from adapter computation.",
+      "tags": [
+        "fine-tuning",
+        "LoRA"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ft-fc1",
+      "front": "When to fine-tune (hierarchy)",
+      "back": "1. Prompt engineering first. 2. RAG for knowledge. 3. Fine-tune for style/format/domain. 4. Scratch-train never. Fine-tune for: consistent output format, domain vocabulary, brand voice — NOT for factual knowledge.",
+      "tags": [
+        "fine-tuning"
+      ]
+    },
+    {
+      "id": "ft-fc2",
+      "front": "LoRA / PEFT",
+      "back": "Freeze all original weights. Add small adapter matrices A × B per layer. Only A and B train (~1% params). Near full fine-tune quality at 1000× lower cost. Adapters can be merged for inference.",
+      "tags": [
+        "fine-tuning",
+        "LoRA"
+      ]
+    },
+    {
+      "id": "ft-fc3",
+      "front": "Fine-tuning data format (OpenAI)",
+      "back": "JSONL: one JSON per line with 'messages' array (system, user, assistant roles). Min 50 examples. Hold out 10-20% for evaluation. No eval leakage.",
+      "tags": [
+        "fine-tuning",
+        "data"
+      ]
+    },
+    {
+      "id": "ft-fc4",
+      "front": "LoRA rank trade-off",
+      "back": "Low r (4–8): fast, few params, less expressive. High r (32–64): more capacity, approaches full fine-tune cost. Start at r=8; increase only if quality insufficient.",
+      "tags": [
+        "fine-tuning",
+        "LoRA"
+      ]
+    },
+    {
+      "id": "ft-fc5",
+      "front": "Catastrophic forgetting",
+      "back": "Fine-tuning on narrow data overwrites general knowledge. Fix: LoRA (weights frozen), regularisation, or replay of diverse data alongside domain data.",
+      "tags": [
+        "fine-tuning"
+      ]
+    },
+    {
+      "id": "ft-fc6",
+      "front": "DPO vs PPO",
+      "back": "DPO: optimize directly on (chosen, rejected) preference pairs. No separate RM needed, no RL instability. PPO: RM scores completions → gradient. DPO simpler and often competitive.",
+      "tags": [
+        "fine-tuning",
+        "RLHF",
+        "DPO"
+      ]
+    },
+    {
+      "id": "ft-fc7",
+      "front": "QLoRA",
+      "back": "Base model quantized to 4-bit (NF4) for inference. Trainable LoRA adapters in bf16. Enables 70B fine-tuning on 1× 48GB GPU.",
+      "tags": [
+        "fine-tuning",
+        "QLoRA"
+      ]
+    },
+    {
+      "id": "ft-fc8",
+      "front": "Data quality > quantity",
+      "back": "1,000 clean, diverse instruction examples outperform 100,000 noisy ones. Filter for: correct answers, right format, no duplicates, no eval set contamination.",
+      "tags": [
+        "fine-tuning",
+        "data"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Fine-Tuning LLMs\n\nDesign a realistic production service with Fine-Tuning LLMs at its core. No code required:\n\n1. Why Fine-Tuning LLMs over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "fine-tuning-pc1",
+        "text": "Justified use of Fine-Tuning LLMs for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "fine-tuning-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "fine-tuning-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "fine-tuning-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "fine-tuning-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Fine-Tuning LLMs remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

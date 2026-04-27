@@ -1,0 +1,443 @@
+{
+  "id": "dsa-java-graphs-basics",
+  "unit": 9,
+  "order": 71,
+  "title": "Graph Basics in Java",
+  "summary": "Adjacency list vs matrix, directed/undirected/weighted, BFS (shortest hops), DFS (explore fully), and cycle detection.",
+  "prereqs": [
+    "dsa-java-queues",
+    "dsa-java-recursion"
+  ],
+  "guide": "# Graph Basics in Java\n\nA graph is just a collection of **nodes (vertices)** connected by **edges**. Unlike a tree, edges can point anywhere \u2014 there is no root, no parent-child direction requirement, and cycles are allowed. Think of a city road map: intersections are nodes, roads are edges. Your job with most graph problems is to move through that map systematically without getting lost or going in circles.\n\n## Representations \u2014 adjacency list vs adjacency matrix\n```java\n// ADJACENCY LIST \u2014 standard choice for sparse graphs\n// Space: O(V + E)   Edge lookup: O(degree)\n//\n//  Graph:  0\u2500\u25001\u2500\u25002\n//          |     |\n//          3\u2500\u2500\u2500\u2500\u2500\u2518\n//\nList<List<Integer>> adj = new ArrayList<>();\nfor (int i = 0; i < 4; i++) adj.add(new ArrayList<>());\nadj.get(0).add(1); adj.get(1).add(0);  // undirected: add both directions\nadj.get(1).add(2); adj.get(2).add(1);\nadj.get(2).add(3); adj.get(3).add(2);\nadj.get(0).add(3); adj.get(3).add(0);\n\n// ADJACENCY MATRIX \u2014 good for dense graphs or when edge lookup must be O(1)\n// Space: O(V\u00b2)\nint[][] matrix = new int[4][4];\nmatrix[0][1] = matrix[1][0] = 1;  // undirected edge 0-1\n```\n\n## BFS \u2014 explore level by level, like ripples in a pond\n```java\n// BFS gives you the SHORTEST PATH in hops (unweighted graphs).\n// Picture: drop a stone in water \u2014 the ripple front expands one ring at a time.\n// Nodes on ring k are all exactly k hops from the source.\n//\nint[] bfs(List<List<Integer>> adj, int src, int n) {\n    int[] dist = new int[n];\n    Arrays.fill(dist, -1);\n    dist[src] = 0;\n    Queue<Integer> q = new ArrayDeque<>();\n    q.offer(src);\n    while (!q.isEmpty()) {\n        int u = q.poll();\n        for (int v : adj.get(u)) {\n            if (dist[v] == -1) {     // not yet visited\n                dist[v] = dist[u] + 1;\n                q.offer(v);\n            }\n        }\n    }\n    return dist;  // dist[v] = shortest hops from src to v\n}\n```\n\n## DFS \u2014 dive deep first, backtrack when stuck\n```java\n// DFS explores one branch as far as possible before trying another.\n// Picture: navigating a maze \u2014 you go straight until a dead end,\n// then backtrack to the last junction and try a different turn.\n//\n// Recursive DFS\nvoid dfs(List<List<Integer>> adj, boolean[] visited, int u) {\n    visited[u] = true;\n    for (int v : adj.get(u)) {\n        if (!visited[v]) dfs(adj, visited, v);\n    }\n}\n\n// Iterative DFS (explicit stack \u2014 same effect, avoids stack overflow on huge graphs)\nvoid dfsIterative(List<List<Integer>> adj, int src, int n) {\n    boolean[] visited = new boolean[n];\n    Deque<Integer> stack = new ArrayDeque<>();\n    stack.push(src);\n    while (!stack.isEmpty()) {\n        int u = stack.pop();\n        if (visited[u]) continue;\n        visited[u] = true;\n        for (int v : adj.get(u)) if (!visited[v]) stack.push(v);\n    }\n}\n```\n\n## Connected components \u2014 run BFS/DFS from every unvisited node\n```java\n// Each call to dfs() from an unvisited node discovers one full component.\n// Like flood-fill: colour one island, then find the next uncoloured cell.\nint countComponents(List<List<Integer>> adj, int n) {\n    boolean[] visited = new boolean[n];\n    int components = 0;\n    for (int i = 0; i < n; i++) {\n        if (!visited[i]) {\n            dfs(adj, visited, i);  // marks entire component\n            components++;\n        }\n    }\n    return components;\n}\n```\n\n## Cycle detection \u2014 undirected vs directed\n```java\n// UNDIRECTED: during DFS, if you reach a visited node that is NOT your parent \u2192 cycle\nboolean hasCycleUndirected(List<List<Integer>> adj, int u, int parent, boolean[] vis) {\n    vis[u] = true;\n    for (int v : adj.get(u)) {\n        if (!vis[v]) { if (hasCycleUndirected(adj, v, u, vis)) return true; }\n        else if (v != parent) return true;  // visited & not parent \u2192 back edge \u2192 cycle\n    }\n    return false;\n}\n\n// DIRECTED: use 3-state coloring\n// WHITE(0) = unvisited, GRAY(1) = in current DFS path, BLACK(2) = fully processed\n// Back edge (white\u2192gray) means cycle\nboolean hasCycleDirected(List<List<Integer>> adj, int u, int[] color) {\n    color[u] = 1;  // GRAY \u2014 currently exploring\n    for (int v : adj.get(u)) {\n        if (color[v] == 1) return true;       // back edge \u2192 cycle\n        if (color[v] == 0 && hasCycleDirected(adj, v, color)) return true;\n    }\n    color[u] = 2;  // BLACK \u2014 done\n    return false;\n}\n```\n\n## Common Pitfalls\n- Forgetting to mark a node visited BEFORE enqueuing (BFS) \u2014 causes duplicate processing\n- Undirected graph: not adding edges in BOTH directions when building adjacency list\n- Cycle detection: in undirected graphs, the parent node looks like a back-edge \u2014 must track parent to avoid false positive\n- Using adjacency matrix for very sparse graphs \u2014 wastes O(V\u00b2) space\n- Directed vs undirected cycle detection: they need different algorithms (back-edge check vs 3-colour DFS)\n\n## Connections\n- **Queues**: BFS is level-order traversal using a queue\n- **Recursion/Stacks**: DFS uses the call stack (or an explicit stack)\n- **Trees**: a tree is a special graph (connected, acyclic) \u2014 tree algorithms are graph algorithms in disguise\n- **Heaps**: Dijkstra replaces the BFS queue with a min-heap for weighted shortest paths",
+  "questions": [
+    {
+      "id": "djgb-q1",
+      "type": "mcq",
+      "prompt": "Adjacency list space complexity for a graph with V vertices and E edges:",
+      "choices": [
+        "O(V\u00b2)",
+        "O(V + E)",
+        "O(E\u00b2)",
+        "O(V \u00d7 E)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each vertex stores its neighbour list. Total entries across all lists = E (directed) or 2E (undirected).",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "djgb-q2",
+      "type": "mcq",
+      "prompt": "Adjacency matrix space complexity:",
+      "choices": [
+        "O(V + E)",
+        "O(V\u00b2)",
+        "O(E log V)",
+        "O(V)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stores a V\u00d7V grid \u2014 one cell per possible edge regardless of whether it exists.",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "djgb-q3",
+      "type": "mcq",
+      "prompt": "When is an adjacency matrix preferred over an adjacency list?",
+      "choices": [
+        "Always \u2014 O(1) edge lookup",
+        "When the graph is dense (E \u2248 V\u00b2) or O(1) edge existence check is critical",
+        "When memory is limited",
+        "When the graph is a tree"
+      ],
+      "answerIndex": 1,
+      "explanation": "Dense graphs fill most of the matrix anyway. O(1) hasEdge(u,v) vs O(degree) for list.",
+      "tags": [
+        "representation"
+      ]
+    },
+    {
+      "id": "djgb-q4",
+      "type": "mcq",
+      "prompt": "BFS guarantees shortest path in:",
+      "choices": [
+        "Any graph",
+        "Unweighted graphs \u2014 path with fewest hops",
+        "Weighted graphs",
+        "DAGs only"
+      ],
+      "answerIndex": 1,
+      "explanation": "BFS processes nodes level-by-level; level k = all nodes exactly k hops away. First time reached = shortest hop count.",
+      "tags": [
+        "bfs"
+      ]
+    },
+    {
+      "id": "djgb-q5",
+      "type": "codeOutput",
+      "prompt": "BFS from node 0 in graph: 0-1, 0-2, 1-3. Visit order:",
+      "code": "// adjacency list:\n// 0: [1, 2]\n// 1: [0, 3]\n// 2: [0]\n// 3: [1]",
+      "choices": [
+        "0 1 2 3",
+        "0 1 3 2",
+        "0 2 1 3",
+        "0 3 1 2"
+      ],
+      "answerIndex": 0,
+      "explanation": "Queue: [0] \u2192 process 0 \u2192 enqueue 1,2 \u2192 [1,2] \u2192 process 1 \u2192 enqueue 3 \u2192 [2,3] \u2192 process 2 \u2192 [3] \u2192 process 3. Order: 0,1,2,3.",
+      "tags": [
+        "bfs",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djgb-q6",
+      "type": "mcq",
+      "prompt": "DFS explores a graph by:",
+      "choices": [
+        "Processing all neighbours before going deeper",
+        "Going as deep as possible along one path before backtracking",
+        "Always using a queue",
+        "Visiting in sorted order"
+      ],
+      "answerIndex": 1,
+      "explanation": "DFS dives to the bottom of one branch, then backtracks to explore other branches \u2014 like navigating a maze.",
+      "tags": [
+        "dfs"
+      ]
+    },
+    {
+      "id": "djgb-q7",
+      "type": "mcq",
+      "prompt": "Mark a node visited in BFS:",
+      "choices": [
+        "After polling it",
+        "When enqueuing it \u2014 BEFORE it enters the queue",
+        "At the end of the loop",
+        "Only if it has neighbours"
+      ],
+      "answerIndex": 1,
+      "explanation": "Marking when enqueuing prevents the same node from being added to the queue multiple times.",
+      "tags": [
+        "bfs"
+      ]
+    },
+    {
+      "id": "djgb-q8",
+      "type": "mcq",
+      "prompt": "DFS time complexity on a graph with V vertices and E edges:",
+      "choices": [
+        "O(V)",
+        "O(E)",
+        "O(V + E)",
+        "O(V \u00d7 E)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Every vertex is visited once (O(V)) and every edge is examined once (O(E)).",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djgb-q9",
+      "type": "mcq",
+      "prompt": "To count connected components in an undirected graph:",
+      "choices": [
+        "Run BFS once from node 0",
+        "Run BFS/DFS from every unvisited node; count how many times you start a new traversal",
+        "Check if any node has degree 0",
+        "Sort nodes by degree"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each fresh traversal start discovers one new component. Component count = number of starts.",
+      "tags": [
+        "components"
+      ]
+    },
+    {
+      "id": "djgb-q10",
+      "type": "mcq",
+      "prompt": "In undirected cycle detection via DFS, a cycle is found when:",
+      "choices": [
+        "A node is visited twice total",
+        "You reach a visited node that is not the direct parent of the current node",
+        "The stack is empty",
+        "A node has degree > 2"
+      ],
+      "answerIndex": 1,
+      "explanation": "The parent edge looks like a back-edge \u2014 exclude it. Any OTHER visited neighbour means a cycle.",
+      "tags": [
+        "cycle"
+      ]
+    },
+    {
+      "id": "djgb-q11",
+      "type": "mcq",
+      "prompt": "In directed graph cycle detection, 3-colour DFS uses GRAY to mean:",
+      "choices": [
+        "Unvisited",
+        "Fully processed",
+        "Currently on the active DFS path",
+        "Visited in a previous component"
+      ],
+      "answerIndex": 2,
+      "explanation": "GRAY = in the current recursion stack. Meeting a GRAY node means we found a back-edge = cycle.",
+      "tags": [
+        "cycle"
+      ]
+    },
+    {
+      "id": "djgb-q12",
+      "type": "mcq",
+      "prompt": "A directed graph with no cycles is called:",
+      "choices": [
+        "A tree",
+        "A bipartite graph",
+        "A DAG (Directed Acyclic Graph)",
+        "A complete graph"
+      ],
+      "answerIndex": 2,
+      "explanation": "DAG: Directed Acyclic Graph. Topological sort is only possible on DAGs.",
+      "tags": [
+        "dag"
+      ]
+    },
+    {
+      "id": "djgb-q13",
+      "type": "mcq",
+      "prompt": "Bipartite graph check can be done with:",
+      "choices": [
+        "DFS only",
+        "BFS 2-colouring \u2014 try to colour graph with 2 colours so no adjacent nodes share a colour",
+        "Cycle detection",
+        "Topological sort"
+      ],
+      "answerIndex": 1,
+      "explanation": "BFS/DFS assigns alternating colours; if any edge connects same-colour nodes, graph is not bipartite.",
+      "tags": [
+        "bipartite"
+      ]
+    },
+    {
+      "id": "djgb-q14",
+      "type": "codeOutput",
+      "prompt": "DFS from 0 in: 0\u21921, 0\u21922, 1\u21923. Visit order (recursive, process neighbours left-to-right):",
+      "code": "// 0: [1, 2]\n// 1: [3]\n// 2: []\n// 3: []",
+      "choices": [
+        "0 1 2 3",
+        "0 2 1 3",
+        "0 1 3 2",
+        "0 3 1 2"
+      ],
+      "answerIndex": 2,
+      "explanation": "DFS: visit 0 \u2192 go to 1 \u2192 go to 3 (dead end, backtrack) \u2192 backtrack to 0 \u2192 go to 2. Order: 0,1,3,2.",
+      "tags": [
+        "dfs",
+        "tracing"
+      ]
+    },
+    {
+      "id": "djgb-q15",
+      "type": "mcq",
+      "prompt": "An undirected graph is connected if:",
+      "choices": [
+        "Every node has at least one edge",
+        "BFS/DFS from any single node visits ALL vertices",
+        "No vertex has degree > 1",
+        "The adjacency matrix is symmetric"
+      ],
+      "answerIndex": 1,
+      "explanation": "Connected = one component. Single BFS/DFS should colour every vertex.",
+      "tags": [
+        "connectivity"
+      ]
+    },
+    {
+      "id": "djgb-q16",
+      "type": "mcq",
+      "prompt": "Iterative DFS uses an explicit stack instead of recursion to:",
+      "choices": [
+        "Run faster",
+        "Process nodes in BFS order",
+        "Avoid StackOverflowError on very deep/large graphs",
+        "Save memory always"
+      ],
+      "answerIndex": 2,
+      "explanation": "Recursive DFS can overflow the JVM call stack on graphs with millions of nodes. Explicit stack uses heap memory.",
+      "tags": [
+        "dfs"
+      ]
+    },
+    {
+      "id": "djgb-q17",
+      "type": "mcq",
+      "prompt": "In a directed graph, edge u\u2192v means:",
+      "choices": [
+        "v is also connected back to u",
+        "You can travel from u to v but NOT necessarily from v to u",
+        "u and v are in the same component",
+        "u has higher priority than v"
+      ],
+      "answerIndex": 1,
+      "explanation": "Directed = one-way street. Reachability is asymmetric.",
+      "tags": [
+        "directed"
+      ]
+    },
+    {
+      "id": "djgb-q18",
+      "type": "multi",
+      "prompt": "Which traversals can detect cycles in a graph?",
+      "choices": [
+        "BFS with visited set",
+        "DFS with visited set (undirected)",
+        "DFS with 3-colour state (directed)",
+        "Topological sort \u2014 cycle exists if not all nodes processed"
+      ],
+      "answerIndexes": [
+        1,
+        2,
+        3
+      ],
+      "explanation": "BFS with just visited set detects connectivity but needs parent-tracking to detect undirected cycles reliably.",
+      "tags": [
+        "cycle"
+      ]
+    },
+    {
+      "id": "djgb-q19",
+      "type": "mcq",
+      "prompt": "Flood fill (paint bucket tool) is which graph algorithm?",
+      "choices": [
+        "Dijkstra",
+        "BFS or DFS on a grid graph",
+        "Topological sort",
+        "Union-Find"
+      ],
+      "answerIndex": 1,
+      "explanation": "Grid cells are nodes; adjacent cells sharing the same colour are edges. BFS/DFS fills the connected region.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djgb-q20",
+      "type": "mcq",
+      "prompt": "BFS vs DFS \u2014 which uses more memory for a wide, shallow graph?",
+      "choices": [
+        "DFS always uses more",
+        "BFS \u2014 its queue can hold an entire level which may be very wide",
+        "Same always",
+        "Depends on edge weights"
+      ],
+      "answerIndex": 1,
+      "explanation": "BFS queue grows to the width of the current frontier. DFS stack depth equals the longest path \u2014 short for shallow graphs.",
+      "tags": [
+        "complexity"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djgb-fc1",
+      "front": "Adjacency list",
+      "back": "List<List<Integer>>. Space O(V+E). Best for sparse graphs (most real graphs).",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc2",
+      "front": "Adjacency matrix",
+      "back": "int[V][V]. Space O(V\u00b2). O(1) edge lookup. Best for dense graphs.",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc3",
+      "front": "BFS = ripples",
+      "back": "Queue + visited set. Level k = all nodes exactly k hops away. Shortest path (unweighted).",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc4",
+      "front": "DFS = maze explorer",
+      "back": "Stack/recursion + visited set. Goes deep first, backtracks at dead ends.",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc5",
+      "front": "Visit-before-enqueue",
+      "back": "Mark node visited when adding to BFS queue \u2014 prevents duplicate entries.",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc6",
+      "front": "Connected components",
+      "back": "Count how many fresh BFS/DFS starts are needed to visit all nodes.",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc7",
+      "front": "Undirected cycle",
+      "back": "DFS: back-edge to a visited non-parent node = cycle.",
+      "tags": [
+        "graphs"
+      ]
+    },
+    {
+      "id": "djgb-fc8",
+      "front": "Directed cycle (3-colour)",
+      "back": "WHITE=unvisited, GRAY=in stack, BLACK=done. GRAY neighbour = cycle.",
+      "tags": [
+        "graphs"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write GraphsLab.java using adjacency list (List<List<Integer>>):\n1. buildGraph(int n, int[][] edges, boolean directed) \u2192 List<List<Integer>>\n2. bfsShortestHops(graph, int src) \u2192 int[]  (distances from src)\n3. countComponents(graph, int n) \u2192 int\n4. hasCycleUndirected(graph, int n) \u2192 boolean\n5. isBipartite(graph, int n) \u2192 boolean  (BFS 2-colouring)\nInclude main() tests: disconnected graph, graph with cycle, bipartite grid, star graph.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "buildGraph adds both directions for undirected",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "bfsShortestHops marks visited on enqueue not on poll",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "countComponents starts fresh DFS for each unvisited node",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "hasCycleUndirected tracks parent to avoid false positive on the back-edge",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "isBipartite returns false as soon as any edge connects same-colour nodes",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "bfsShortestHops: initialise dist[] = -1, set dist[src]=0 before enqueueing src.",
+      "hasCycleUndirected: pass parent=-1 for the initial call.",
+      "isBipartite: use int[] color = -1/0/1. Start BFS, assign 0 to src, alternate 1-color for neighbours."
+    ]
+  }
+}

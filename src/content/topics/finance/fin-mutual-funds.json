@@ -1,0 +1,218 @@
+{
+  "id": "fin-mutual-funds",
+  "unit": 8,
+  "order": 54,
+  "title": "Mutual Funds & SIP",
+  "summary": "Types of mutual funds, NAV, SIP benefits, expense ratios, and how to choose funds wisely.",
+  "prereqs": ["fin-stock-market-basics"],
+  "guide": "# Mutual Funds & SIP\n\nA **mutual fund** is a pooled investment vehicle managed by professional fund managers. Your money is combined with thousands of other investors to buy a diversified portfolio of stocks, bonds, or both.\n\n**Analogy:** A mutual fund is like a food delivery aggregator — instead of cooking yourself (picking stocks), you pay a small fee for professionals to handle everything.\n\n## How Mutual Funds Work\n1. Investors buy **units** of the fund\n2. Fund manager pools money and invests per the fund's mandate\n3. **NAV (Net Asset Value)** = (Total Assets − Liabilities) / Total Units\n4. NAV is recalculated daily\n5. You profit when NAV rises; you can sell units anytime (for open-ended funds)\n\n## Types of Mutual Funds\n\n### By Asset Class\n| Type | Invests In | Risk | Return Potential |\n|---|---|---|---|\n| **Equity funds** | Stocks | High | High |\n| **Debt funds** | Bonds, T-bills | Low-Med | Low-Med |\n| **Hybrid funds** | Mix of equity+debt | Med | Med |\n| **Index funds** | Tracks an index (NIFTY 50) | Med | Matches index |\n| **ETF** | Index but traded on exchange | Med | Matches index |\n\n### Equity Fund Sub-types\n- **Large Cap**: Top 100 companies by market cap — stable, lower volatility\n- **Mid Cap**: 101–250 by market cap — higher growth, higher risk\n- **Small Cap**: 251+ — highest potential, most volatile\n- **Flexi Cap**: Can invest across all sizes\n- **ELSS** (Equity Linked Savings Scheme): Tax-saving under 80C, 3-year lock-in\n\n### Debt Fund Sub-types\n- **Liquid funds**: Invest in very short-term instruments (< 91 days). Like a savings account replacement.\n- **Short duration**: 1-3 year horizon\n- **Gilt funds**: Government securities — safest but interest rate sensitive\n\n## SIP (Systematic Investment Plan)\nInvesting a fixed amount regularly (monthly/weekly) regardless of market levels.\n\n**Benefits of SIP:**\n1. **Rupee Cost Averaging**: Buy more units when NAV is low, fewer when high. Averages your cost.\n2. **Discipline**: Removes emotion from investing.\n3. **Power of compounding**: ₹5,000/month at 12% CAGR for 20 years = ~₹50 lakhs\n4. **No market timing needed**: Works in bull and bear markets.\n\n**Analogy:** SIP is like automatically filling rice every month. Sometimes you get more for the same money (sale), sometimes less (price hike). Over time, you average out and save consistently.\n\n## Expense Ratio\nAnnual fee charged by the fund = fund manager's fee + operational costs. Deducted from NAV daily.\n- Active funds: 1–2.5%\n- Index funds / ETFs: 0.05–0.5%\n\n**Impact:** ₹10 lakh earning 12% for 30 years:\n- 0% fees: ₹2.99 cr\n- 1% fees: ₹2.26 cr (₹73 lakh difference from fees alone!)\n\n## Direct vs Regular Plans\n- **Regular**: Bought via intermediary/distributor. Higher expense ratio (commission included).\n- **Direct**: Bought directly from AMC. Lower expense ratio. Always prefer direct if you're doing your own research.\n\n## Active vs Passive Funds\n- **Active**: Fund manager picks stocks. Aims to beat benchmark. Higher fees. Most active funds underperform their benchmark over 10+ years.\n- **Passive/Index**: Replicates index. Low cost. Returns = index − expense ratio.\n\n## Common Pitfalls\n1. **Chasing past returns** — last year's top fund often underperforms next year.\n2. **Choosing regular plan** when you can use direct — distributor commission erodes returns.\n3. **Stopping SIP in bear market** — exactly when you should continue (buying cheap units).\n4. **Too many funds** — holding 15+ funds adds no diversification, just complexity.\n5. **Ignoring exit load** — some funds charge 1% if you exit within 1 year.\n\n## Mind Map\n- Mutual Funds\n  - Types: Equity, Debt, Hybrid, Index\n  - Equity: Large/Mid/Small cap, ELSS, Flexi\n  - Fees: Expense Ratio, Exit Load\n  - Plans: Direct (lower fees) vs Regular (distributor)\n  - SIP: Rupee cost averaging, discipline, compounding\n\n## Connections\n- **Stock Market Basics** — equity funds invest in stocks\n- **Macroeconomics** — interest rates affect debt funds\n- **Personal Finance** — mutual funds as wealth-building vehicle\n- **Tax** — LTCG, STCG, ELSS 80C benefits",
+  "questions": [
+    {
+      "id": "fmf-q1",
+      "type": "mcq",
+      "prompt": "NAV (Net Asset Value) of a mutual fund is calculated as:",
+      "choices": ["Total Assets + Liabilities / Units", "(Total Assets − Liabilities) / Total Units", "Total Revenue / Shareholders", "Price per share on exchange"],
+      "answerIndex": 1,
+      "explanation": "NAV = (Fund Assets − Liabilities) / Total Units Outstanding. Recalculated daily at market close.",
+      "tags": ["nav", "mutual-funds"]
+    },
+    {
+      "id": "fmf-q2",
+      "type": "mcq",
+      "prompt": "The key benefit of SIP (Systematic Investment Plan) is:",
+      "choices": ["Guaranteed returns", "Rupee cost averaging and enforced discipline", "No tax on gains", "Instant liquidity"],
+      "answerIndex": 1,
+      "explanation": "SIP gives rupee cost averaging (more units when cheap, fewer when expensive) and removes emotional timing decisions.",
+      "tags": ["sip"]
+    },
+    {
+      "id": "fmf-q3",
+      "type": "mcq",
+      "prompt": "Which fund type is most suitable for a 1-month surplus with minimal risk?",
+      "choices": ["Small cap fund", "Liquid fund", "ELSS fund", "Mid cap fund"],
+      "answerIndex": 1,
+      "explanation": "Liquid funds invest in instruments maturing within 91 days — low risk, stable returns, instant redemption.",
+      "tags": ["debt-funds", "liquid-fund"]
+    },
+    {
+      "id": "fmf-q4",
+      "type": "mcq",
+      "prompt": "ELSS funds have a mandatory lock-in of:",
+      "choices": ["1 year", "2 years", "3 years", "5 years"],
+      "answerIndex": 2,
+      "explanation": "ELSS (Equity Linked Savings Scheme) has a 3-year lock-in. In return, investments qualify for 80C tax deduction.",
+      "tags": ["elss", "tax"]
+    },
+    {
+      "id": "fmf-q5",
+      "type": "mcq",
+      "prompt": "Direct mutual fund plans have lower expense ratios than regular plans because:",
+      "choices": ["They invest in safer assets", "No distributor commission is included", "SEBI subsidizes them", "They have smaller AUM"],
+      "answerIndex": 1,
+      "explanation": "Regular plans include distributor commission in the expense ratio. Direct = no middleman = lower fees = higher returns.",
+      "tags": ["direct-regular", "expense-ratio"]
+    },
+    {
+      "id": "fmf-q6",
+      "type": "mcq",
+      "prompt": "An Index Fund tracking NIFTY 50 will:",
+      "choices": ["Beat NIFTY 50 consistently", "Underperform NIFTY 50 by the expense ratio approximately", "Have zero risk", "Only invest in large-cap banks"],
+      "answerIndex": 1,
+      "explanation": "Index fund returns ≈ Index returns − Expense Ratio. With 0.2% ER, you get ~index returns minus that small fee.",
+      "tags": ["index-funds", "passive-investing"]
+    },
+    {
+      "id": "fmf-q7",
+      "type": "mcq",
+      "prompt": "A mid-cap mutual fund invests in:",
+      "choices": ["Top 100 companies by market cap", "Companies ranked 101–250 by market cap", "Companies ranked 251+", "International stocks"],
+      "answerIndex": 1,
+      "explanation": "SEBI classifies: Large cap = top 100, Mid cap = 101-250, Small cap = 251+ by market cap.",
+      "tags": ["fund-categories", "equity-funds"]
+    },
+    {
+      "id": "fmf-q8",
+      "type": "multi",
+      "prompt": "Which are advantages of SIP over lump sum investing? (Select all that apply)",
+      "choices": ["Guaranteed higher returns", "Reduces impact of market timing", "Rupee cost averaging", "Enforces saving discipline", "No expense ratio charged"],
+      "answerIndexes": [1, 2, 3],
+      "explanation": "SIP benefits: market timing reduction, rupee cost averaging, and savig discipline. Returns are NOT guaranteed, expense ratios still apply.",
+      "tags": ["sip"]
+    },
+    {
+      "id": "fmf-q9",
+      "type": "mcq",
+      "prompt": "An expense ratio of 1.5% vs 0.5% on ₹10 lakh over 30 years would cost approximately:",
+      "choices": ["₹1,000 difference", "A few lakhs difference", "Tens of lakhs difference in final corpus", "No meaningful difference"],
+      "answerIndex": 2,
+      "explanation": "Compounding amplifies fee differences. 1% extra annually over 30 years can erode 25-30% of your final corpus.",
+      "tags": ["expense-ratio", "compounding"]
+    },
+    {
+      "id": "fmf-q10",
+      "type": "mcq",
+      "prompt": "Exit load of 1% applies when you:",
+      "choices": ["Enter a fund during NFO", "Withdraw within the specified holding period (e.g., 1 year)", "Switch between funds of same AMC", "Start a new SIP"],
+      "answerIndex": 1,
+      "explanation": "Exit load discourages early redemption. It's charged on the withdrawal amount if you exit before the minimum holding period.",
+      "tags": ["exit-load"]
+    },
+    {
+      "id": "fmf-q11",
+      "type": "mcq",
+      "prompt": "Active funds aim to:",
+      "choices": ["Exactly replicate an index", "Beat the benchmark index through stock selection", "Minimize risk to zero", "Invest only in government bonds"],
+      "answerIndex": 1,
+      "explanation": "Active funds have managers selecting stocks to outperform the benchmark. Most fail to beat their benchmark over 10+ years after fees.",
+      "tags": ["active-passive"]
+    },
+    {
+      "id": "fmf-q12",
+      "type": "mcq",
+      "prompt": "Which mutual fund category is MOST suitable for retirement savings over 20+ years?",
+      "choices": ["Liquid fund", "Gilt fund", "Equity Large/Flexi Cap with SIP", "Ultra-short duration debt fund"],
+      "answerIndex": 2,
+      "explanation": "Long time horizon + equity = historically best wealth creation. Equity volatility is manageable over 20+ years.",
+      "tags": ["long-term-investing", "equity-funds"]
+    },
+    {
+      "id": "fmf-q13",
+      "type": "fillBlank",
+      "prompt": "The compounding phenomenon where investing ₹5,000/month at 12% CAGR for 20 years grows to ~₹50 lakhs is called the power of ___.",
+      "accepted": ["compounding", "compound interest"],
+      "explanation": "Compound interest = returns earning returns. Time is the most powerful factor — start early.",
+      "tags": ["compounding", "sip"]
+    },
+    {
+      "id": "fmf-q14",
+      "type": "mcq",
+      "prompt": "Flexi Cap funds are classified as:",
+      "choices": ["Only large-cap investments", "Funds that can invest across large, mid, and small cap stocks", "Fixed income funds", "International equity funds"],
+      "answerIndex": 1,
+      "explanation": "Flexi cap funds have no market cap restriction — managers allocate freely based on opportunities.",
+      "tags": ["fund-categories"]
+    },
+    {
+      "id": "fmf-q15",
+      "type": "mcq",
+      "prompt": "An NFO (New Fund Offer) should be treated with caution because:",
+      "choices": ["It always has high expense ratios", "There's no track record to evaluate performance", "SEBI doesn't regulate NFOs", "It cannot invest in stocks"],
+      "answerIndex": 1,
+      "explanation": "NFOs are new funds with no history. You can't assess the manager's skill or fund's behavior in different market conditions.",
+      "tags": ["nfo", "fund-selection"]
+    },
+    {
+      "id": "fmf-q16",
+      "type": "mcq",
+      "prompt": "Gilt funds primarily invest in:",
+      "choices": ["Gold ETFs", "Government securities (bonds)", "Small-cap equities", "Foreign stocks"],
+      "answerIndex": 1,
+      "explanation": "Gilt funds invest in Government of India bonds — zero default risk, but sensitive to interest rate changes.",
+      "tags": ["gilt-fund", "debt-funds"]
+    },
+    {
+      "id": "fmf-q17",
+      "type": "mcq",
+      "prompt": "If NIFTY 50 drops 15% in a month, a NIFTY 50 index SIP investor should ideally:",
+      "choices": ["Stop SIP immediately to cut losses", "Increase SIP amount to buy more units at lower NAV", "Redeem all units", "Switch to liquid funds"],
+      "answerIndex": 1,
+      "explanation": "Lower NAV = more units for same money. Continuing/increasing SIP in downturns accelerates wealth creation (rupee cost averaging).",
+      "tags": ["sip", "bear-market"]
+    },
+    {
+      "id": "fmf-q18",
+      "type": "match",
+      "prompt": "Match the fund type to its primary use case:",
+      "left": ["ELSS", "Liquid Fund", "Index Fund", "Small Cap Fund"],
+      "right": ["Tax saving with 3yr lock-in", "Parking short-term surplus safely", "Low-cost market returns", "High risk high growth potential"],
+      "pairs": [[0,0],[1,1],[2,2],[3,3]],
+      "explanation": "Each fund type has a specific role in a portfolio based on time horizon, risk, and tax goals.",
+      "tags": ["fund-categories"]
+    },
+    {
+      "id": "fmf-q19",
+      "type": "mcq",
+      "prompt": "AUM (Assets Under Management) measures:",
+      "choices": ["Fund manager's salary", "Total value of assets the fund manages", "Annual returns percentage", "Number of investors"],
+      "answerIndex": 1,
+      "explanation": "AUM = total market value of investments in the fund. Higher AUM can indicate popularity, but very large AUM can limit flexibility.",
+      "tags": ["aum", "fund-selection"]
+    },
+    {
+      "id": "fmf-q20",
+      "type": "mcq",
+      "prompt": "LTCG tax on equity mutual funds kicks in after a holding period of:",
+      "choices": ["6 months", "1 year", "2 years", "3 years"],
+      "answerIndex": 1,
+      "explanation": "Equity fund gains held > 1 year = LTCG taxed at 10% (above ₹1 lakh). < 1 year = STCG at 15%.",
+      "tags": ["tax", "ltcg"]
+    }
+  ],
+  "flashcards": [
+    { "id": "fmf-fc1", "front": "NAV", "back": "Net Asset Value = (Fund Assets − Liabilities) / Total Units. Price of 1 unit. Calculated daily.", "tags": ["nav"] },
+    { "id": "fmf-fc2", "front": "SIP benefits", "back": "1. Rupee cost averaging 2. Removes timing pressure 3. Enforces discipline 4. Power of compounding over time.", "tags": ["sip"] },
+    { "id": "fmf-fc3", "front": "Direct vs Regular plan", "back": "Direct plan: buy from AMC directly, lower expense ratio. Regular: via distributor, higher fees. Switch to direct if possible.", "tags": ["expense-ratio"] },
+    { "id": "fmf-fc4", "front": "ELSS", "back": "Equity Linked Savings Scheme. Invests in equities. 3-year lock-in. Tax deduction under Section 80C up to ₹1.5 lakh.", "tags": ["elss", "tax"] },
+    { "id": "fmf-fc5", "front": "Large / Mid / Small Cap", "back": "Large: Top 100 by market cap — stable. Mid: 101-250 — growth. Small: 251+ — highest risk/return.", "tags": ["fund-categories"] },
+    { "id": "fmf-fc6", "front": "Expense Ratio impact", "back": "1% extra fee compounded over 30 years can reduce final corpus by 25-30%. Always minimize fees.", "tags": ["expense-ratio"] },
+    { "id": "fmf-fc7", "front": "Index fund vs Active fund", "back": "Index: Replicates benchmark, low cost (~0.1-0.5%), consistent. Active: Aims to beat benchmark, high cost (1-2.5%), most fail long-term.", "tags": ["active-passive"] },
+    { "id": "fmf-fc8", "front": "Liquid fund", "back": "Debt fund investing in instruments maturing < 91 days. Near-zero risk, ~6-7% returns. Use for emergency fund / short-term parking.", "tags": ["liquid-fund"] }
+  ],
+  "project": {
+    "brief": "**Portfolio Construction Exercise:** You're a 25-year-old software engineer earning ₹1 lakh/month. You want to invest ₹20,000/month across mutual funds. Your goals: (1) ₹40 lakh down payment for a house in 7 years, (2) Retirement corpus in 35 years, (3) Tax saving under 80C.\n\nDesign a mutual fund portfolio: which fund categories, how much SIP per goal, direct vs regular, and how you'd rebalance as you approach each goal.",
+    "checklist": [
+      { "id": "p1", "text": "Allocate the ₹20,000 across specific fund categories with rationale", "weight": 25 },
+      { "id": "p2", "text": "Explain how you'd handle the 7-year goal differently from the 35-year goal", "weight": 20 },
+      { "id": "p3", "text": "Include an ELSS allocation and explain the tax benefit", "weight": 15 },
+      { "id": "p4", "text": "Justify direct plan preference over regular", "weight": 10 },
+      { "id": "p5", "text": "Describe how you'd gradually de-risk the 7-year portfolio as you approach the goal date", "weight": 20 },
+      { "id": "p6", "text": "Identify the biggest risk to this plan and how to mitigate it", "weight": 10 }
+    ],
+    "hints": [
+      "For the 7-year house goal, consider a hybrid allocation that gradually shifts to debt funds in years 5-7.",
+      "For 35 years, pure equity (large/flexi cap index) with SIP is hard to beat.",
+      "ELSS can serve double duty: equity exposure + tax saving."
+    ]
+  }
+}
+

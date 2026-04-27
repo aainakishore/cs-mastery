@@ -1,0 +1,427 @@
+{
+  "id": "angular-routing",
+  "unit": 10,
+  "order": 102,
+  "title": "Angular Routing",
+  "summary": "Route configuration, lazy loading, route guards, resolvers, and navigation with Angular Router.",
+  "prereqs": [
+    "angular-services-di"
+  ],
+  "guide": "# Angular Routing\n\nAngular Router maps URL paths to components — first-match wins from top to bottom. Think of the routes array as a priority-ordered table: Angular walks it until a path matches, then renders that component into the `<router-outlet>`.\n\n```\nURL: /admin/users/42\n  ↓\nRoutes table (top-to-bottom, first match)\n  { path: '' }         ✗ no match\n  { path: 'about' }    ✗ no match\n  { path: 'admin',     ✓  (lazy module loaded)\n    children: [\n      { path: 'users/:id' } ✓  ProductDetail rendered\n    ]\n  }\n  { path: '**' }       ← never reached (MUST be last)\n```\n\n## Route Config\n```typescript\nexport const routes: Routes = [\n  { path: '',           component: HomeComponent },\n  { path: 'products/:id', component: ProductDetailComponent },\n  { path: 'admin', canActivate: [authGuard],\n    loadChildren: () => import('./admin/admin.routes').then(m => m.adminRoutes) },\n  { path: '**', component: NotFoundComponent }  // MUST be last\n];\n```\n\n## Lazy Loading\n```typescript\n{ path: 'dashboard', loadComponent: () =>\n    import('./dashboard.component').then(m => m.DashboardComponent) }\n```\n\n## Functional Guards (Angular 14+)\n```typescript\nexport const authGuard: CanActivateFn = (route, state) => {\n  const auth = inject(AuthService);\n  return auth.isLoggedIn()\n    ? true\n    : inject(Router).createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });\n};\n```\n\n## Reading Route Params\n```typescript\n// One-time (snapshot):\nconst id = this.route.snapshot.paramMap.get('id');\n// Reactive (same component, different params):\nthis.route.paramMap.pipe(map(p => p.get('id')))\n```\n\n```\nsnapshot frozen at init time\n  /product/1 → component created → snapshot.id = '1'\n  user clicks /product/2:\n    Angular reuses component (no destroy)\n    snapshot still = '1'  ← BUG\n  Solution: subscribe to paramMap Observable\n```\n\n## Resolvers\n```typescript\nexport const productResolver: ResolveFn<Product> = (route) =>\n  inject(ProductService).getProduct(route.paramMap.get('id')!);\n// Route: { resolve: { product: productResolver } }\n// Component: inject(ActivatedRoute).snapshot.data['product']\n```\n\n## withPreloading\n```typescript\nprovideRouter(routes, withPreloading(PreloadAllModules))\n// Loads lazy modules in background after initial load\n// Custom strategy: implement PreloadingStrategy interface\n```\n\n## Common Pitfalls\n- `**` wildcard must be LAST.\n- Guard returning `false` shows blank page — always return a UrlTree for redirect.\n- Use `route.paramMap` Observable when same component navigates to different params.\n- Child routes render in the PARENT component's `<router-outlet>`.\n- NgModule apps: `RouterModule.forRoot(routes)`. Standalone: `provideRouter(routes)` in bootstrapApplication.\n- `pathMatch: 'full'` required for empty path + redirectTo, otherwise `/` matches every URL.\n- `RouterModule.forRoot` in a lazy module creates a second Router instance — only use `forChild` in feature modules.\n\n## Named Router Outlets\n```typescript\n// Template:\n<router-outlet></router-outlet>               // primary\n<router-outlet name=\"sidebar\"></router-outlet> // secondary\n\n// Navigate:\nrouter.navigate([{ outlets: { sidebar: ['help'] } }]);\n```\n\n## Query Params vs Route Params\n```typescript\n// /products?sort=price&dir=asc\nroute.queryParamMap.subscribe(p => p.get('sort'));  // 'price'\n\n// /products/:id  →  /products/42\nroute.paramMap.subscribe(p => p.get('id'));  // '42'\n\n// Fragment /products#reviews\nroute.fragment.subscribe(f => f);  // 'reviews'\n```\n",
+  "questions": [
+    {
+      "id": "aro-q1",
+      "type": "mcq",
+      "prompt": "Why must `{ path: '**' }` be last?",
+      "choices": [
+        "TypeScript requirement",
+        "Angular matches top-to-bottom \u2014 wildcard first catches all URLs",
+        "Optional",
+        "Wildcards deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "First-match strategy: a wildcard route first would swallow all paths.",
+      "tags": [
+        "routing"
+      ]
+    },
+    {
+      "id": "aro-q2",
+      "type": "mcq",
+      "prompt": "Main benefit of lazy-loaded routes?",
+      "choices": [
+        "Cache busting",
+        "Smaller initial bundle \u2014 route code downloads on first visit",
+        "Faster requests",
+        "Enables guards"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lazy loading splits the bundle. Rarely-visited pages (admin, reports) don't inflate the initial download.",
+      "tags": [
+        "routing",
+        "lazy-loading"
+      ]
+    },
+    {
+      "id": "aro-q3",
+      "type": "mcq",
+      "prompt": "When to use `route.paramMap` Observable vs `snapshot`?",
+      "choices": [
+        "Always Observable",
+        "When same component navigates to different params without being destroyed",
+        "Only nested routes",
+        "Snapshot deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "Snapshot is frozen at init. If Angular reuses the component for new params, snapshot stays stale.",
+      "tags": [
+        "routing",
+        "route-params"
+      ]
+    },
+    {
+      "id": "aro-q4",
+      "type": "mcq",
+      "prompt": "Guard returning `false` does what?",
+      "choices": [
+        "Redirects to home",
+        "Destroys component",
+        "Blocks navigation \u2014 page stays blank unless redirected",
+        "Logs warning"
+      ],
+      "answerIndex": 2,
+      "explanation": "false blocks without redirecting. Use createUrlTree(['/login']) to properly redirect.",
+      "tags": [
+        "routing",
+        "guards"
+      ]
+    },
+    {
+      "id": "aro-q5",
+      "type": "mcq",
+      "prompt": "`router.navigate(['/orders', '42', 'confirm'])` produces:",
+      "choices": [
+        "/orders/confirm",
+        "/orders/42/confirm",
+        "Error",
+        "Relative URL"
+      ],
+      "answerIndex": 1,
+      "explanation": "Array segments become path parts: /orders/42/confirm.",
+      "tags": [
+        "routing"
+      ]
+    },
+    {
+      "id": "aro-q6",
+      "type": "mcq",
+      "prompt": "Route Resolver purpose?",
+      "choices": [
+        "Guards access",
+        "Pre-fetches data before component activates \u2014 available synchronously in snapshot.data",
+        "Type-checks params",
+        "Handles 404"
+      ],
+      "answerIndex": 1,
+      "explanation": "Resolver ensures data is ready before the view renders.",
+      "tags": [
+        "routing",
+        "resolver"
+      ]
+    },
+    {
+      "id": "aro-q7",
+      "type": "mcq",
+      "prompt": "Standalone app equivalent of RouterModule.forRoot?",
+      "choices": [
+        "RouterModule.standalone",
+        "provideRouter(routes) in bootstrapApplication providers",
+        "Auto-discovered",
+        "RouterModule still needed"
+      ],
+      "answerIndex": 1,
+      "explanation": "provideRouter(routes) is the functional standalone replacement.",
+      "tags": [
+        "routing",
+        "standalone"
+      ]
+    },
+    {
+      "id": "aro-q8",
+      "type": "multi",
+      "prompt": "Valid Angular route guard types?",
+      "choices": [
+        "canActivate",
+        "canDeactivate",
+        "canDestroy",
+        "canMatch"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "canActivate, canDeactivate, canActivateChild, canMatch are real guards. canDestroy doesn't exist.",
+      "tags": [
+        "routing",
+        "guards"
+      ]
+    },
+    {
+      "id": "aro-q9",
+      "type": "mcq",
+      "prompt": "Child routes render in which outlet?",
+      "choices": [
+        "Root AppComponent outlet",
+        "Parent route component's own <router-outlet>",
+        "Special child-outlet",
+        "First DOM outlet"
+      ],
+      "answerIndex": 1,
+      "explanation": "Nested routes: parent must have its own <router-outlet> in its template.",
+      "tags": [
+        "routing",
+        "nested-routes"
+      ]
+    },
+    {
+      "id": "aro-q10",
+      "type": "mcq",
+      "prompt": "canDeactivate guard typical use:",
+      "choices": [
+        "Admin auth",
+        "Unsaved-changes warning before navigating away",
+        "Lazy loading cleanup",
+        "HTTP cancellation"
+      ],
+      "answerIndex": 1,
+      "explanation": "canDeactivate fires when leaving. Used for unsaved-form confirmation.",
+      "tags": [
+        "routing",
+        "canDeactivate"
+      ]
+    },
+    {
+      "id": "aro-q11",
+      "type": "mcq",
+      "prompt": "Why is `pathMatch: 'full'` required on `{ path: '', redirectTo: '/home' }`?",
+      "choices": [
+        "Empty path is deprecated without it",
+        "Without it, '' matches every URL (prefix match), causing all routes to redirect",
+        "TypeScript requirement",
+        "Only needed for lazy routes"
+      ],
+      "answerIndex": 1,
+      "explanation": "By default Angular uses prefix matching. '' is a prefix of every URL, so without pathMatch:'full' every navigation triggers the redirect.",
+      "tags": ["routing"]
+    },
+    {
+      "id": "aro-q12",
+      "type": "mcq",
+      "prompt": "Where does a child route's component render?",
+      "choices": [
+        "In the root AppComponent's router-outlet",
+        "In the parent route's component template's <router-outlet>",
+        "In a new browser tab",
+        "Overlaid on the parent component"
+      ],
+      "answerIndex": 1,
+      "explanation": "Nested routes require the parent component to have its own <router-outlet>. The child renders there, not in the root outlet.",
+      "tags": ["routing", "nested-routes"]
+    },
+    {
+      "id": "aro-q13",
+      "type": "mcq",
+      "prompt": "What does withPreloading(PreloadAllModules) do?",
+      "choices": [
+        "Loads all modules before the app starts",
+        "After the initial load, downloads lazy modules in background so future navigations are instant",
+        "Disables lazy loading",
+        "Pre-populates resolvers"
+      ],
+      "answerIndex": 1,
+      "explanation": "Preloading is a background optimization. The app still only executes modules when navigated to, but the JS is already downloaded.",
+      "tags": ["routing", "lazy-loading"]
+    },
+    {
+      "id": "aro-q14",
+      "type": "codeOutput",
+      "prompt": "User navigates from /products/1 to /products/2. Component stays alive. What is the snapshot id?",
+      "code": "// component constructor:\nconst id = this.route.snapshot.paramMap.get('id');\nconsole.log(id); // navigation to /products/2 just happened",
+      "choices": [
+        "'2' — snapshot updates on navigation",
+        "'1' — snapshot frozen at component creation time",
+        "null",
+        "Throws — component was destroyed"
+      ],
+      "answerIndex": 1,
+      "explanation": "snapshot is taken once at component activation. If Angular reuses the component for a new param, snapshot is stale. Subscribe to paramMap Observable instead.",
+      "tags": ["routing", "route-params"]
+    },
+    {
+      "id": "aro-q15",
+      "type": "multi",
+      "prompt": "Which things does a Resolver do?",
+      "choices": [
+        "Fetch data before the component activates",
+        "Guard access based on authentication",
+        "Make data available synchronously in snapshot.data",
+        "Cancel navigation on error"
+      ],
+      "answerIndexes": [0, 2],
+      "explanation": "Resolvers pre-fetch data (guaranteed available in snapshot.data). They do NOT guard access — that's canActivate. They can cancel by returning EMPTY.",
+      "tags": ["routing", "resolver"]
+    },
+    {
+      "id": "aro-q16",
+      "type": "mcq",
+      "prompt": "canActivateChild guard fires:",
+      "choices": [
+        "When parent route activates",
+        "Before any child route of the parent activates — protecting an entire section",
+        "Same as canActivate on every child",
+        "Only on lazy-loaded children"
+      ],
+      "answerIndex": 1,
+      "explanation": "canActivateChild is placed on the parent route and fires before any of its children activate, without listing the guard on each child individually.",
+      "tags": ["routing", "guards"]
+    },
+    {
+      "id": "aro-q17",
+      "type": "mcq",
+      "prompt": "Router link `[routerLink]=\"['/user', userId, 'details']\"` produces:",
+      "choices": [
+        "/user/userId/details (literal)",
+        "/user/{userId}/details",
+        "/user/42/details (if userId = 42)",
+        "Error — use routerLink as string"
+      ],
+      "answerIndex": 2,
+      "explanation": "Array syntax: each element is a path segment. Variables are interpolated. Result: /user/42/details.",
+      "tags": ["routing"]
+    },
+    {
+      "id": "aro-q18",
+      "type": "mcq",
+      "prompt": "canMatch guard differs from canActivate because:",
+      "choices": [
+        "canMatch runs before Angular matches the route entry at all",
+        "canMatch replaces canActivate in Angular 15+",
+        "canMatch only works on lazy routes",
+        "No difference"
+      ],
+      "answerIndex": 0,
+      "explanation": "canMatch gates the route matching phase. If it returns false/UrlTree, Angular continues to the next route definition. Enables role-based route tables.",
+      "tags": ["routing", "guards"]
+    },
+    {
+      "id": "aro-q19",
+      "type": "codeOutput",
+      "prompt": "authGuard returns `false` for an unauthenticated user navigating to /dashboard. What does the user see?",
+      "code": "export const authGuard: CanActivateFn = () => false;",
+      "choices": [
+        "Redirect to /login",
+        "Login page",
+        "Blank page / no component rendered",
+        "404 page"
+      ],
+      "answerIndex": 2,
+      "explanation": "false simply blocks navigation with no redirect. The URL may update but no component renders. Always return a UrlTree to redirect.",
+      "tags": ["routing", "guards"]
+    },
+    {
+      "id": "aro-q20",
+      "type": "mcq",
+      "prompt": "RouterModule.forChild vs forRoot:",
+      "choices": [
+        "forChild creates a second Router service",
+        "forRoot registers the Router service once; forChild registers additional routes without a second service",
+        "Identical",
+        "forChild for lazy modules only"
+      ],
+      "answerIndex": 1,
+      "explanation": "forRoot creates the singleton Router + directive providers. forChild adds routes to the existing router. Calling forRoot in a lazy module creates a second Router — breaks app.",
+      "tags": ["routing"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "aro-fc1",
+      "front": "snapshot vs paramMap Observable",
+      "back": "snapshot: frozen at init. paramMap: reactive stream. Use Observable when same component navigates between different IDs.",
+      "tags": [
+        "routing"
+      ]
+    },
+    {
+      "id": "aro-fc2",
+      "front": "loadComponent",
+      "back": "{ path: 'p', loadComponent: () => import('./p.component').then(m => m.PComponent) }. Separate JS chunk downloaded on first visit.",
+      "tags": [
+        "routing"
+      ]
+    },
+    {
+      "id": "aro-fc3",
+      "front": "Guard return types",
+      "back": "true/false. UrlTree (createUrlTree(['/login'])): redirect. Observable<boolean|UrlTree>: async. Never return false alone.",
+      "tags": [
+        "routing",
+        "guards"
+      ]
+    },
+    {
+      "id": "aro-fc4",
+      "front": "provideRouter (standalone)",
+      "back": "bootstrapApplication(App, { providers: [provideRouter(routes, withPreloading(...))] }). Functional and composable.",
+      "tags": [
+        "routing",
+        "standalone"
+      ]
+    },
+    {
+      "id": "aro-fc5",
+      "front": "Resolver",
+      "back": "ResolveFn<T> = (route) => inject(Service).fetch(id). Route: resolve: { key: resolverFn }. Component reads: snapshot.data['key'].",
+      "tags": [
+        "routing"
+      ]
+    },
+    {
+      "id": "aro-fc6",
+      "front": "Functional guard",
+      "back": "const g: CanActivateFn = (route, state) => { const a = inject(Auth); return a.loggedIn() ? true : inject(Router).createUrlTree(['/login']); }",
+      "tags": [
+        "routing",
+        "guards"
+      ]
+    },
+    {
+      "id": "aro-fc7",
+      "front": "pathMatch: 'full'",
+      "back": "Required on empty path redirects. Without it, '' prefix-matches every URL. With it, only matches exactly ''. Essential for { path: '', redirectTo: '/home' }.",
+      "tags": ["routing"]
+    },
+    {
+      "id": "aro-fc8",
+      "front": "canMatch vs canActivate",
+      "back": "canActivate: blocks after route matched. canMatch: fires before matching — false makes Angular skip to next route definition. Enables role-partitioned route tables.",
+      "tags": ["routing", "guards"]
+    }
+  ],
+  "project": {
+    "brief": "Design routing for a task app: public (/, /login), protected (dashboard, tasks, task-detail with resolver+canDeactivate), admin (role-guarded, lazy). Write the routes array and functional auth+role guards.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Public routes eager; protected with canActivate: [authGuard]",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Tasks and admin loaded via loadChildren (separate routes files)",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Task detail: resolve: { task: taskResolver }, canDeactivate: [unsavedGuard]",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "authGuard returns createUrlTree(['/login'], { queryParams: { returnUrl: state.url } })",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Admin guard reads user.role and returns createUrlTree(['/forbidden']) if not admin",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "Functional guard: CanActivateFn = (route, state) => inject(Auth).isLoggedIn() ? true : inject(Router).createUrlTree(['/login', ...])",
+      "returnUrl: after login use this.router.navigateByUrl(route.queryParams['returnUrl']) to restore destination.",
+      "Routes file (not module): export const taskRoutes: Routes = [...]. loadChildren: () => import('./task.routes').then(m => m.taskRoutes)."
+    ]
+  }
+}

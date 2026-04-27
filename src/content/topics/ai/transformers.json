@@ -1,0 +1,470 @@
+{
+  "id": "transformers",
+  "unit": 2,
+  "order": 7,
+  "title": "Transformers and Attention",
+  "summary": "Master Transformers and Attention: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "neural-nets"
+  ],
+  "guide": "# Transformers & Attention\n\nThe Transformer architecture (Vaswani et al., 2017, \"Attention Is All You Need\") revolutionised NLP and became the foundation for all modern LLMs. Its core innovation is **self-attention**.\n\n## Before Transformers: RNN Problem\n\n```\nRNNs processed tokens sequentially:\n  word1 → hidden1 → word2 → hidden2 → ... → wordN → output\n\nProblems:\n- Vanishing gradients: can't learn long-range dependencies\n- Sequential: can't parallelize on GPUs (slow training)\n- Fixed-size hidden state: bottleneck for long sequences\n```\n\n## Self-Attention Mechanism\n\n```\nFor each token, attention computes:\n  Q (Query): \"What am I looking for?\"\n  K (Key):   \"What do I contain?\"\n  V (Value): \"What information do I provide?\"\n\nAttention(Q, K, V) = softmax(QK^T / √d_k) × V\n\nExample:\n  \"The animal didn't cross the street because IT was too tired\"\n  For token IT:\n    - Attends strongly to \"animal\" (high attention score)\n    - Low attention to \"street\" and \"cross\"\n  → Model knows \"it\" refers to \"animal\" not \"street\"\n\nMulti-head attention:\n  Run N attention heads in parallel, each learning different relationships\n  Concatenate results → allows model to attend to different aspects simultaneously\n```\n\n## Transformer Architecture\n\n```\nInput tokens\n    ↓\nEmbedding + Positional Encoding\n    ↓\nN × Transformer Blocks:\n    ├── Multi-Head Self-Attention\n    ├── Add & Normalize (residual connection)\n    ├── Feed-Forward Network (2-layer MLP)\n    └── Add & Normalize\n    ↓\nOutput logits (vocabulary distribution)\n```\n\n## Positional Encoding\n\nTransformers see all tokens in parallel (unlike RNNs). Positional encoding adds **position information** to each token's embedding:\n\n```\npos_encoding(pos, 2i)   = sin(pos / 10000^(2i/d_model))\npos_encoding(pos, 2i+1) = cos(pos / 10000^(2i/d_model))\n\nModern LLMs use learned positional embeddings or RoPE (rotary).\n```\n\n## Types of Transformers\n\n```\nEncoder-only (BERT):\n  Reads full sequence, builds rich bidirectional representations\n  Good for: classification, NER, semantic search\n  No text generation\n\nDecoder-only (GPT series, Claude, Llama):\n  Generates text left-to-right, causal (can't see future tokens)\n  Good for: text generation, chat, code\n  The dominant architecture for LLMs\n\nEncoder-Decoder (T5, Bart):\n  Encoder reads input, decoder generates output\n  Good for: translation, summarization (seq2seq tasks)\n```\n\n## Common Pitfalls\n- **Confusing BERT vs GPT** — BERT: fill-in-the-blank (masked LM), bidirectional. GPT: next-token prediction, autoregressive. Totally different training objectives.\n- **Context window ≠ model quality** — longer context window doesn't make the model smarter, just allows more input tokens.\n\n\n## Self-Attention Mechanics\n\n```\nInput: [Token1, Token2, Token3, Token4]  → embed → X (n × d_model)\n\nQ = X·Wq    K = X·Wk    V = X·Wv\n\nAttention = softmax(QK^T / √d_k) · V\n\nIntuition:\n  Q = \"what am I looking for?\"\n  K = \"what do I offer?\"\n  V = \"what information to pass?\"\n\nThe bank that handles money:    high attention to \"bank\" for Q=\"financial\"\nThe bank of the river:          high attention to \"bank\" for Q=\"geography\"\nSame token, different context → different attention weights\n```\n\n## Transformer Architecture\n\n```\nInput Tokens\n     ↓\n[Embedding + Positional Encoding]\n     ↓\n┌──────────────────────┐ × N\n│  Multi-Head Attention │  (attends to all positions)\n│  + Residual + LN      │\n│  FFN (expand → GELU → │  (position-wise, d_model → 4d → d_model)\n│  contract)            │\n│  + Residual + LN      │\n└──────────────────────┘\n     ↓\nLinear → Softmax → Next Token Probabilities\n```\n\n## Encoder vs Decoder vs Encoder-Decoder\n\n```\nEncoder (BERT):\n  Bidirectional attention — sees whole sequence\n  Good for: classification, NER, embeddings\n  Training: masked language modelling (MLM)\n\nDecoder (GPT):\n  Causal/autoregressive — only sees past tokens\n  Good for: generation, chat, completion\n  Training: next-token prediction\n\nEncoder-Decoder (T5, BART):\n  Encoder: reads input\n  Decoder: generates output attending to encoder\n  Good for: translation, summarisation, Q&A\n```\n\n## Positional Encoding\n\n```\nTransformers have no inherent order — \"cat sat mat\" = \"mat sat cat\" without PE\n\nSinusoidal PE (original): PE(pos, 2i) = sin(pos/10000^(2i/d_model))\n  Fixed, not learned, generalises to longer sequences\n\nRoPE (Rotary PE — LLaMA, GPT-NeoX):\n  Encode position as rotation in complex space\n  Better length generalisation, relative position awareness\n\nALiBi (PaLM): add position bias to attention scores directly\n```\n\n## References & Further Learning\n- 📄 **Attention Is All You Need** (Vaswani et al. 2017) — arxiv.org/abs/1706.03762 — the original paper\n- 🖼️ **\"The Illustrated Transformer\"** — Jay Alammar — jalammar.github.io/illustrated-transformer — best visual explanation ever made\n- 🖼️ **\"The Illustrated GPT-2\"** — Jay Alammar — jalammar.github.io/illustrated-gpt2\n- 🎥 **Andrej Karpathy** \"Let's build GPT from scratch in code, spelled out\" (~2hr, YouTube) — implements full transformer\n- 🎥 **Yannic Kilcher** \"Attention Is All You Need\" paper walkthrough (YouTube)\n- 📖 **The Annotated Transformer** — nlp.seas.harvard.edu/annotated-transformer — line-by-line code + explanation\n- 🖼️ **Diagram**: Transformer architecture poster — search \"transformer architecture diagram vaswani 2017\"\n",
+  "questions": [
+    {
+      "id": "tr-q1",
+      "type": "mcq",
+      "prompt": "Why did Transformers replace RNNs for NLP?",
+      "choices": [
+        "Transformers use less memory",
+        "Transformers process all tokens in PARALLEL (GPU-friendly) and use attention to capture long-range dependencies directly — no gradient degradation over distance. RNNs are sequential and suffer vanishing gradients",
+        "RNNs couldn't handle tokenization",
+        "Transformers are simpler"
+      ],
+      "answerIndex": 1,
+      "explanation": "Two key improvements: (1) Parallelism — all tokens processed simultaneously, enabling massive GPU utilization. (2) Attention — any token can directly attend to any other token regardless of distance, solving the long-range dependency problem.",
+      "tags": [
+        "transformers",
+        "attention",
+        "RNN"
+      ]
+    },
+    {
+      "id": "tr-q2",
+      "type": "mcq",
+      "prompt": "What do Q, K, V represent in attention?",
+      "choices": [
+        "Query=user, Key=prompt, Value=output",
+        "Q (Query): what the current token is looking for. K (Key): what each token contains. V (Value): what information each token provides. Attention = which Ks match my Q, weighted sum of Vs",
+        "Database query analogy",
+        "Q=quality, K=keys, V=vectors"
+      ],
+      "answerIndex": 1,
+      "explanation": "Attention as a soft database: for each token, compute how relevant every other token is (QK dot product), then aggregate their values (V) weighted by relevance. This produces a context-aware representation.",
+      "tags": [
+        "transformers",
+        "attention",
+        "QKV"
+      ]
+    },
+    {
+      "id": "tr-q3",
+      "type": "mcq",
+      "prompt": "Encoder-only (BERT) vs Decoder-only (GPT) — difference and use case?",
+      "choices": [
+        "Same architecture",
+        "BERT: bidirectional (sees all tokens), trained with masked LM — good for classification, NER, embeddings. GPT: causal/autoregressive (only sees past tokens), trained with next-token prediction — good for text generation, chat",
+        "BERT generates text",
+        "GPT cannot generate text"
+      ],
+      "answerIndex": 1,
+      "explanation": "Architecture determines capability. Bidirectional (BERT): richer understanding but can't generate. Autoregressive (GPT): can generate token by token. Modern LLMs are all decoder-only (GPT architecture).",
+      "tags": [
+        "transformers",
+        "BERT",
+        "GPT"
+      ]
+    },
+    {
+      "id": "tr-q4",
+      "type": "mcq",
+      "prompt": "Why is positional encoding necessary in transformers?",
+      "choices": [
+        "For memory efficiency",
+        "Self-attention treats all positions equally — without positional encoding, 'cat sat mat' and 'mat sat cat' would produce identical representations",
+        "For training speed",
+        "Tokenization requires it"
+      ],
+      "answerIndex": 1,
+      "explanation": "Attention computes weighted sums regardless of position. PE injects order information by adding position vectors to embeddings before attention.",
+      "tags": [
+        "transformers",
+        "positional-encoding"
+      ]
+    },
+    {
+      "id": "tr-q5",
+      "type": "mcq",
+      "prompt": "The FFN (feed-forward network) in each transformer layer serves to:",
+      "choices": [
+        "Attend to positions",
+        "Apply position-wise nonlinear transformation — integrates information within each token after attention has mixed cross-token information",
+        "Encode position",
+        "Compute softmax"
+      ],
+      "answerIndex": 1,
+      "explanation": "Attention = cross-token information mixing. FFN = per-token nonlinear transformation (typically: Linear → GELU → Linear with 4× expansion). They alternate: mix → transform → mix → transform.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-q6",
+      "type": "mcq",
+      "prompt": "Causal masking in decoder transformers ensures:",
+      "choices": [
+        "Faster training",
+        "Each position can only attend to earlier positions — prevents future token leakage during autoregressive training",
+        "Bidirectional attention",
+        "Better embeddings"
+      ],
+      "answerIndex": 1,
+      "explanation": "During training, the next token is the label. Without causal mask, the model could 'cheat' by attending to the answer directly. Masking forces prediction from only past context.",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    },
+    {
+      "id": "tr-q7",
+      "type": "mcq",
+      "prompt": "BERT uses which training objective?",
+      "choices": [
+        "Next token prediction",
+        "Masked Language Modelling (MLM) — randomly mask 15% of tokens, predict them using bidirectional context",
+        "Contrastive learning",
+        "Image classification"
+      ],
+      "answerIndex": 1,
+      "explanation": "BERT's bidirectional attention requires a different objective than GPT's causal next-token prediction. MLM: [MASK] token must be predicted using both left AND right context.",
+      "tags": [
+        "transformers",
+        "BERT"
+      ]
+    },
+    {
+      "id": "tr-q8",
+      "type": "mcq",
+      "prompt": "Multi-head attention vs single-head:",
+      "choices": [
+        "Faster",
+        "Multiple independent attention computations run in parallel — each head can attend to different aspects (syntax, semantics, position) of the input simultaneously",
+        "More memory-efficient",
+        "Required for GPUs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each head has its own Q/K/V projections. One head may focus on subject-verb relationships, another on coreference. Heads are concatenated and projected back to d_model.",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    },
+    {
+      "id": "tr-q9",
+      "type": "codeOutput",
+      "prompt": "What is the computational complexity of standard self-attention with sequence length N?",
+      "code": "# Standard attention: Attention(Q,K,V) = softmax(QK^T / sqrt(d)) * V\n# QK^T produces a (N x N) matrix\n# What is the complexity in terms of N?",
+      "choices": [
+        "O(N)",
+        "O(N log N)",
+        "O(N²)",
+        "O(N³)"
+      ],
+      "answerIndex": 2,
+      "explanation": "QK^T: each of N tokens attends to all N tokens = N² operations. The N×N attention matrix also requires O(N²) memory. Flash Attention uses tiling to compute this without materialising the full N×N matrix.",
+      "tags": [
+        "transformers",
+        "complexity"
+      ]
+    },
+    {
+      "id": "tr-q10",
+      "type": "mcq",
+      "prompt": "Residual connections (skip connections) in transformers serve to:",
+      "choices": [
+        "Reduce parameter count",
+        "Allow gradients to flow directly through the network, prevent vanishing gradients in deep models, and let layers learn residual corrections rather than full transformations",
+        "Enable attention",
+        "Improve tokenization"
+      ],
+      "answerIndex": 1,
+      "explanation": "output = x + layer(x). Even if layer(x) learns nothing, x passes through unchanged. Deep transformers (96 layers in GPT-3) rely heavily on residuals for stable training.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-q11",
+      "type": "mcq",
+      "prompt": "RoPE (Rotary Position Embedding) vs sinusoidal PE advantage:",
+      "choices": [
+        "RoPE requires less memory",
+        "RoPE encodes relative positions naturally and generalises better to sequences longer than seen during training",
+        "RoPE is older",
+        "No advantage"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sinusoidal PE: absolute positions. RoPE: rotate queries and keys by position angle — inner product naturally encodes relative distance. Used by LLaMA, Mistral, GPT-NeoX.",
+      "tags": [
+        "transformers",
+        "positional-encoding"
+      ]
+    },
+    {
+      "id": "tr-q12",
+      "type": "mcq",
+      "prompt": "The d_model dimension in transformers represents:",
+      "choices": [
+        "Number of layers",
+        "The embedding/hidden dimension — all token representations are d_model-dimensional vectors throughout the network. Typical: 768 (BERT-base), 4096 (LLaMA 7B)",
+        "Vocabulary size",
+        "Context length"
+      ],
+      "answerIndex": 1,
+      "explanation": "d_model = width of the model. Larger d_model = more representational capacity per token. Tradeoffs: compute scales quadratically with d_model in attention.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-q13",
+      "type": "mcq",
+      "prompt": "T5 (Text-to-Text Transfer Transformer) treats all NLP tasks how?",
+      "choices": [
+        "As classification",
+        "As text-to-text — every task (translation, summary, QA, classification) is framed as: 'summarise: [input]' → '[output]'. Unified training format.",
+        "As masked prediction",
+        "As image captioning"
+      ],
+      "answerIndex": 1,
+      "explanation": "T5 unified NLP under one interface: prefix task name + input → output. Train once on mixture of tasks. Fine-tune by adding task prefix. Elegant simplification of encoder-decoder models.",
+      "tags": [
+        "transformers",
+        "T5"
+      ]
+    },
+    {
+      "id": "tr-q14",
+      "type": "mcq",
+      "prompt": "Flash Attention speeds up transformer training/inference by:",
+      "choices": [
+        "Reducing model parameters",
+        "Tiling the attention computation to stay within GPU SRAM — avoids materialising the full N×N attention matrix in HBM, reducing memory IO by ~10×",
+        "Approximating attention",
+        "Using faster hardware"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bottleneck in attention = HBM (slow) memory reads/writes for N×N matrix. Flash Attention: compute in tiles, keep intermediate values in fast SRAM. Same exact result, ~3× faster.",
+      "tags": [
+        "transformers",
+        "Flash Attention"
+      ]
+    },
+    {
+      "id": "tr-q15",
+      "type": "multi",
+      "prompt": "Which are encoder-only transformer models?",
+      "choices": [
+        "BERT",
+        "RoBERTa",
+        "GPT-4",
+        "DeBERTa"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "BERT, RoBERTa, DeBERTa are encoder-only (bidirectional, MLM training). GPT-4 is decoder-only (autoregressive). Encoder-only models excel at classification, NER, embeddings.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-q16",
+      "type": "mcq",
+      "prompt": "Scaled dot-product attention divides QK^T by √d_k because:",
+      "choices": [
+        "Normalization convention",
+        "For large d_k, dot products become very large → softmax saturates (gradients ≈ 0). Dividing by √d_k keeps magnitudes stable.",
+        "To match output dimension",
+        "Required by the loss function"
+      ],
+      "answerIndex": 1,
+      "explanation": "If Q·K are random unit vectors in d_k dimensions, their dot product variance is d_k. Scaling by 1/√d_k normalises variance to 1, preventing softmax from peaking (all attention on one token).",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    },
+    {
+      "id": "tr-q17",
+      "type": "mcq",
+      "prompt": "Layer Normalisation in transformers is applied:",
+      "choices": [
+        "Before each batch",
+        "After the residual addition (Post-LN) in original paper, or before each sub-layer (Pre-LN) in GPT-style models — Pre-LN more stable for deep networks",
+        "Only in BERT",
+        "To the embedding layer only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pre-LN (GPT, LLaMA): normalize inputs to each sub-layer → more training stability for very deep models. Post-LN (original paper) can diverge with very deep models without warm-up.",
+      "tags": [
+        "transformers",
+        "normalization"
+      ]
+    },
+    {
+      "id": "tr-q18",
+      "type": "mcq",
+      "prompt": "What does the vocabulary size V affect in transformer models?",
+      "choices": [
+        "Number of attention heads",
+        "Embedding matrix size (V × d_model) and final linear projection (d_model × V) — both are large. V=50K (GPT-2), 128K (Llama 3).",
+        "Sequence length",
+        "Number of layers"
+      ],
+      "answerIndex": 1,
+      "explanation": "Embedding table: V × d_model params. Output projection: d_model × V. For V=128K, d=4096: 524M params just in these two matrices. Vocabulary design affects memory and tokenization efficiency.",
+      "tags": [
+        "transformers",
+        "vocabulary"
+      ]
+    },
+    {
+      "id": "tr-q19",
+      "type": "mcq",
+      "prompt": "Why does increasing transformer depth (layers) improve performance up to a point?",
+      "choices": [
+        "More layers = faster inference",
+        "Deeper networks learn hierarchical representations — lower layers: syntax/local patterns; higher layers: semantics/reasoning. But: vanishing gradients, diminishing returns beyond ~96 layers.",
+        "More parameters always help",
+        "Depth affects only training speed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Hierarchy: early layers → tokens/syntax, middle → phrase structure, late → semantics/entity types. Very deep models hit diminishing returns and training instability. Width also matters.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-q20",
+      "type": "mcq",
+      "prompt": "Attention 'heads' in multi-head attention are combined by:",
+      "choices": [
+        "Addition",
+        "Concatenation followed by a linear projection — [head1 | head2 | ... | headN] × W_O → d_model",
+        "Average pooling",
+        "Softmax"
+      ],
+      "answerIndex": 1,
+      "explanation": "MHA: run h heads of d_k=d_model/h each. Concatenate all head outputs → (N × h·d_v). Multiply by W_O (h·d_v × d_model) to project back. Parameter W_O learns to combine head perspectives.",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "tr-fc1",
+      "front": "Self-attention (simplified)",
+      "back": "For each token: Q asks 'what do I need', K answers 'what I contain', V provides content. score = softmax(QK^T / √d). Output = weighted sum of V. Enables long-range relationships.",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    },
+    {
+      "id": "tr-fc2",
+      "front": "Transformer vs RNN",
+      "back": "RNN: sequential, vanishing gradients, can't parallelize. Transformer: parallel, attention handles any distance, GPU-friendly. Training speed and long-range deps → Transformers win.",
+      "tags": [
+        "transformers",
+        "RNN"
+      ]
+    },
+    {
+      "id": "tr-fc3",
+      "front": "Transformer types",
+      "back": "Encoder-only (BERT): bidirectional understanding, embeddings, classification. Decoder-only (GPT, Claude): text generation, chat. Encoder-decoder (T5): translation, seq2seq.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-fc4",
+      "front": "Causal masking",
+      "back": "Decoder: mask future tokens in attention matrix (set to -inf before softmax). Ensures autoregressive property: each token only attends to itself and previous tokens during training AND inference.",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    },
+    {
+      "id": "tr-fc5",
+      "front": "Multi-head attention (MHA)",
+      "back": "h parallel attention heads, each d_k=d_model/h. Each learns different relationships. Concatenate → linear project W_O. GPT-3: 96 heads, d_model=12288, d_k=128.",
+      "tags": [
+        "transformers",
+        "attention"
+      ]
+    },
+    {
+      "id": "tr-fc6",
+      "front": "Encoder vs Decoder",
+      "back": "Encoder (BERT): bidirectional, MLM training, classification/embeddings. Decoder (GPT): causal, next-token prediction, generation. Encoder-decoder (T5): sequence-to-sequence tasks.",
+      "tags": [
+        "transformers",
+        "architecture"
+      ]
+    },
+    {
+      "id": "tr-fc7",
+      "front": "Flash Attention",
+      "back": "Tile-based attention avoiding N×N HBM materialisation. Same math result as standard attention. ~3× speedup, ~10× memory reduction. Required for long-context (>8K) training.",
+      "tags": [
+        "transformers",
+        "Flash Attention"
+      ]
+    },
+    {
+      "id": "tr-fc8",
+      "front": "Scaling laws",
+      "back": "Chinchilla (Hoffmann et al.): optimal training: N_params ≈ 20 × training_tokens. 7B model → ~140B tokens optimal. Compute-optimal models outperform over-parameterized undertrained ones.",
+      "tags": [
+        "transformers",
+        "scaling"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Transformers and Attention\n\nDesign a realistic production service with Transformers and Attention at its core. No code required:\n\n1. Why Transformers and Attention over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "transformers-pc1",
+        "text": "Justified use of Transformers and Attention for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "transformers-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "transformers-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "transformers-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "transformers-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Transformers and Attention remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

@@ -1,0 +1,434 @@
+{
+  "id": "dsa-java-linked-lists",
+  "unit": 9,
+  "order": 62,
+  "title": "Linked Lists in Java",
+  "summary": "Singly/doubly linked lists, reversal, middle node, merge, and cycle detection.",
+  "prereqs": [
+    "dsa-java-arrays"
+  ],
+  "guide": "# Linked Lists in Java\n\nA linked list is a chain of **node objects** scattered anywhere in memory. Each node holds a value and a pointer (`next`) to the next node. Unlike arrays, there are no mailbox rows \u2014 nodes live wherever the heap puts them.\n\n```\nValue:   7      3     12      1    null\n        \u250c\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2500\u2510  \u250c\u2500\u2500\u2500\u2510\n        \u2502 7 \u2502\u2192 \u2502 3 \u2502\u2192 \u2502 12 \u2502\u2192 \u2502 1 \u2502\u2192 null\n        \u2514\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2500\u2518  \u2514\u2500\u2500\u2500\u2518\n         head\n```\n\n## Node Definition\n\n```java\nclass ListNode {\n    int val;\n    ListNode next;\n    ListNode(int val) { this.val = val; }\n}\n```\n\n## Singly vs Doubly Linked List\n\n```\nSingly:  head \u2192 [7|\u2192] \u2192 [3|\u2192] \u2192 [12|\u2192] \u2192 null\n                                           (no going back)\n\nDoubly:  head \u21cc [\u2190|7|\u2192] \u21cc [\u2190|3|\u2192] \u21cc [\u2190|12|\u2192] \u21cc null\n                                           (navigate both ways)\n```\n\n## Reversal \u2014 the three-pointer dance\n\nVisualise three runners on the chain: `prev`, `cur`, `next`.\n\n```\nStep 0:  null \u2190 prev   cur=7 \u2192 3 \u2192 12 \u2192 null\nStep 1:  null \u2190 7      cur=3 \u2192 12 \u2192 null    (7.next = null)\nStep 2:  null \u2190 7 \u2190 3  cur=12 \u2192 null        (3.next = 7)\nStep 3:  null \u2190 7 \u2190 3 \u2190 12  cur=null        (12.next = 3)\nReturn prev (= node 12) \u2014 new head\n```\n\n```java\nListNode reverse(ListNode head) {\n    ListNode prev = null, cur = head;\n    while (cur != null) {\n        ListNode next = cur.next;   // 1. save next BEFORE breaking the link\n        cur.next = prev;            // 2. flip the arrow\n        prev = cur;                 // 3. advance prev\n        cur = next;                 // 4. advance cur\n    }\n    return prev;  // last non-null node = new head\n}\n```\n\n## Fast/Slow Pointer (Floyd's Tortoise and Hare)\n\nTwo runners start at head. Slow moves 1 step, fast moves 2 steps per iteration.\n\n**Finding the middle:**\n```\nList:  1 \u2192 2 \u2192 3 \u2192 4 \u2192 5\n       s/f\n       1    2    3\n       \u2191f        \u2191f       fast reaches end\n            \u2191s          slow is at middle (3)\n```\n\n**Cycle detection:** If the list has a loop, fast eventually laps slow \u2014 they meet.\n```\nNo cycle: fast reaches null \u2192 no cycle\nCycle:    fast == slow at some node \u2192 cycle detected\n```\n\n```java\nboolean hasCycle(ListNode head) {\n    ListNode slow = head, fast = head;\n    while (fast != null && fast.next != null) {\n        slow = slow.next;\n        fast = fast.next.next;\n        if (slow == fast) return true;\n    }\n    return false;\n}\n```\n\n## Merge Two Sorted Lists\n\n```\nl1: 1 \u2192 3 \u2192 5\nl2: 2 \u2192 4 \u2192 6\n\nCompare heads: 1 < 2 \u2192 take from l1:  1 \u2192\n               3 > 2 \u2192 take from l2:  1 \u2192 2 \u2192\n               3 < 4 \u2192 take from l1:  1 \u2192 2 \u2192 3 \u2192 \u2026\nResult: 1 \u2192 2 \u2192 3 \u2192 4 \u2192 5 \u2192 6\n```\n\nUse a **dummy head** node \u2014 it eliminates special cases for inserting the very first node.\n\n## Dummy Head \u2014 removes edge-case code\n\n```java\nListNode dummy = new ListNode(0);\nListNode tail = dummy;\n// ... build list by setting tail.next = newNode; tail = tail.next;\nreturn dummy.next;  // real head\n```\n\n## K-th Node from End \u2014 one pass\n\n```\nk = 2, list: 1 \u2192 2 \u2192 3 \u2192 4 \u2192 5\nlead starts k=2 steps ahead of follow:\nlead:   1  2  3  4  5  null\nfollow: 1  2  3  4       \u2190 when lead is null, follow = k-th from end = 4\n```\n\n## LRU Cache \u2014 LinkedList + HashMap\n\n`HashMap<key, Node>` gives O(1) lookup.\n`DoublyLinkedList` gives O(1) move-to-front and evict-from-tail.\nTogether: O(1) get and put.\n\n## Complexity Cheatsheet\n\n| Operation | Time | Notes |\n|---|---|---|\n| Head insert / delete | O(1) | Only pointer updates |\n| Tail insert (with tail ptr) | O(1) | |\n| Access by index | O(n) | Must walk from head |\n| Search | O(n) | |\n| Reversal | O(n) O(1) space | Three pointer iterative |\n| Find middle | O(n) | Fast/slow pointer |\n| Cycle detection | O(n) O(1) space | Floyd's algorithm |\n\n## Common Pitfalls\n- Save `cur.next` to a temp variable **before** redirecting `cur.next` \u2014 or you lose the rest of the chain\n- Always handle `head == null` and single-node lists as base cases\n- Doubly linked list: must update BOTH `prev` and `next` on insert/delete\n- `LinkedList` in Java is a doubly linked list \u2014 good for queue/stack, bad for random access\n\n## Connections\n- **Stacks/Queues** \u2014 both can be implemented with a linked list\n- **Two Pointers** \u2014 fast/slow pointer is a two-pointer technique on a list\n- **Hashing** \u2014 HashMap + linked list = O(1) LRU cache\n",
+  "questions": [
+    {
+      "id": "djll-q1",
+      "type": "mcq",
+      "prompt": "Head insertion in a singly linked list is:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 0,
+      "explanation": "Only a few references change.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-q2",
+      "type": "mcq",
+      "prompt": "Floyd's cycle detection uses:",
+      "choices": [
+        "Sorting",
+        "Slow and fast pointers",
+        "A heap",
+        "Binary search"
+      ],
+      "answerIndex": 1,
+      "explanation": "The fast pointer catches the slow pointer in a cycle.",
+      "tags": [
+        "cycle"
+      ]
+    },
+    {
+      "id": "djll-q3",
+      "type": "mcq",
+      "prompt": "Random access by index in a linked list is:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "You must traverse node by node.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djll-q4",
+      "type": "codeOutput",
+      "prompt": "After reversing 1->2->3, the new head value is:",
+      "code": "// reverse(1->2->3) returns the new head",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "null"
+      ],
+      "answerIndex": 2,
+      "explanation": "The list becomes 3->2->1.",
+      "tags": [
+        "reversal"
+      ]
+    },
+    {
+      "id": "djll-q5",
+      "type": "multi",
+      "prompt": "Which references are tracked during iterative reversal?",
+      "choices": [
+        "prev",
+        "cur",
+        "next",
+        "root"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "prev/cur/next prevent losing the rest of the list.",
+      "tags": [
+        "reversal"
+      ]
+    },
+    {
+      "id": "djll-q6",
+      "type": "mcq",
+      "prompt": "Singly linked list node contains:",
+      "choices": [
+        "Only value",
+        "Value and next",
+        "Value, prev, next",
+        "Array of values"
+      ],
+      "answerIndex": 1,
+      "explanation": "One forward reference only.",
+      "tags": [
+        "structure"
+      ]
+    },
+    {
+      "id": "djll-q7",
+      "type": "mcq",
+      "prompt": "Doubly linked list node contains:",
+      "choices": [
+        "Only value",
+        "Value and next",
+        "Value, prev, next",
+        "Two nexts"
+      ],
+      "answerIndex": 2,
+      "explanation": "Bidirectional references.",
+      "tags": [
+        "structure"
+      ]
+    },
+    {
+      "id": "djll-q8",
+      "type": "mcq",
+      "prompt": "Find middle of list with fast/slow pointers \u2014 complexity:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Slow reaches middle when fast reaches end.",
+      "tags": [
+        "two-pointers"
+      ]
+    },
+    {
+      "id": "djll-q9",
+      "type": "mcq",
+      "prompt": "Iterative reverse space complexity:",
+      "choices": [
+        "O(n)",
+        "O(log n)",
+        "O(1)",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Three pointer variables only.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djll-q10",
+      "type": "mcq",
+      "prompt": "Merge two sorted lists \u2014 time complexity:",
+      "choices": [
+        "O(n*m)",
+        "O(n+m)",
+        "O(n log m)",
+        "O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Single pass through both lists.",
+      "tags": [
+        "merging"
+      ]
+    },
+    {
+      "id": "djll-q11",
+      "type": "mcq",
+      "prompt": "Java LinkedList implements:",
+      "choices": [
+        "List only",
+        "Deque only",
+        "List and Deque",
+        "Map"
+      ],
+      "answerIndex": 2,
+      "explanation": "Can be used as list or double-ended queue.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djll-q12",
+      "type": "mcq",
+      "prompt": "Tail append without a tail pointer \u2014 complexity:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "Impossible"
+      ],
+      "answerIndex": 2,
+      "explanation": "Must traverse to the last node.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djll-q13",
+      "type": "mcq",
+      "prompt": "Floyd: if slow and fast meet, a cycle:",
+      "choices": [
+        "Does not exist",
+        "Definitely exists",
+        "May exist",
+        "Is only detected once"
+      ],
+      "answerIndex": 1,
+      "explanation": "They only meet if fast laps slow inside a cycle.",
+      "tags": [
+        "floyd"
+      ]
+    },
+    {
+      "id": "djll-q14",
+      "type": "mcq",
+      "prompt": "To find cycle start after Floyd detection:",
+      "choices": [
+        "Impossible",
+        "Move one pointer to head, advance both one step at a time",
+        "Count list length",
+        "Use HashMap"
+      ],
+      "answerIndex": 1,
+      "explanation": "Math proves they meet again exactly at the cycle start.",
+      "tags": [
+        "floyd"
+      ]
+    },
+    {
+      "id": "djll-q15",
+      "type": "mcq",
+      "prompt": "Delete a node given only a pointer to it (not the last node):",
+      "choices": [
+        "Impossible",
+        "Copy next node's value, skip next node",
+        "Use prev pointer",
+        "Traverse from head"
+      ],
+      "answerIndex": 1,
+      "explanation": "Overwrite with next data then skip next.",
+      "tags": [
+        "deletion"
+      ]
+    },
+    {
+      "id": "djll-q16",
+      "type": "mcq",
+      "prompt": "Find k-th node from end in one pass:",
+      "choices": [
+        "Impossible",
+        "Two pointers k indices apart",
+        "Reverse then index",
+        "Count then subtract"
+      ],
+      "answerIndex": 1,
+      "explanation": "Advance lead pointer k steps, then move both until lead reaches end.",
+      "tags": [
+        "two-pointers"
+      ]
+    },
+    {
+      "id": "djll-q17",
+      "type": "mcq",
+      "prompt": "Dummy/sentinel head node helps because:",
+      "choices": [
+        "It speeds up traversal",
+        "Simplifies insert/delete at head \u2014 no special case",
+        "Required by Java",
+        "Saves memory"
+      ],
+      "answerIndex": 1,
+      "explanation": "Head pointer always stays valid.",
+      "tags": [
+        "technique"
+      ]
+    },
+    {
+      "id": "djll-q18",
+      "type": "codeOutput",
+      "prompt": "List before: 1->2->3. Delete node with value 2. Result:",
+      "code": "// deleteMiddle(1->2->3)",
+      "choices": [
+        "1->3",
+        "2->3",
+        "1->2",
+        "null"
+      ],
+      "answerIndex": 0,
+      "explanation": "Node 2 is removed by relinking 1 to 3.",
+      "tags": [
+        "deletion"
+      ]
+    },
+    {
+      "id": "djll-q19",
+      "type": "mcq",
+      "prompt": "LRU cache uses doubly linked list + HashMap to achieve:",
+      "choices": [
+        "O(log n) get and put",
+        "O(1) get and put",
+        "O(n) get, O(1) put",
+        "O(1) get, O(n) put"
+      ],
+      "answerIndex": 1,
+      "explanation": "Map gives O(1) lookup; list gives O(1) reorder.",
+      "tags": [
+        "lru"
+      ]
+    },
+    {
+      "id": "djll-q20",
+      "type": "mcq",
+      "prompt": "Best case for linked list over array:",
+      "choices": [
+        "Random access",
+        "Finding max",
+        "Insert/delete in the middle when you already hold the node",
+        "Sorting"
+      ],
+      "answerIndex": 2,
+      "explanation": "O(1) pointer rewire vs O(n) array shift.",
+      "tags": [
+        "comparison"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djll-fc1",
+      "front": "Singly node fields",
+      "back": "value and next.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc2",
+      "front": "Doubly node fields",
+      "back": "value, prev, next.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc3",
+      "front": "Fast/slow use",
+      "back": "Middle node or cycle detection.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc4",
+      "front": "Reverse list \u2014 space",
+      "back": "O(1) iterative; O(n) recursive (call stack).",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc5",
+      "front": "Java LinkedList",
+      "back": "Implements both List and Deque.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc6",
+      "front": "Floyd two-phase",
+      "back": "Phase 1: detect. Phase 2: move one ptr to head, step both by 1 to find start.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc7",
+      "front": "Dummy head",
+      "back": "Eliminates special-case logic for head insert/delete.",
+      "tags": [
+        "linked-list"
+      ]
+    },
+    {
+      "id": "djll-fc8",
+      "front": "K-th from end",
+      "back": "Two pointers: advance lead k steps, then move both until lead hits null.",
+      "tags": [
+        "linked-list"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Implement MyLinkedList with addFirst, addLast, removeFirst, reverse, and hasCycle tests.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Defines ListNode cleanly",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Handles empty list cases",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Implements iterative reverse",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Implements Floyd cycle detection",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "Use a dummy node to simplify insert/delete near head.",
+      "Save next before changing cur.next."
+    ]
+  }
+}

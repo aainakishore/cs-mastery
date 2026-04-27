@@ -1,0 +1,361 @@
+{
+  "id": "react-context",
+  "unit": 10,
+  "order": 91,
+  "title": "React Context API",
+  "summary": "Context API, Provider patterns, context composition, and avoiding the performance pitfalls of over-using context.",
+  "prereqs": ["react-hooks"],
+  "guide": "# React Context API\n\n## The Problem Context Solves\n\nWithout context, getting data from a grandparent to a grandchild means threading props through every layer in between — even components that don't use the data at all.\n\n```\nWithout Context — prop drilling:\n\n  <App user={user}>\n    <Layout user={user}>         ← doesn't use user, just passes it\n      <Sidebar user={user}>      ← doesn't use user, just passes it\n        <Avatar user={user} />   ← finally uses it\n      </Sidebar>\n    </Layout>\n  </App>\n\nWith Context:\n\n  <UserContext.Provider value={user}>\n    <App>\n      <Layout>             ← no user prop needed\n        <Sidebar>          ← no user prop needed\n          <Avatar />       ← reads context directly\n        </Sidebar>\n      </Layout>\n    </App>\n  </UserContext.Provider>\n```\n\n## Creating and Consuming Context\n\n```tsx\n// 1. Create the context with a default value\nconst ThemeContext = createContext<'light' | 'dark'>('light');\n\n// 2. Provide the value at any level\nfunction App() {\n  const [theme, setTheme] = useState<'light' | 'dark'>('light');\n  return (\n    <ThemeContext.Provider value={theme}>\n      <Layout />\n    </ThemeContext.Provider>\n  );\n}\n\n// 3. Consume anywhere below — no props needed\nfunction Button() {\n  const theme = useContext(ThemeContext);\n  return <button className={theme}>Click</button>;\n}\n```\n\n## The Context Update Flow\n\n```\nProvider value changes\n         │\n         ▼\nReact finds all components that useContext(ThemeContext)\n         │\n         ▼\nRe-renders ALL of them — regardless of which part of\nvalue they actually use\n         │\n         ▼\nChildren of those components re-render too\n(unless wrapped in React.memo)\n```\n\nThis is the core performance risk with context.\n\n## Pattern: Separate State from Dispatch\n\nSplit context into two separate contexts — one for the state (changes often) and one for the dispatch/actions (never changes). Components that only need to dispatch don't subscribe to state changes.\n\n```tsx\nconst StateContext = createContext<State | null>(null);\nconst DispatchContext = createContext<Dispatch<Action> | null>(null);\n\nfunction StoreProvider({ children }: { children: ReactNode }) {\n  const [state, dispatch] = useReducer(reducer, initialState);\n  return (\n    <StateContext.Provider value={state}>\n      <DispatchContext.Provider value={dispatch}>\n        {children}\n      </DispatchContext.Provider>\n    </StateContext.Provider>\n  );\n}\n\n// Components that only dispatch — never re-render when state changes\nfunction AddButton() {\n  const dispatch = useContext(DispatchContext);\n  return <button onClick={() => dispatch({ type: 'ADD' })}>Add</button>;\n}\n```\n\n## Custom Hook Pattern — the right way to expose context\n\nAlways wrap `useContext` in a custom hook. This:\n- Validates the context is used inside its Provider\n- Provides a better error message\n- Hides implementation details from consumers\n\n```tsx\nconst AuthContext = createContext<AuthState | null>(null);\n\nexport function useAuth() {\n  const ctx = useContext(AuthContext);\n  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');\n  return ctx;\n}\n\n// Usage:\nconst { user, logout } = useAuth(); // clear API, null-safe\n```\n\n## Context vs Props — Decision Reference\n\n```\nUse props when:\n  ✓ Data flows 1-2 levels deep\n  ✓ The relationship between parent/child is explicit and you want it visible\n  ✓ Data is specific to that component tree section\n\nUse context when:\n  ✓ Data needed by many components at different nesting levels\n  ✓ Global app data: auth, theme, locale, feature flags\n  ✓ Avoids deep prop drilling (>3 levels)\n\nDon't use context for:\n  ✗ Frequently changing data (every keystroke) — too many re-renders\n  ✗ Data local to a small subtree — just lift state to nearest common parent\n  ✗ Server state (fetched data) — use React Query / SWR instead\n```\n\n## The Re-render Problem and Solutions\n\n```tsx\n// Problem: value is a new object on every render\nfunction App() {\n  const [user, setUser] = useState(null);\n  return (\n    // { user, logout } is a NEW object each render → all consumers re-render!\n    <AuthContext.Provider value={{ user, logout }}>\n      ...\n    </AuthContext.Provider>\n  );\n}\n\n// Solution A: useMemo the value\nconst value = useMemo(() => ({ user, logout }), [user, logout]);\n<AuthContext.Provider value={value}>\n\n// Solution B: Separate contexts for separate concerns\n<UserContext.Provider value={user}>\n  <ActionsContext.Provider value={logout}>\n    ...\n  </ActionsContext.Provider>\n</UserContext.Provider>\n// Components needing only user rerender when user changes\n// Components needing only logout never rerender (logout is stable)\n```\n\n## Multiple Contexts — Provider Composition\n\n```tsx\n// Instead of nesting 5 providers:\n<ThemeProvider>\n  <AuthProvider>\n    <LocaleProvider>\n      <App />\n    </LocaleProvider>\n  </AuthProvider>\n</ThemeProvider>\n\n// Create a composite provider:\nfunction Providers({ children }: { children: ReactNode }) {\n  return (\n    <ThemeProvider>\n      <AuthProvider>\n        <LocaleProvider>\n          {children}\n        </LocaleProvider>\n      </AuthProvider>\n    </ThemeProvider>\n  );\n}\n// Usage: <Providers><App /></Providers>\n```\n\n## Context Default Value\n\n```tsx\n// Default value is used when a component is rendered OUTSIDE any Provider\nconst ThemeContext = createContext<'light' | 'dark'>('light');\n//                                                    ^^^^^^^\n//                                                    Used only when no Provider above\n\n// Common pattern for required context: default to null, throw in hook\nconst AuthContext = createContext<AuthState | null>(null);\n// If someone uses useAuth() without AuthProvider → custom hook throws clear error\n```\n\n## Complexity Reference\n\n| Pattern | Re-renders per value change | Notes |\n|---|---|---|\n| Single context, object value | All consumers | Common pitfall |\n| Split state/dispatch contexts | Only state consumers | Dispatch consumers skip |\n| Memoised context value | Only when deps change | Prevents object churn |\n| React.memo on consumers | Varies | Skips if props unchanged |\n\n## Common Pitfalls\n- Creating a new object/array as `value` every render — every consumer re-renders even when content is the same\n- Using context for rapidly-changing values (scroll position, cursor) — use a subscription or custom store instead\n- Not providing a Provider and getting the default value silently for type-correct contexts\n- Deep context nesting creating invisible coupling — consider component composition first\n\n## Connections\n- **react-hooks** — custom hooks are how you expose context cleanly\n- **react-rendering** — context value changes trigger all consumers even with React.memo on parent\n- **react-performance** — split contexts and useMemo prevent unnecessary re-renders",
+  "questions": [
+    {
+      "id": "rctx-q1",
+      "type": "mcq",
+      "prompt": "What problem does React Context primarily solve?",
+      "choices": [
+        "Slow renders in deeply nested trees",
+        "Prop drilling — threading data through intermediate components that don't need it",
+        "Sharing functions between sibling components",
+        "Global async state management"
+      ],
+      "answerIndex": 1,
+      "explanation": "Context lets you broadcast a value to any component in the tree without manually passing it through each level. The classic problem is 'prop drilling' — intermediate components that serve only as pass-throughs for data they don't use.",
+      "tags": ["context", "prop-drilling"]
+    },
+    {
+      "id": "rctx-q2",
+      "type": "mcq",
+      "prompt": "When a Context Provider's value changes, which components re-render?",
+      "choices": [
+        "Only the Provider component",
+        "All components that called useContext() for that context — regardless of which part of the value they use",
+        "Only direct children of the Provider",
+        "Components are smart enough to skip if their slice didn't change"
+      ],
+      "answerIndex": 1,
+      "explanation": "React re-renders ALL consumers of the context when the value changes — it doesn't selectively update only consumers that read the changed part. This is why passing large objects in a single context can cause performance issues.",
+      "tags": ["context", "re-renders", "performance"]
+    },
+    {
+      "id": "rctx-q3",
+      "type": "codeOutput",
+      "prompt": "What performance problem does this pattern have?",
+      "code": "function App() {\n  const [user, setUser] = useState(null);\n  return (\n    <AuthContext.Provider value={{ user, logout }}>\n      <Tree />\n    </AuthContext.Provider>\n  );\n}",
+      "choices": [
+        "No problem — this is the correct pattern",
+        "Every render creates a new `{ user, logout }` object — all consumers re-render even when user and logout haven't changed",
+        "setUser is not available to consumers",
+        "Provider without a key prop causes issues"
+      ],
+      "answerIndex": 1,
+      "explanation": "`{ user, logout }` is a new object literal on every render. Even if `user` is the same value and `logout` is stable (from useCallback), the wrapper object is a new reference. Context comparison uses Object.is on the value — new reference = all consumers re-render.",
+      "tags": ["context", "performance", "object-identity"]
+    },
+    {
+      "id": "rctx-q4",
+      "type": "mcq",
+      "prompt": "The 'separate state from dispatch' pattern for context means:",
+      "choices": [
+        "Never use dispatch with context",
+        "Put state in one context and dispatch/actions in another — components that only dispatch won't re-render when state changes",
+        "Use useState for state and useReducer for dispatch in the same context",
+        "Export action creators separately"
+      ],
+      "answerIndex": 1,
+      "explanation": "Dispatch from useReducer is always stable (same reference). If you put dispatch in its own context, components that only dispatch (like buttons) never re-render when state changes — they only subscribed to the dispatch context which never changes.",
+      "tags": ["context", "dispatch", "performance", "useReducer"]
+    },
+    {
+      "id": "rctx-q5",
+      "type": "mcq",
+      "prompt": "Why wrap useContext in a custom hook like `useAuth()`?",
+      "choices": [
+        "Required by TypeScript",
+        "To validate context is used inside its Provider (throw clear error) and hide implementation details from consumers",
+        "To make context reactive to changes",
+        "To prevent re-renders"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without the custom hook, consumers get `null` if used outside the Provider (when defaulting to null). The custom hook adds `if (!ctx) throw new Error(...)` — a clear, actionable error message. It also gives a stable API — the context implementation can change without touching every consumer.",
+      "tags": ["context", "custom-hooks", "patterns"]
+    },
+    {
+      "id": "rctx-q6",
+      "type": "mcq",
+      "prompt": "Context's default value (second arg to createContext) is used:",
+      "choices": [
+        "When the Provider's value prop is undefined",
+        "When a component calls useContext but there is no matching Provider anywhere above it in the tree",
+        "As the initial state before first render",
+        "When the context value is null"
+      ],
+      "answerIndex": 1,
+      "explanation": "The default value is a fallback for components rendered outside any Provider. If `createContext(null)` and a component calls `useContext(AuthContext)` with no Provider above it, it gets `null` — the default. Commonly used in testing or libraries to provide safe defaults.",
+      "tags": ["context", "default-value"]
+    },
+    {
+      "id": "rctx-q7",
+      "type": "mcq",
+      "prompt": "Should you use context for rapidly changing data like mouse position?",
+      "choices": [
+        "Yes — context is perfect for frequently updating data",
+        "No — every change re-renders all consumers; mouse position can change 60+ times per second causing severe performance issues",
+        "Yes if you memoize the value",
+        "Yes if you use useLayoutEffect to read it"
+      ],
+      "answerIndex": 1,
+      "explanation": "Context triggers re-renders in all consumers on every change. Mouse position updating at 60Hz means 60 full re-renders per second for every consumer. For high-frequency data, use a ref (no re-render), a subscription pattern, or a purpose-built library like Zustand.",
+      "tags": ["context", "performance", "high-frequency"]
+    },
+    {
+      "id": "rctx-q8",
+      "type": "multi",
+      "prompt": "Which are good use cases for React Context?",
+      "choices": [
+        "Authentication state (current user, logout function)",
+        "UI theme (light/dark mode)",
+        "Every keystroke in a search input",
+        "Locale/language preference"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Auth, theme, and locale change infrequently and are needed across the app — ideal for context. Keystroke-level data changes many times per second and is local to one component — it belongs in useState close to where it's used, not a global context.",
+      "tags": ["context", "use-cases"]
+    },
+    {
+      "id": "rctx-q9",
+      "type": "mcq",
+      "prompt": "To fix the 'new object on every render' context bug, the best approach is:",
+      "choices": [
+        "Wrap the Provider in React.memo",
+        "Use useMemo to memoize the context value, or split into separate state/dispatch contexts",
+        "Pass a string instead of an object",
+        "List the context in a dep array"
+      ],
+      "answerIndex": 1,
+      "explanation": "`const value = useMemo(() => ({ user, logout }), [user, logout])` — only creates a new object when `user` or `logout` actually changes. Alternatively, split into `<UserContext.Provider value={user}><ActionsContext.Provider value={{ logout }}>` so they update independently.",
+      "tags": ["context", "performance", "useMemo"]
+    },
+    {
+      "id": "rctx-q10",
+      "type": "mcq",
+      "prompt": "Does React.memo on a consumer component prevent context-triggered re-renders?",
+      "choices": [
+        "Yes — React.memo skips all re-renders",
+        "No — React.memo only compares props. Context changes bypass React.memo",
+        "Only if the context value is a primitive",
+        "Yes if the context value is memoized"
+      ],
+      "answerIndex": 1,
+      "explanation": "React.memo wraps a component and skips re-rendering if props are unchanged. But when a context value changes, React directly re-renders ALL consumers regardless of React.memo. memo protects against PARENT re-renders propagating down — not against context updates.",
+      "tags": ["context", "React.memo", "re-renders"]
+    },
+    {
+      "id": "rctx-q11",
+      "type": "mcq",
+      "prompt": "Multiple context values can be composed cleanly by:",
+      "choices": [
+        "Passing all values in one mega-context",
+        "Creating a Providers wrapper component that nests all Provider components — used once at the app root",
+        "Using provider chaining via the extends keyword",
+        "Using a flat array of contexts"
+      ],
+      "answerIndex": 1,
+      "explanation": "A dedicated `<Providers>` wrapper component nests all providers internally. The app root uses `<Providers><App /></Providers>` — one clean line. Adding a new provider means editing one file. This is a common pattern in large React apps.",
+      "tags": ["context", "composition", "patterns"]
+    },
+    {
+      "id": "rctx-q12",
+      "type": "codeOutput",
+      "prompt": "What does this component render when used outside any ThemeContext.Provider?",
+      "code": "const ThemeContext = createContext<'light' | 'dark'>('light');\n\nfunction Button() {\n  const theme = useContext(ThemeContext);\n  return <button className={theme}>Click</button>;\n}",
+      "choices": [
+        "An error — no Provider found",
+        "Button with className='light' — uses the default value",
+        "Button with no className",
+        "null"
+      ],
+      "answerIndex": 1,
+      "explanation": "When no Provider is found, useContext returns the default value passed to createContext — here `'light'`. The button renders with `className='light'`. No error. This can be a silent bug if the default is null and you're not doing a null check.",
+      "tags": ["context", "default-value"]
+    },
+    {
+      "id": "rctx-q13",
+      "type": "mcq",
+      "prompt": "Context is NOT a replacement for which of these?",
+      "choices": [
+        "Prop drilling",
+        "Global theme state",
+        "Server-state management (caching fetched API data, background refetching, optimistic updates)",
+        "Locale settings"
+      ],
+      "answerIndex": 2,
+      "explanation": "Context is for synchronous state that lives in the React tree. Server state — fetched data, caching, background updates, invalidation — has a very different lifecycle. Libraries like React Query / TanStack Query or SWR are designed for server state. Using context for it leads to complex stale-data bugs.",
+      "tags": ["context", "server-state"]
+    },
+    {
+      "id": "rctx-q14",
+      "type": "mcq",
+      "prompt": "If Component A provides a UserContext, and Component B renders inside A but provides its OWN UserContext.Provider, components inside B read:",
+      "choices": [
+        "A's context — providers don't override",
+        "B's context — the nearest Provider wins",
+        "Both values merged",
+        "An error — duplicate Providers are not allowed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Context reads from the nearest Provider above in the tree. This lets you intentionally override context for a subtree — common in testing (wrapping a component in a mock provider) or in UI libraries that may need their own isolated context.",
+      "tags": ["context", "nearest-provider"]
+    },
+    {
+      "id": "rctx-q15",
+      "type": "multi",
+      "prompt": "Which approaches prevent unnecessary re-renders when a context value changes?",
+      "choices": [
+        "Memoize the context value with useMemo",
+        "Split into separate contexts for different data shapes",
+        "Use React.memo on the Provider",
+        "Keep context values as primitives when possible (primitives compare by value)"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Memoized values (A), split contexts (B), and primitive values (D) all reduce unnecessary re-renders. React.memo on the Provider (C) prevents the Provider's own re-render if its props haven't changed — but the consumers still re-render when the context value changes.",
+      "tags": ["context", "performance", "optimisation"]
+    },
+    {
+      "id": "rctx-q16",
+      "type": "mcq",
+      "prompt": "The cleanest TypeScript pattern for a required context (no safe default) is:",
+      "choices": [
+        "createContext<AuthState>(undefined as any)",
+        "createContext<AuthState | null>(null) — then in a custom hook, throw if null",
+        "createContext<AuthState>({} as AuthState)",
+        "Avoid TypeScript for contexts"
+      ],
+      "answerIndex": 1,
+      "explanation": "`createContext<AuthState | null>(null)` is correct TypeScript — the default is null (no Provider). The custom hook `useAuth` reads the context and throws `new Error('must be inside AuthProvider')` if it's null. This gives both correct types and a helpful runtime error.",
+      "tags": ["context", "typescript", "patterns"]
+    },
+    {
+      "id": "rctx-q17",
+      "type": "mcq",
+      "prompt": "Component composition (passing JSX as children/slots) vs Context: when is comp composition better?",
+      "choices": [
+        "Component composition is always better",
+        "When the data only needs to travel 1-2 levels deep, passing JSX itself avoids both prop drilling and context overhead",
+        "Context is always better than composition",
+        "Composition requires Redux"
+      ],
+      "answerIndex": 1,
+      "explanation": "If you have `<Page><Avatar user={user} /></Page>` where page doesn't use user, consider: `<Page element={<Avatar user={user} />} />` — pass the composed JSX. This way user stays in the component that creates Avatar and Page never sees it. No prop drilling, no context.",
+      "tags": ["context", "composition", "design"]
+    },
+    {
+      "id": "rctx-q18",
+      "type": "codeOutput",
+      "prompt": "How many times does ChildB re-render when count changes in this setup?",
+      "code": "const ValueCtx = createContext(0);\nconst SetterCtx = createContext<React.Dispatch<React.SetStateAction<number>>>(() => {});\n\nfunction Parent() {\n  const [count, setCount] = useState(0);\n  return (\n    <ValueCtx.Provider value={count}>\n      <SetterCtx.Provider value={setCount}>\n        <ChildA />\n        <ChildB />\n      </SetterCtx.Provider>\n    </ValueCtx.Provider>\n  );\n}\n\nfunction ChildA() { return <span>{useContext(ValueCtx)}</span>; }\nfunction ChildB() { const set = useContext(SetterCtx); return <button onClick={() => set(c => c+1)}>+</button>; }",
+      "choices": [
+        "1 — ChildB re-renders because count changed",
+        "0 — ChildB only reads SetterCtx which never changes",
+        "2 — once for each context",
+        "It depends on React version"
+      ],
+      "answerIndex": 1,
+      "explanation": "ChildB only subscribes to SetterCtx. setCount (from useState) has a stable reference — it never changes. When count updates, ValueCtx changes (ChildA re-renders) but SetterCtx does NOT change — ChildB skips the re-render. This is the exact benefit of splitting state and setter contexts.",
+      "tags": ["context", "split-context", "re-renders"]
+    },
+    {
+      "id": "rctx-q19",
+      "type": "mcq",
+      "prompt": "Can context replace all uses of component props?",
+      "choices": [
+        "Yes — context is more powerful",
+        "No — props make data flow explicit and are better for data specific to a component pair. Context is for cross-cutting concerns",
+        "Yes if using TypeScript",
+        "Only for primitive values"
+      ],
+      "answerIndex": 1,
+      "explanation": "Props are intentionally explicit — you can see exactly what data a component receives. This is valuable for maintainability. Context hides data flow, making it harder to trace where a value comes from. Use props as the default; reach for context only when prop drilling becomes painful (>3 levels, many components).",
+      "tags": ["context", "props", "design"]
+    },
+    {
+      "id": "rctx-q20",
+      "type": "mcq",
+      "prompt": "What happens if you call `useContext(SomeContext)` outside a React function component?",
+      "choices": [
+        "Returns the default value",
+        "Throws a hooks rule violation — hooks can only be called inside React function components or custom hooks",
+        "Returns undefined",
+        "Reads from the global context store"
+      ],
+      "answerIndex": 1,
+      "explanation": "useContext is a hook — subject to all rules of hooks. It can only be called inside React function components or inside other hooks. Calling it in a regular function, class component, or outside React throws an invalid hook call error.",
+      "tags": ["context", "hooks-rules"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rctx-fc1",
+      "front": "Context re-render scope",
+      "back": "ALL components that useContext() for a context re-render when its value changes — regardless of which slice they read. Split contexts to limit blast radius.",
+      "tags": ["context", "re-renders"]
+    },
+    {
+      "id": "rctx-fc2",
+      "front": "Fix: new object context value",
+      "back": "`const val = useMemo(() => ({ user, logout }), [user, logout])` — prevents new object on every render. Alternative: split into separate contexts.",
+      "tags": ["context", "useMemo", "performance"]
+    },
+    {
+      "id": "rctx-fc3",
+      "front": "Context default value used when",
+      "back": "No matching Provider above in the tree. Not when value is undefined/null. Always provide a safe default or throw in a custom hook wrapper.",
+      "tags": ["context", "default-value"]
+    },
+    {
+      "id": "rctx-fc4",
+      "front": "Split state/dispatch context pattern",
+      "back": "dispatch from useReducer is always stable. Put dispatch in its own context. Components that only dispatch never re-render when state changes.",
+      "tags": ["context", "useReducer", "dispatch"]
+    },
+    {
+      "id": "rctx-fc5",
+      "front": "React.memo + context",
+      "back": "React.memo blocks parent-triggered re-renders but NOT context-triggered ones. Context changes always reach consumers directly.",
+      "tags": ["context", "React.memo"]
+    },
+    {
+      "id": "rctx-fc6",
+      "front": "Custom hook for context",
+      "back": "Wrap `useContext` in `useFoo()`. Check for null and throw. Hides implementation, gives clear error when used outside Provider, stable consumer API.",
+      "tags": ["context", "custom-hooks"]
+    },
+    {
+      "id": "rctx-fc7",
+      "front": "Context vs server state",
+      "back": "Context for synchronous app state (auth, theme). NOT for server state (fetched data). Use React Query or SWR for caching, background refetching, stale data.",
+      "tags": ["context", "server-state"]
+    },
+    {
+      "id": "rctx-fc8",
+      "front": "Nearest Provider wins",
+      "back": "useContext reads from the closest Provider above in the tree. Works intentionally for test overrides and library isolation.",
+      "tags": ["context", "provider"]
+    }
+  ],
+  "project": {
+    "brief": "Design a multi-context app shell for a SaaS dashboard with three cross-cutting concerns: 1) AuthContext — current user, login, logout. 2) ThemeContext — light/dark/system preference with persistence to localStorage. 3) NotificationContext — list of toast messages, actions: addNotification, dismissNotification. For each: describe the context shape, how the Provider stores state (useState or useReducer?), the custom hook API consumers use, and what value is passed to the Provider. Then address: how would you prevent NotificationContext updates from re-rendering the AuthContext consumers?",
+    "checklist": [
+      { "id": "c1", "text": "AuthContext uses { user, login, logout } — memoised value or split state/actions contexts", "weight": 1 },
+      { "id": "c2", "text": "ThemeContext uses useState + localStorage sync in useEffect, exposes { theme, setTheme }", "weight": 1 },
+      { "id": "c3", "text": "NotificationContext uses useReducer for list management — ADD and DISMISS actions", "weight": 1 },
+      { "id": "c4", "text": "Each context has a custom hook (useAuth, useTheme, useNotifications) that throws outside its Provider", "weight": 1 },
+      { "id": "c5", "text": "Explains isolation: separate contexts = separate subscriptions = notifications don't trigger auth consumers", "weight": 1 }
+    ],
+    "hints": [
+      "Auth: split into UserContext (value={user}) and AuthActionsContext (value={login, logout}) — login/logout can be stable useCallback.",
+      "Theme: const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? 'light') — lazy init from storage.",
+      "Notifications: useReducer with { notifications: Notification[] } state — dispatch ADD/DISMISS actions.",
+      "Isolation: three completely separate Provider trees. NotificationContext changes only re-render notification consumers."
+    ]
+  }
+}
+

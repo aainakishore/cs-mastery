@@ -1,0 +1,442 @@
+{
+  "id": "dsa-java-trees",
+  "unit": 9,
+  "order": 78,
+  "title": "Tree Data Structures in Java",
+  "summary": "BST, AVL, Red-Black, Segment Tree, Fenwick Tree, Trie, B-Tree \u2014 when to use each and how they keep operations fast.",
+  "prereqs": [
+    "dsa-java-binary-trees",
+    "dsa-java-heaps"
+  ],
+  "guide": "# Tree Data Structures in Java\n\nA tree is a **hierarchical structure**: one root, no cycles, every node reachable from the root. Different tree types enforce different invariants to make specific operations fast. Choosing the right tree means knowing which invariant you need.\n\n```\n         GENERIC TREE TAXONOMY\n         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n         \u2502           Tree                   \u2502\n         \u2502     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2510             \u2502\n         \u2502  Binary          N-ary           \u2502\n         \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u2502\n         \u2502 BST       Balanced             \u2502\n         \u2502           \u250c\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2510          \u2502\n         \u2502          AVL    Red-Black       \u2502\n         \u2502  Heaps (complete binary)        \u2502\n         \u2502  Segment / Fenwick (implicit)   \u2502\n         \u2502  B-Tree / B+-Tree (disk)        \u2502\n         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n## Binary Search Tree (BST)\n\nInvariant: **left < node < right** (all values, recursively).\n\n```\n        8\n       / \\\n      3   10\n     / \\    \\\n    1   6   14\n       / \\\n      4   7\n\nIn-order: 1 3 4 6 7 8 10 14  \u2190 always sorted\n```\n\nOperations: O(log n) average, O(n) worst (degenerate/skewed tree from sorted inserts).\n\n## AVL Tree \u2014 Self-Balancing BST\n\nInvariant: **|height(left) - height(right)| \u2264 1** at every node (balance factor \u2208 {-1, 0, 1}).\n\nWhen an insert/delete breaks this, a **rotation** restores balance in O(1).\n\n```\nInsert 30 into:     20            Becomes (Left Rotation):    25\n                   /  \\                                      /  \\\n                  10   25                                   20   30\n                         \\                                 /  \\\n                          30  \u2190 imbalance (BF=\u22122 at 20) 10   25\n\nAVL height: always O(log n) \u2192 guaranteed O(log n) search, insert, delete.\n```\n\n## Red-Black Tree \u2014 Colour-Based Balance\n\nFive invariants (including: root=black, no two consecutive reds, equal black-height on all paths) ensure height \u2264 2 log\u2082(n+1).\n\nWhy Java uses it: `TreeMap`, `TreeSet`, and `HashMap`'s long-chain bucket all use Red-Black trees.\n\n```\n        B(8)\n       /     \\\n     R(3)   B(10)\n    /   \\       \\\n  B(1) B(6)    R(14)\n       /   \\\n     R(4)  R(7)\n\nB=Black, R=Red \u2014 satisfies all RB properties.\n```\n\nAVL vs Red-Black: AVL is more strictly balanced (faster reads), but Red-Black does fewer rotations on insert/delete (faster writes). Java chose Red-Black for its collections.\n\n## Segment Tree \u2014 Range Queries in O(log n)\n\nA segment tree stores aggregate values (sum, min, max) for every subarray interval.\n\n```\nArray:  [1, 3, 2, 7, 9, 11]\n\nSegment tree (sum):\n                 33 [0..5]\n               /           \\\n          6 [0..2]       27 [3..5]\n          /      \\       /      \\\n       4 [0..1] 2[2] 16 [3..4] 11[5]\n       /    \\       /    \\\n     1[0]  3[1]  7[3]  9[4]\n\nQuery sum(1,4) = 3+2+7+9 = 21 \u2192 O(log n) by combining at most 2log(n) nodes.\nUpdate arr[2] = 10 \u2192 O(log n) \u2014 walk path from leaf to root.\n```\n\n## Fenwick Tree (Binary Indexed Tree) \u2014 Compact Prefix Sums\n\nA Fenwick tree stores partial sums using bit manipulation on indices.\nSimpler code than a segment tree; supports point-update + prefix-sum in O(log n).\n\n```java\nvoid update(int[] bit, int i, int delta) {\n    for (i++; i < bit.length; i += i & (-i)) bit[i] += delta;\n}\nint query(int[] bit, int i) {\n    int sum = 0;\n    for (i++; i > 0; i -= i & (-i)) sum += bit[i];\n    return sum;\n}\n// Range sum(l,r) = query(r) - query(l-1)\n```\n\n## Trie \u2014 Prefix Tree\n\nEach edge is a character; each root-to-node path is a prefix.\nO(L) insert, search, and startsWith (L = string length), independent of n.\n(Full coverage in dsa-java-tries topic.)\n\n## B-Tree / B+-Tree \u2014 Disk-Optimised\n\nUsed inside every relational database index (MySQL InnoDB uses B+-Tree).\n\n```\nB-TREE node holds multiple keys and pointers (degree d):\n    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n    \u2502  10  \u2502  20  \u2502  30   \u2502   \u2190 keys\n    \u2514\u2500\u2500\u252c\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u252c\u2500\u2500\u2534\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2518\n       \u2193       \u2193      \u2193\n   [<10]    [10-20] [>30]   \u2190 subtrees\n```\n\nProperty: all leaves at the same depth. Node holds d to 2d keys.\nWhy disks? Minimises I/O: one disk read fetches an entire node (many keys).\n\n## Heap (Complete Binary Tree)\n\nShape: complete tree stored in array (no pointers needed).\nOrder: min-heap: parent \u2264 children; max-heap: parent \u2265 children.\nO(log n) insert/extract-min. O(n) heapify.\n(Full coverage in dsa-java-heaps topic.)\n\n## Choosing the Right Tree\n\n| Need | Use |\n|---|---|\n| Sorted iteration + range delete | TreeMap / TreeSet (Red-Black) |\n| Priority queue (always want min/max) | PriorityQueue (min-heap) |\n| Prefix search / autocomplete | Trie |\n| Range sum / range min queries with updates | Segment Tree |\n| Prefix sum with point updates (simpler code) | Fenwick Tree |\n| Disk-based sorted index | B+-Tree |\n| Height-balanced BST with fastest read | AVL Tree |\n\n## Common Pitfalls\n- Confusing BST (sorted but may be skewed) with balanced BST (AVL, RB \u2014 always O(log n))\n- Segment tree: 1-indexed vs 0-indexed \u2014 fix one convention and stick to it\n- Fenwick tree: `i & (-i)` isolates the lowest set bit \u2014 easy to mis-apply without visualising binary\n- B-Tree vs B+-Tree: B+-Tree stores all data in leaves (leaves linked) \u2014 gives efficient range scans\n\n## Connections\n- **Binary Trees** \u2014 all tree types are specialisations of binary or k-ary trees\n- **Heaps** \u2014 complete binary tree with a different (order not search) invariant\n- **Hashing** \u2014 Java's HashMap uses Red-Black trees for long collision chains\n- **Graphs** \u2014 trees are acyclic connected graphs; tree algorithms generalise to graph traversal\n",
+  "questions": [
+    {
+      "id": "djt-q1",
+      "type": "mcq",
+      "prompt": "A BST guarantees O(log n) search when:",
+      "choices": [
+        "It stores only integers",
+        "It is balanced \u2014 height O(log n)",
+        "It has no duplicate keys",
+        "All left children are 0"
+      ],
+      "answerIndex": 1,
+      "explanation": "An unbalanced BST (e.g. sorted inserts) degenerates to O(n) height. Balance is required for O(log n).",
+      "tags": [
+        "bst"
+      ]
+    },
+    {
+      "id": "djt-q2",
+      "type": "mcq",
+      "prompt": "In-order traversal of a BST produces:",
+      "choices": [
+        "Pre-order sequence",
+        "Reverse sorted output",
+        "Sorted ascending output",
+        "Level-by-level output"
+      ],
+      "answerIndex": 2,
+      "explanation": "BST invariant left<root<right means in-order (left\u2192root\u2192right) always yields sorted order.",
+      "tags": [
+        "bst",
+        "traversal"
+      ]
+    },
+    {
+      "id": "djt-q3",
+      "type": "mcq",
+      "prompt": "AVL tree balance factor at every node must be:",
+      "choices": [
+        "-2, -1, 0, 1, or 2",
+        "-1, 0, or 1",
+        "Always 0",
+        "0 or 1"
+      ],
+      "answerIndex": 1,
+      "explanation": "AVL: |height(left) - height(right)| \u2264 1. Factor outside {-1,0,1} triggers a rotation.",
+      "tags": [
+        "avl"
+      ]
+    },
+    {
+      "id": "djt-q4",
+      "type": "mcq",
+      "prompt": "What triggers a rotation in an AVL tree?",
+      "choices": [
+        "Any insert or delete",
+        "An insert or delete that makes a node's balance factor +2 or -2",
+        "Finding a duplicate key",
+        "Reaching height > 10"
+      ],
+      "answerIndex": 1,
+      "explanation": "When the balance factor goes outside {-1,0,1}, the tree is rebalanced via single or double rotation.",
+      "tags": [
+        "avl"
+      ]
+    },
+    {
+      "id": "djt-q5",
+      "type": "mcq",
+      "prompt": "Java's TreeMap and TreeSet are backed by:",
+      "choices": [
+        "AVL tree",
+        "Min-heap",
+        "Red-Black tree",
+        "Skip list"
+      ],
+      "answerIndex": 2,
+      "explanation": "Java chose Red-Black trees for its sorted collections because they require fewer rotations on insert/delete than AVL trees.",
+      "tags": [
+        "red-black",
+        "java"
+      ]
+    },
+    {
+      "id": "djt-q6",
+      "type": "mcq",
+      "prompt": "Red-Black tree vs AVL tree \u2014 which is faster for read-heavy workloads?",
+      "choices": [
+        "Red-Black \u2014 fewer rotations",
+        "AVL \u2014 more strictly balanced so shorter, faster search paths",
+        "They are identical",
+        "Depends on key type"
+      ],
+      "answerIndex": 1,
+      "explanation": "AVL height \u2264 1.44 log\u2082n vs Red-Black \u2264 2 log\u2082(n+1). Stricter balance = slightly faster reads.",
+      "tags": [
+        "avl",
+        "red-black"
+      ]
+    },
+    {
+      "id": "djt-q7",
+      "type": "mcq",
+      "prompt": "A Segment Tree with n leaves answers range sum queries in:",
+      "choices": [
+        "O(n)",
+        "O(log n)",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each query visits at most 4 log n nodes by combining pre-computed interval aggregates.",
+      "tags": [
+        "segment-tree"
+      ]
+    },
+    {
+      "id": "djt-q8",
+      "type": "mcq",
+      "prompt": "A Segment Tree point-update (change one element) runs in:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Update walks from leaf to root \u2014 O(log n) nodes on the path.",
+      "tags": [
+        "segment-tree"
+      ]
+    },
+    {
+      "id": "djt-q9",
+      "type": "mcq",
+      "prompt": "Fenwick tree (BIT) update uses the expression i += i & (-i) to:",
+      "choices": [
+        "Move to parent",
+        "Move to left child",
+        "Move to next responsible index (next ancestor in BIT structure)",
+        "Detect overflow"
+      ],
+      "answerIndex": 2,
+      "explanation": "i & (-i) isolates the lowest set bit; adding it jumps to the next BIT node that covers index i.",
+      "tags": [
+        "fenwick"
+      ]
+    },
+    {
+      "id": "djt-q10",
+      "type": "mcq",
+      "prompt": "Why does a B+-Tree (not B-Tree) store all data in leaf nodes?",
+      "choices": [
+        "Simpler implementation",
+        "Leaf nodes are linked \u2014 enables O(n) forward range scan without going back up",
+        "Saves space",
+        "Required by SQL standard"
+      ],
+      "answerIndex": 1,
+      "explanation": "Linked leaves let the DB engine scan a range by following leaf pointers without re-traversing internal nodes.",
+      "tags": [
+        "b-tree"
+      ]
+    },
+    {
+      "id": "djt-q11",
+      "type": "mcq",
+      "prompt": "A Trie stores n words of average length L. Search time for one word is:",
+      "choices": [
+        "O(n)",
+        "O(L)",
+        "O(n \u00d7 L)",
+        "O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trie navigates exactly L edges regardless of how many words are stored.",
+      "tags": [
+        "trie"
+      ]
+    },
+    {
+      "id": "djt-q12",
+      "type": "mcq",
+      "prompt": "Heap differs from BST in that a heap:",
+      "choices": [
+        "Is always sorted",
+        "Has the root as minimum (min-heap) but does NOT support efficient arbitrary search",
+        "Requires O(n log n) build",
+        "Cannot store duplicates"
+      ],
+      "answerIndex": 1,
+      "explanation": "Heap order: parent \u2264 children (min-heap). There is no left < root < right invariant \u2014 searching is O(n).",
+      "tags": [
+        "heap",
+        "bst"
+      ]
+    },
+    {
+      "id": "djt-q13",
+      "type": "codeOutput",
+      "prompt": "BST insert order [5,3,7,1,4]. In-order traversal output:",
+      "code": "// Build BST inserting in order: 5, 3, 7, 1, 4\n// In-order traversal",
+      "choices": [
+        "5 3 7 1 4",
+        "1 3 4 5 7",
+        "5 7 3 4 1",
+        "1 4 3 7 5"
+      ],
+      "answerIndex": 1,
+      "explanation": "In-order of a BST always yields sorted order: 1,3,4,5,7.",
+      "tags": [
+        "bst",
+        "traversal"
+      ]
+    },
+    {
+      "id": "djt-q14",
+      "type": "mcq",
+      "prompt": "Inserting already-sorted data into a plain BST creates:",
+      "choices": [
+        "A perfectly balanced tree",
+        "A degenerate tree (linked list) with O(n) height",
+        "An AVL tree automatically",
+        "A Red-Black tree automatically"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each new element is always inserted as the rightmost child \u2014 the tree grows as a straight line.",
+      "tags": [
+        "bst"
+      ]
+    },
+    {
+      "id": "djt-q15",
+      "type": "mcq",
+      "prompt": "Segment Tree vs Fenwick Tree \u2014 when should you choose Fenwick?",
+      "choices": [
+        "When you need range min/max queries",
+        "When range is 2D",
+        "When you only need prefix sums with point updates \u2014 simpler code, same O(log n)",
+        "When n > 10^6"
+      ],
+      "answerIndex": 2,
+      "explanation": "Fenwick only supports associative invertible operations (sum). Segment tree is more flexible but has more code.",
+      "tags": [
+        "segment-tree",
+        "fenwick"
+      ]
+    },
+    {
+      "id": "djt-q16",
+      "type": "mcq",
+      "prompt": "A complete binary tree is stored in an array where index 0 is the root. The right child of index 3 is at:",
+      "choices": [
+        "6",
+        "7",
+        "8",
+        "4"
+      ],
+      "answerIndex": 2,
+      "explanation": "right child of i = 2i+2. right child of 3 = 8.",
+      "tags": [
+        "heap",
+        "array-index"
+      ]
+    },
+    {
+      "id": "djt-q17",
+      "type": "multi",
+      "prompt": "Which tree structures guarantee O(log n) worst-case search?",
+      "choices": [
+        "Plain BST",
+        "AVL Tree",
+        "Red-Black Tree",
+        "Segment Tree"
+      ],
+      "answerIndexes": [
+        1,
+        2
+      ],
+      "explanation": "Plain BST degenerates to O(n). Segment Tree is not a search tree \u2014 it answers range queries, not individual searches.",
+      "tags": [
+        "comparison"
+      ]
+    },
+    {
+      "id": "djt-q18",
+      "type": "mcq",
+      "prompt": "B-Tree nodes hold multiple keys to minimise disk I/O because:",
+      "choices": [
+        "Multiple keys reduce tree height \u2014 one disk read fetches an entire 4KB node with many keys",
+        "CPUs prefer multiple keys",
+        "It avoids pointer arithmetic",
+        "Databases require sorted output"
+      ],
+      "answerIndex": 0,
+      "explanation": "A B-Tree of degree 500 has height ~log\u2085\u2080\u2080(n) \u2014 drastically few disk reads vs a binary tree's log\u2082(n).",
+      "tags": [
+        "b-tree"
+      ]
+    },
+    {
+      "id": "djt-q19",
+      "type": "mcq",
+      "prompt": "AVL tree single left rotation is needed when:",
+      "choices": [
+        "Left subtree is too tall \u2014 left-left case",
+        "Right subtree is too tall \u2014 right-right case",
+        "Both subtrees equal height",
+        "Root has no parent"
+      ],
+      "answerIndex": 1,
+      "explanation": "Right-right imbalance (balance factor -2) is fixed by a single left rotation. Right-left imbalance requires a double rotation.",
+      "tags": [
+        "avl"
+      ]
+    },
+    {
+      "id": "djt-q20",
+      "type": "mcq",
+      "prompt": "Which tree gives O(L) prefix existence check (where L = prefix length), independent of number of stored words?",
+      "choices": [
+        "BST",
+        "Red-Black Tree",
+        "Trie",
+        "Segment Tree"
+      ],
+      "answerIndex": 2,
+      "explanation": "Trie navigates exactly L edges for any prefix query, regardless of the number of stored words n.",
+      "tags": [
+        "trie"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djt-fc1",
+      "front": "BST invariant",
+      "back": "All left subtree values < node < all right subtree values (recursively).",
+      "tags": [
+        "bst"
+      ]
+    },
+    {
+      "id": "djt-fc2",
+      "front": "AVL balance factor",
+      "back": "|height(left) - height(right)| \u2264 1. Violation triggers O(1) rotation.",
+      "tags": [
+        "avl"
+      ]
+    },
+    {
+      "id": "djt-fc3",
+      "front": "Red-Black vs AVL",
+      "back": "RB: fewer rotations on write (Java collections). AVL: stricter balance = faster reads.",
+      "tags": [
+        "red-black",
+        "avl"
+      ]
+    },
+    {
+      "id": "djt-fc4",
+      "front": "Segment Tree ops",
+      "back": "Build O(n). Query O(log n). Update O(log n). Supports non-invertible ops (min/max).",
+      "tags": [
+        "segment-tree"
+      ]
+    },
+    {
+      "id": "djt-fc5",
+      "front": "Fenwick Tree ops",
+      "back": "Update: i += i&(-i). Query: i -= i&(-i). Both O(log n). Only invertible ops (sum).",
+      "tags": [
+        "fenwick"
+      ]
+    },
+    {
+      "id": "djt-fc6",
+      "front": "B+-Tree advantage",
+      "back": "All data in linked leaves \u2192 range scan O(k) after O(log n) position find. Used in DB indexes.",
+      "tags": [
+        "b-tree"
+      ]
+    },
+    {
+      "id": "djt-fc7",
+      "front": "Heap array index",
+      "back": "parent(i)=(i-1)/2. left(i)=2i+1. right(i)=2i+2. Works because heap is a complete binary tree.",
+      "tags": [
+        "heap"
+      ]
+    },
+    {
+      "id": "djt-fc8",
+      "front": "Choosing a tree",
+      "back": "Sorted iteration\u2192TreeMap. Priority\u2192Heap. Prefix search\u2192Trie. Range queries\u2192SegTree/Fenwick. Disk\u2192B+Tree.",
+      "tags": [
+        "comparison"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write TreeTypesDemos.java with:\n1. BSTMap<K extends Comparable<K>, V> with put, get, inorderKeys\n2. fenwickSum(int[] arr) \u2014 build BIT, then answer range sum queries\n3. A short written comparison (comments) of AVL vs Red-Black for a read-heavy vs write-heavy use case\n4. A demonstration of Java's TreeMap proving O(log n) sorted iteration",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "BSTMap.inorderKeys() returns keys in sorted order",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "fenwickSum correctly answers at least 3 range queries",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Written comparison explains the rotation trade-off clearly",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "TreeMap demo shows firstKey(), lastKey(), and subMap()",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "BST put: recurse left if key < node.key, right if key > node.key, overwrite if equal.",
+      "Fenwick update: for(i++; i < bit.length; i += i & (-i)) bit[i] += delta.",
+      "Fenwick query: for(i++; i > 0; i -= i & (-i)) sum += bit[i]."
+    ]
+  }
+}

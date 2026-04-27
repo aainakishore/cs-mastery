@@ -1,0 +1,433 @@
+{
+  "id": "dsa-java-hashing",
+  "unit": 9,
+  "order": 65,
+  "title": "Hashing in Java",
+  "summary": "HashMap, HashSet, frequency counting, collision handling, load factor, and common interview patterns.",
+  "prereqs": [
+    "dsa-java-arrays",
+    "dsa-java-strings"
+  ],
+  "guide": "# Hashing in Java\n\nHashing converts a key into an **array index** through a hash function. The goal is to spread keys uniformly so that finding, inserting, and deleting any key takes O(1) on average \u2014 without sorting anything.\n\n```\nKey \"apple\"  \u2192  hashCode()  \u2192  mod table-size  \u2192  index 3\nKey \"grape\"  \u2192  hashCode()  \u2192  mod table-size  \u2192  index 7\nKey \"mango\"  \u2192  hashCode()  \u2192  mod table-size  \u2192  index 3  \u2190 COLLISION with \"apple\"\n```\n\n## How Java HashMap Works Internally\n\n```\nBacking array (16 buckets by default):\n [0]  \u2192  null\n [1]  \u2192  Entry(\"one\", 1)\n [2]  \u2192  null\n [3]  \u2192  Entry(\"apple\",\"fruit\") \u2192 Entry(\"mango\",\"fruit\")  \u2190 chained (collision)\n ...\n [15] \u2192  null\n\nWhen chain length > 8 AND table size >= 64 \u2192 chain converts to a RED-BLACK TREE (O(log n) fallback)\n```\n\n```java\nMap<String, Integer> map = new HashMap<>();\nmap.put(\"alice\", 90);          // O(1) avg\nmap.get(\"alice\");              // O(1) avg\nmap.getOrDefault(\"bob\", 0);    // safe get with fallback\nmap.containsKey(\"alice\");      // O(1)\nmap.remove(\"alice\");           // O(1)\nmap.merge(\"word\", 1, Integer::sum);  // put-or-update in one call\n```\n\n## Collision Handling \u2014 two main strategies\n\n```\nCHAINING (Java's default):\n  Each bucket holds a linked list (or tree) of entries.\n  Collision \u2192 just append to the chain.\n\n  Bucket 3: [apple] \u2192 [mango] \u2192 null\n\nOPEN ADDRESSING (linear probing):\n  On collision, find the next open slot.\n  Bucket 3 taken \u2192 try 4, 5, \u2026 wrap around.\n  Requires careful delete (tombstone markers).\n```\n\n## Load Factor and Rehashing\n\n```\nload factor = entries / buckets\n\nJava default: initial capacity=16, load factor=0.75\nWhen entries > 16 \u00d7 0.75 = 12 \u2192 REHASH:\n  \u2022 Allocate new array (double size = 32)\n  \u2022 Re-hash every entry into new positions\n  \u2022 O(n) cost, but amortised O(1) per insert overall\n```\n\n## HashSet \u2014 just a HashMap with dummy values\n\n```java\nSet<String> seen = new HashSet<>();\nseen.add(\"alice\");          // O(1)\nseen.contains(\"alice\");     // O(1)\nseen.remove(\"alice\");       // O(1)\n\n// Detect duplicates in O(n):\nboolean hasDuplicate(int[] arr) {\n    Set<Integer> seen = new HashSet<>();\n    for (int x : arr) if (!seen.add(x)) return true;\n    return false;\n}\n```\n\n## Frequency Counting Pattern\n\n```java\n// Count word frequencies:\nMap<String, Integer> freq = new HashMap<>();\nfor (String word : words)\n    freq.merge(word, 1, Integer::sum);\n\n// Top-K frequent: pair with a min-heap of size k\nPriorityQueue<Map.Entry<String,Integer>> pq =\n    new PriorityQueue<>(Comparator.comparingInt(Map.Entry::getValue));\nfor (var e : freq.entrySet()) {\n    pq.offer(e);\n    if (pq.size() > k) pq.poll();\n}\n```\n\n## Two-Sum with HashMap \u2014 O(n)\n\n```\nnums = [2, 7, 11, 15], target = 9\n\ni=0: need = 9-2 = 7, map does not have 7 \u2192 store {2:0}\ni=1: need = 9-7 = 2, map HAS 2 at index 0 \u2192 return [0, 1]  \u2713\n```\n\n```java\nint[] twoSum(int[] nums, int target) {\n    Map<Integer, Integer> seen = new HashMap<>();\n    for (int i = 0; i < nums.length; i++) {\n        int need = target - nums[i];\n        if (seen.containsKey(need)) return new int[]{seen.get(need), i};\n        seen.put(nums[i], i);\n    }\n    return new int[]{-1, -1};\n}\n```\n\n## Complexity Cheatsheet\n\n| Operation | HashMap Average | HashMap Worst | TreeMap |\n|---|---|---|---|\n| get / put / remove | O(1) | O(n) (all in one bucket) | O(log n) |\n| containsKey | O(1) | O(n) | O(log n) |\n| Iteration | O(n) | O(n) | O(n) |\n\nUse **TreeMap** when you need sorted key order. Use **HashMap** for pure O(1) operations.\n\n## Common Pitfalls\n- Using mutable objects as keys \u2014 hashCode/equals must be consistent; mutable key changes can make entries unreachable\n- Comparing values with `==` instead of `.equals()` \u2014 objects need `.equals()` for content comparison\n- Forgetting to override both `hashCode()` AND `equals()` in custom key classes\n- `ConcurrentModificationException` \u2014 never modify a map while iterating it with `entrySet()` iterator; use `removeIf` or iterate a copy\n\n## Connections\n- **Arrays** \u2014 `int[26]` or `int[128]` is a fast fixed-size 'hash map' for bounded char sets\n- **Heaps** \u2014 frequency map + min-heap solves Top-K in O(n log k)\n- **Tries** \u2014 alternative to HashMap when prefix lookups are needed\n- **Hashing + Linked List** \u2014 LRU cache uses HashMap for O(1) lookup + doubly linked list for O(1) eviction\n",
+  "questions": [
+    {
+      "id": "djh-q1",
+      "type": "mcq",
+      "prompt": "Average time complexity of HashMap get() / put():",
+      "choices": [
+        "O(n)",
+        "O(log n)",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Hash function maps key to bucket in constant time on average.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djh-q2",
+      "type": "mcq",
+      "prompt": "HashMap vs HashSet:",
+      "choices": [
+        "Identical",
+        "HashMap stores key-value pairs; HashSet stores unique keys only",
+        "HashSet is faster",
+        "HashMap forbids duplicates"
+      ],
+      "answerIndex": 1,
+      "explanation": "HashSet is backed by a HashMap with a dummy value.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djh-q3",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "Map<String,Integer> m = new HashMap<>();\nm.put(\"x\", 1);\nSystem.out.println(m.getOrDefault(\"y\", 99));",
+      "choices": [
+        "1",
+        "null",
+        "99",
+        "0"
+      ],
+      "answerIndex": 2,
+      "explanation": "Key 'y' is absent \u2014 getOrDefault returns the fallback 99.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djh-q4",
+      "type": "mcq",
+      "prompt": "Default load factor of Java HashMap:",
+      "choices": [
+        "0.5",
+        "0.75",
+        "1.0",
+        "2.0"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rehash triggers when size > capacity \u00d7 0.75.",
+      "tags": [
+        "load-factor"
+      ]
+    },
+    {
+      "id": "djh-q5",
+      "type": "mcq",
+      "prompt": "Java HashMap collision strategy:",
+      "choices": [
+        "Open addressing / linear probing",
+        "Chaining \u2014 linked list per bucket, tree above threshold",
+        "Double hashing",
+        "Cuckoo hashing"
+      ],
+      "answerIndex": 1,
+      "explanation": "Buckets use a linked list; long chains convert to a red-black tree at length 8.",
+      "tags": [
+        "collision"
+      ]
+    },
+    {
+      "id": "djh-q6",
+      "type": "mcq",
+      "prompt": "Custom class as a HashMap key requires:",
+      "choices": [
+        "Nothing extra",
+        "Override hashCode() and equals()",
+        "Implement Comparable",
+        "Be declared final"
+      ],
+      "answerIndex": 1,
+      "explanation": "hashCode locates the bucket; equals resolves collisions within it.",
+      "tags": [
+        "keys"
+      ]
+    },
+    {
+      "id": "djh-q7",
+      "type": "mcq",
+      "prompt": "HashMap iteration order:",
+      "choices": [
+        "Always sorted by key",
+        "Insertion order",
+        "Unpredictable / arbitrary",
+        "Sorted by value"
+      ],
+      "answerIndex": 2,
+      "explanation": "Use LinkedHashMap for insertion order or TreeMap for sorted keys.",
+      "tags": [
+        "ordering"
+      ]
+    },
+    {
+      "id": "djh-q8",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "Map<Integer,String> m = new HashMap<>();\nm.put(1, \"a\"); m.put(1, \"b\");\nSystem.out.println(m.get(1));",
+      "choices": [
+        "a",
+        "b",
+        "null",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Second put overwrites the first \u2014 one entry per key.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djh-q9",
+      "type": "mcq",
+      "prompt": "HashSet.add() returns false when:",
+      "choices": [
+        "Set is full",
+        "Element already present",
+        "Element is null",
+        "Always after first add"
+      ],
+      "answerIndex": 1,
+      "explanation": "Returns false on duplicate \u2014 useful for one-line visited checks.",
+      "tags": [
+        "hashset"
+      ]
+    },
+    {
+      "id": "djh-q10",
+      "type": "mcq",
+      "prompt": "HashMap worst-case per-operation complexity (Java 8+):",
+      "choices": [
+        "O(1)",
+        "O(log n) \u2014 tree bins",
+        "O(n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Long-chain buckets convert to red-black trees \u2192 O(log n) worst case.",
+      "tags": [
+        "collision"
+      ]
+    },
+    {
+      "id": "djh-q11",
+      "type": "mcq",
+      "prompt": "Which Map preserves insertion order?",
+      "choices": [
+        "HashMap",
+        "LinkedHashMap",
+        "TreeMap",
+        "IdentityHashMap"
+      ],
+      "answerIndex": 1,
+      "explanation": "LinkedHashMap maintains a doubly-linked list across entries.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djh-q12",
+      "type": "mcq",
+      "prompt": "Best structure to count word frequencies over arbitrary strings:",
+      "choices": [
+        "int[]",
+        "HashMap<String,Integer>",
+        "PriorityQueue",
+        "Stack"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arbitrary string keys require a hash map.",
+      "tags": [
+        "frequency"
+      ]
+    },
+    {
+      "id": "djh-q13",
+      "type": "mcq",
+      "prompt": "Rehashing doubles capacity when:",
+      "choices": [
+        "Every insertion",
+        "Load factor threshold exceeded",
+        "A collision occurs",
+        "Called explicitly"
+      ],
+      "answerIndex": 1,
+      "explanation": "Threshold = capacity \u00d7 loadFactor (default 0.75).",
+      "tags": [
+        "rehash"
+      ]
+    },
+    {
+      "id": "djh-q14",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "Set<Integer> s = new HashSet<>();\ns.add(3); s.add(3); s.add(5);\nSystem.out.println(s.size());",
+      "choices": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answerIndex": 1,
+      "explanation": "Duplicate 3 is ignored \u2014 set has {3,5}, size 2.",
+      "tags": [
+        "hashset"
+      ]
+    },
+    {
+      "id": "djh-q15",
+      "type": "mcq",
+      "prompt": "map.getOrDefault(k, v) advantage over map.get(k):",
+      "choices": [
+        "Faster lookup",
+        "Returns v instead of null when key absent \u2014 avoids NPE",
+        "Inserts the key automatically",
+        "Works on null keys only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Avoids manual null checks; the idiomatic frequency-count pattern.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djh-q16",
+      "type": "mcq",
+      "prompt": "For grouping anagrams, best HashMap key strategy:",
+      "choices": [
+        "First character of each string",
+        "String length",
+        "Sorted string as key",
+        "Hash of character sum"
+      ],
+      "answerIndex": 2,
+      "explanation": "Sorting produces the same canonical key for all anagrams of the same letters.",
+      "tags": [
+        "anagrams"
+      ]
+    },
+    {
+      "id": "djh-q17",
+      "type": "mcq",
+      "prompt": "TreeMap differs from HashMap in:",
+      "choices": [
+        "It is faster",
+        "Keys always sorted, O(log n) per operation",
+        "Allows null keys",
+        "Thread-safe by default"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backed by a red-black tree \u2014 sorted but slower than HashMap.",
+      "tags": [
+        "treemap"
+      ]
+    },
+    {
+      "id": "djh-q18",
+      "type": "mcq",
+      "prompt": "Detect first duplicate in O(n) time O(n) space:",
+      "choices": [
+        "Sort then scan",
+        "Two nested loops",
+        "Insert into HashSet; if add() returns false, it is the duplicate",
+        "Prefix sum"
+      ],
+      "answerIndex": 2,
+      "explanation": "add() returns false on the first duplicate; no need to scan twice.",
+      "tags": [
+        "patterns"
+      ]
+    },
+    {
+      "id": "djh-q19",
+      "type": "mcq",
+      "prompt": "ConcurrentModificationException during map iteration is caused by:",
+      "choices": [
+        "Map is empty",
+        "Map is structurally modified during iteration",
+        "Key is null",
+        "Value is null"
+      ],
+      "answerIndex": 1,
+      "explanation": "Use Iterator.remove() or iterate over a snapshot/copy.",
+      "tags": [
+        "exceptions"
+      ]
+    },
+    {
+      "id": "djh-q20",
+      "type": "mcq",
+      "prompt": "Space complexity of a HashMap storing n entries:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "One slot per entry plus bucket array overhead.",
+      "tags": [
+        "complexity"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djh-fc1",
+      "front": "HashMap avg complexity",
+      "back": "put / get / containsKey / remove \u2014 all O(1) average.",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc2",
+      "front": "getOrDefault pattern",
+      "back": "map.getOrDefault(key, 0) + 1 \u2014 the standard frequency-count idiom.",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc3",
+      "front": "Collision strategy",
+      "back": "Chaining: linked list per bucket; converts to red-black tree at length 8.",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc4",
+      "front": "Load factor default",
+      "back": "0.75 \u2014 rehash (double capacity) when size > capacity \u00d7 0.75.",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc5",
+      "front": "Custom key rule",
+      "back": "Override both hashCode() and equals() for correctness.",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc6",
+      "front": "LinkedHashMap",
+      "back": "Like HashMap but preserves insertion order; use for LRU cache.",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc7",
+      "front": "TreeMap",
+      "back": "Sorted key order, O(log n) ops. firstKey() / lastKey() / subMap().",
+      "tags": [
+        "hashing"
+      ]
+    },
+    {
+      "id": "djh-fc8",
+      "front": "Two-sum O(n) trick",
+      "back": "Store complement \u2192 index in HashMap; single pass, no sorting needed.",
+      "tags": [
+        "hashing"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write HashingLab.java with four methods:\n1. twoSum(int[] nums, int target) \u2192 int[]\n2. groupAnagrams(String[] strs) \u2192 List<List<String>>\n3. firstUniqueChar(String s) \u2192 int\n4. longestConsecutiveSequence(int[] nums) \u2192 int\nInclude a main() with test cases for each.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "twoSum uses a single-pass HashMap (O(n))",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "groupAnagrams uses sorted-string canonical key",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "firstUniqueChar uses LinkedHashMap or int[26] frequency array",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "longestConsecutiveSequence uses HashSet for O(n) \u2014 no sorting",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "longestConsecutive: put all numbers in a HashSet, then for each number with no left-neighbour (n-1 absent) start counting upward.",
+      "groupAnagrams: Arrays.sort(s.toCharArray()) gives the same key for all anagrams.",
+      "firstUniqueChar: scan once to build frequency, scan again to find first with count 1."
+    ]
+  }
+}

@@ -1,0 +1,360 @@
+{
+  "id": "ts-decorators",
+  "unit": 10,
+  "order": 85,
+  "title": "TypeScript Decorators",
+  "summary": "Class, method, property, and parameter decorators — metadata-driven code with Angular and NestJS patterns.",
+  "prereqs": ["ts-advanced-types"],
+  "guide": "# TypeScript Decorators\n\nDecorators are **annotations that wrap a class, method, property, or parameter with additional behaviour**. The mental model: a decorator is a higher-order function applied at class definition time. When the file is first loaded, the decorator runs — before any instances are created.\n\n```\nDecorator execution order:\n\n@Controller('/users')           ← class decorator — runs last (outermost)\nclass UserController {\n\n  @Get('/:id')                  ← method decorator — runs per method\n  @Validate(UserSchema)         ← stacked decorators run bottom-up\n  getUser(@Param('id') id: string) {\n    //      ↑ parameter decorator — runs first (innermost)\n  }\n}\n\nRuntime order (bottom to top):\n  1. @Param('id')      — parameter decorator for 'id'\n  2. @Validate         — method decorator\n  3. @Get('/:id')      — method decorator\n  4. @Controller       — class decorator\n```\n\n## Enabling Decorators\n\n```json\n// tsconfig.json — decorators are NOT enabled by default\n{\n  \"compilerOptions\": {\n    \"experimentalDecorators\": true,\n    \"emitDecoratorMetadata\": true  // needed for reflect-metadata (Angular/NestJS)\n  }\n}\n```\n\n## Class Decorators\n\nA class decorator receives the constructor and can return a new constructor or modify the existing one.\n\n```ts\n// Simple logging decorator\nfunction Logged(target: Function) {\n  console.log(`Class defined: ${target.name}`);\n}\n\n@Logged\nclass MyService {}  // Logs 'Class defined: MyService' when file loads\n\n// Decorator factory — returns the actual decorator, accepts config\nfunction Injectable(scope: 'singleton' | 'transient' = 'singleton') {\n  return function(target: Function) {\n    Reflect.defineMetadata('scope', scope, target);\n  };\n}\n\n@Injectable('transient')\nclass UserService {}\n```\n\n## Method Decorators\n\nMethod decorators receive `(target, propertyKey, descriptor)`. They can replace or wrap the method.\n\n```ts\nfunction Bind(\n  target: any,\n  propertyKey: string,\n  descriptor: PropertyDescriptor\n): PropertyDescriptor {\n  // Wrap with auto-bind so 'this' is always correct:\n  const original = descriptor.value;\n  return {\n    ...descriptor,\n    get() {\n      return original.bind(this);\n    },\n  };\n}\n\nclass Button {\n  label = 'Click me';\n\n  @Bind\n  handleClick() {\n    console.log(this.label);  // 'this' always refers to Button instance\n  }\n}\n\n// Timing decorator:\nfunction Timed(target: any, name: string, desc: PropertyDescriptor) {\n  const original = desc.value;\n  desc.value = function(...args: any[]) {\n    const start = Date.now();\n    const result = original.apply(this, args);\n    console.log(`${name} took ${Date.now() - start}ms`);\n    return result;\n  };\n  return desc;\n}\n```\n\n## Property Decorators\n\n```ts\nfunction MinLength(min: number) {\n  return function(target: any, propertyKey: string) {\n    // Store validation metadata on the class prototype\n    const rules = Reflect.getMetadata('validations', target) || [];\n    rules.push({ property: propertyKey, type: 'minLength', value: min });\n    Reflect.defineMetadata('validations', rules, target);\n  };\n}\n\nclass User {\n  @MinLength(3)\n  name: string = '';  // validation rule is stored in metadata\n}\n```\n\n## Parameter Decorators\n\n```ts\nfunction Param(key: string) {\n  return function(target: any, methodName: string, paramIndex: number) {\n    // Record which parameter index corresponds to which route param key\n    const metadata = Reflect.getMetadata('params', target, methodName) || [];\n    metadata[paramIndex] = key;\n    Reflect.defineMetadata('params', metadata, target, methodName);\n  };\n}\n\nclass UserController {\n  getUser(@Param('id') id: string, @Param('version') v: string) {\n    // At runtime: framework reads metadata to extract id and v from request\n  }\n}\n```\n\n## Decorator Factories vs Direct Decorators\n\n```\nDirect decorator:           Decorator factory:\n\n@Logged                     @Injectable('singleton')\nclass Foo {}                class Bar {}\n\n  ↓                               ↓\nLoggedDecorator(Foo)        Injectable('singleton')(Bar)\n                                ↑\n                           factory called first,\n                           returns the actual decorator\n```\n\n```ts\n// Direct — no config\nfunction Logged(target: Function) { /* ... */ }\n@Logged class Foo {}\n\n// Factory — with config\nfunction Log(level: 'info'|'warn') {\n  return (target: Function) => { /* use level */ };\n}\n@Log('warn') class Bar {}\n```\n\n## reflect-metadata\n\nAngular and NestJS use `reflect-metadata` to store and retrieve type and parameter info at runtime:\n\n```ts\nimport 'reflect-metadata';\n\n// emitDecoratorMetadata: true makes TypeScript emit:\n// Reflect.metadata('design:type', String) for properties\n// Reflect.metadata('design:paramtypes', [String, Number]) for constructors\n\n@Injectable()\nclass UserService {\n  constructor(\n    private db: DatabaseService,   // type info emitted as metadata\n    private logger: LoggerService\n  ) {}\n}\n// NestJS reads 'design:paramtypes' to auto-inject db and logger\n```\n\n## Decorator Composition Cheatsheet\n\n| Decorator type | Target | Args | Common use |\n|---|---|---|---|\n| Class | Constructor function | target | @Injectable, @Component |\n| Method | Prototype + descriptor | target, key, descriptor | @Get, @Timed, @Bind |\n| Accessor | Same as method | target, key, descriptor | @Computed |\n| Property | Prototype | target, key | @Column, @MinLength |\n| Parameter | Prototype, method name, index | target, key, index | @Param, @Body, @Query |\n\n## Common Pitfalls\n- Forgetting `experimentalDecorators: true` in tsconfig — decorators will error without it\n- Stacked decorators execute bottom-up — order matters for composition\n- Decorators on class properties run at class definition, not at instance creation — the property value doesn't exist yet\n- `emitDecoratorMetadata` requires `reflect-metadata` to be imported somewhere in your entry point\n- `design:type` metadata gives you the TypeScript type as a JavaScript constructor — erased generics appear as `Object`\n\n## Connections\n- **ts-advanced-types** — understanding how TypeScript types map to runtime values (generics erased, reflected as Object)\n- **angular-services-di** — Angular's DI is powered by class decorators + reflect-metadata\n- **angular-fundamentals** — @Component, @NgModule, @Directive all use the decorator system",
+  "questions": [
+    {
+      "id": "tsd-q1",
+      "type": "mcq",
+      "prompt": "When does a class decorator execute?",
+      "choices": [
+        "Each time a new instance is created with new",
+        "Once, when the class definition is evaluated (file load time), before any instances exist",
+        "Only when the decorated method is called",
+        "At the time of the first property access"
+      ],
+      "answerIndex": 1,
+      "explanation": "Decorators run when the class is defined — at module load time. The decorator receives the constructor and can modify it, but this happens once per class definition, not per instantiation.",
+      "tags": ["decorators", "execution-order"]
+    },
+    {
+      "id": "tsd-q2",
+      "type": "mcq",
+      "prompt": "Given stacked decorators `@A @B @C` on a class — in what order do they execute?",
+      "choices": [
+        "A, then B, then C (top to bottom)",
+        "C, then B, then A (bottom to top)",
+        "All three simultaneously",
+        "The order is undefined"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stacked decorators evaluate bottom-up: C runs first, then B, then A. Decorator factories (the outer functions) are CALLED top to bottom to obtain the actual decorators, but the returned decorator functions are APPLIED bottom to top.",
+      "tags": ["decorators", "execution-order", "stacking"]
+    },
+    {
+      "id": "tsd-q3",
+      "type": "mcq",
+      "prompt": "What tsconfig option must be set to use decorators?",
+      "choices": [
+        "strict",
+        "experimentalDecorators",
+        "allowDecorators",
+        "useDecorators"
+      ],
+      "answerIndex": 1,
+      "explanation": "`experimentalDecorators: true` is the flag. As of TypeScript 5.0, the TC39 Stage 3 decorator proposal is available without this flag, but the legacy decorator style (used by Angular/NestJS) still requires it.",
+      "tags": ["decorators", "tsconfig"]
+    },
+    {
+      "id": "tsd-q4",
+      "type": "mcq",
+      "prompt": "A decorator factory like `@Injectable('singleton')` differs from a direct decorator like `@Logged` in that:",
+      "choices": [
+        "Factories can only be used once",
+        "The factory is a function that RETURNS the actual decorator — it's called with config first, then the returned function is applied to the class",
+        "Factories run after class instantiation",
+        "Direct decorators cannot modify classes"
+      ],
+      "answerIndex": 1,
+      "explanation": "`@Injectable('singleton')` first calls `Injectable('singleton')` → returns a decorator function → that function is then applied to the class. The extra call is what gives you the config parameter.",
+      "tags": ["decorators", "factory"]
+    },
+    {
+      "id": "tsd-q5",
+      "type": "mcq",
+      "prompt": "A method decorator's `PropertyDescriptor` gives you access to:",
+      "choices": [
+        "Only the method's return type",
+        "The method's implementation (`descriptor.value`), plus enumerable/configurable/writable flags — lets you replace or wrap the method",
+        "Parameter types via reflection",
+        "The class's constructor"
+      ],
+      "answerIndex": 1,
+      "explanation": "`descriptor.value` is the function itself. You can wrap it: save the original, replace `descriptor.value` with a wrapper, and call the original inside. This is how timing, caching, and retry decorators work.",
+      "tags": ["decorators", "method", "property-descriptor"]
+    },
+    {
+      "id": "tsd-q6",
+      "type": "codeOutput",
+      "prompt": "What does a timing decorator wrapped with `desc.value = function(...args) { ... original.apply(this, args); }` use `this` for?",
+      "choices": [
+        "Accesses the class constructor",
+        "Preserves the correct instance context — without this, 'this' inside the wrapped function would be undefined in strict mode",
+        "Accesses the decorator arguments",
+        "this is not needed — decorators are always static"
+      ],
+      "answerIndex": 1,
+      "explanation": "The wrapper `function(...args) { original.apply(this, args); }` passes the correct `this` binding to the original method. If you used an arrow function for the wrapper, `this` would be captured from the decorator scope (wrong). Using `function` and `apply(this, args)` is essential.",
+      "tags": ["decorators", "method", "this-binding"]
+    },
+    {
+      "id": "tsd-q7",
+      "type": "mcq",
+      "prompt": "What does `emitDecoratorMetadata: true` in tsconfig enable?",
+      "choices": [
+        "Generates JSON metadata files alongside JS output",
+        "Makes TypeScript emit `Reflect.metadata()` calls with type info for decorated classes — used by Angular/NestJS for dependency injection",
+        "Enables runtime type checking",
+        "Exports decorator type definitions"
+      ],
+      "answerIndex": 1,
+      "explanation": "With `emitDecoratorMetadata: true`, TypeScript emits calls like `Reflect.metadata('design:paramtypes', [DatabaseService, LoggerService])` for constructors. At runtime, the DI container reads this to know what to inject.",
+      "tags": ["decorators", "reflect-metadata", "tsconfig"]
+    },
+    {
+      "id": "tsd-q8",
+      "type": "mcq",
+      "prompt": "Why does `design:type` metadata report `Object` for generic type parameters like `Array<string>`?",
+      "choices": [
+        "It's a bug in TypeScript",
+        "Generic type information is erased at compilation — at runtime, Array<string> is just Array, which reflects as Object",
+        "You must use `design:generictype` instead",
+        "Generics are stored as string descriptions"
+      ],
+      "answerIndex": 1,
+      "explanation": "TypeScript's generic types are erased before JavaScript output. The runtime JavaScript has no concept of `Array<string>` — it's just `Array`. So `Reflect.getMetadata('design:type')` sees `Array` constructor, which prototype-wise is `Object`.",
+      "tags": ["decorators", "reflect-metadata", "type-erasure"]
+    },
+    {
+      "id": "tsd-q9",
+      "type": "mcq",
+      "prompt": "A parameter decorator's third argument (paramIndex) is:",
+      "choices": [
+        "The parameter name as a string",
+        "The zero-based index of the parameter in the method's parameter list",
+        "The type of the parameter",
+        "The parameter's default value"
+      ],
+      "answerIndex": 1,
+      "explanation": "Parameter decorators receive `(target, methodName, paramIndex)`. `paramIndex` is the 0-based position — `@Param('id')` on the first parameter gets index 0. Frameworks use this to map route params to method arguments.",
+      "tags": ["decorators", "parameter"]
+    },
+    {
+      "id": "tsd-q10",
+      "type": "multi",
+      "prompt": "Which are valid TypeScript decorator targets?",
+      "choices": [
+        "Classes",
+        "Methods and accessors",
+        "Properties",
+        "Local variables inside functions"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "Decorators can target classes, methods, accessors, properties, and parameters. They CANNOT target local variables — only class-level constructs. TypeScript will error if you try to decorate a local variable.",
+      "tags": ["decorators", "targets"]
+    },
+    {
+      "id": "tsd-q11",
+      "type": "mcq",
+      "prompt": "In Angular, `@Component({ selector: 'app-root', templateUrl: './app.component.html' })` is:",
+      "choices": [
+        "A direct decorator",
+        "A decorator factory — @Component is called with a config object, returns the actual decorator function",
+        "A property decorator",
+        "A type assertion"
+      ],
+      "answerIndex": 1,
+      "explanation": "`@Component({...})` uses parentheses — that's a factory call. `Component({...})` returns the decorator, which is then applied to the class. The object is the config. Same pattern as `@Injectable()`, `@NgModule({...})`.",
+      "tags": ["decorators", "factory", "angular"]
+    },
+    {
+      "id": "tsd-q12",
+      "type": "codeOutput",
+      "prompt": "What runs when this file is first imported?",
+      "code": "function Log(target: Function) {\n  console.log('Loaded: ' + target.name);\n}\n\n@Log\nclass OrderService {}",
+      "choices": [
+        "Nothing — decorators are lazy",
+        "Logs 'Loaded: OrderService' immediately when the module is loaded",
+        "Logs when new OrderService() is called",
+        "Logs when a method on OrderService is called"
+      ],
+      "answerIndex": 1,
+      "explanation": "The `@Log` decorator runs when the class definition is evaluated — at module load time. `console.log('Loaded: OrderService')` executes before any code in your application creates an instance.",
+      "tags": ["decorators", "execution-order"]
+    },
+    {
+      "id": "tsd-q13",
+      "type": "mcq",
+      "prompt": "How does NestJS `@Inject()` use decorators to perform dependency injection without explicit wiring?",
+      "choices": [
+        "It reads source code at runtime",
+        "It uses `emitDecoratorMetadata: true` to emit Reflect.metadata for constructor parameter types, then resolves those types from the IoC container",
+        "It requires a global registry of all services",
+        "It uses runtime type checking via instanceof"
+      ],
+      "answerIndex": 1,
+      "explanation": "With `emitDecoratorMetadata`, TypeScript emits `Reflect.metadata('design:paramtypes', [DatabaseService])` for the constructor. NestJS reads `design:paramtypes` to discover what to inject. The `@Injectable()` class decorator registers the service. The container resolves the graph automatically.",
+      "tags": ["decorators", "reflect-metadata", "dependency-injection"]
+    },
+    {
+      "id": "tsd-q14",
+      "type": "mcq",
+      "prompt": "A property decorator `(target, propertyKey)` can:",
+      "choices": [
+        "Read the property's current value",
+        "Store metadata about the property — but NOT intercept get/set without using Object.defineProperty to add a getter/setter",
+        "Change the property's type",
+        "Make the property required"
+      ],
+      "answerIndex": 1,
+      "explanation": "Property decorators receive `target` and `propertyKey` but NOT the property descriptor — there's no value yet at class definition time. They're primarily used to store metadata. To intercept reads/writes, you'd combine with `Object.defineProperty` to swap in a getter/setter.",
+      "tags": ["decorators", "property"]
+    },
+    {
+      "id": "tsd-q15",
+      "type": "mcq",
+      "prompt": "Why must `import 'reflect-metadata'` appear at the entry point of an app using Angular or NestJS?",
+      "choices": [
+        "It defines TypeScript's type system",
+        "It polyfills the `Reflect` global object with `defineMetadata`/`getMetadata` — without it, decorator metadata storage throws at runtime",
+        "It speeds up the startup",
+        "It is only needed in production builds"
+      ],
+      "answerIndex": 1,
+      "explanation": "`reflect-metadata` adds `Reflect.defineMetadata` and `Reflect.getMetadata`. The emitted metadata code calls these — if the polyfill isn't loaded, the calls throw. It must be imported before any modules that use decorators.",
+      "tags": ["decorators", "reflect-metadata"]
+    },
+    {
+      "id": "tsd-q16",
+      "type": "multi",
+      "prompt": "Which are things a method decorator CAN do by modifying the PropertyDescriptor?",
+      "choices": [
+        "Replace the method implementation entirely",
+        "Wrap the method with before/after logic (timing, logging, retry)",
+        "Make the method non-enumerable",
+        "Change the TypeScript return type at compile time"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "Method decorators modify the PropertyDescriptor at runtime — they can replace `value`, wrap it, or change `enumerable`, `configurable`, `writable`. They CANNOT change TypeScript's compile-time type information.",
+      "tags": ["decorators", "method", "property-descriptor"]
+    },
+    {
+      "id": "tsd-q17",
+      "type": "mcq",
+      "prompt": "A `@Memoize` method decorator would store the result of a method and return it on subsequent calls with the same arguments. The key implementation detail is:",
+      "choices": [
+        "Using Reflect.metadata to store results",
+        "Replacing descriptor.value with a wrapper that maintains a cache Map and checks args before calling original",
+        "Modifying the class prototype directly",
+        "Using WeakRef to store results"
+      ],
+      "answerIndex": 1,
+      "explanation": "Memoize: save `original = descriptor.value`, create a `cache = new Map()`. Set `descriptor.value = function(...args) { const key = JSON.stringify(args); if (cache.has(key)) return cache.get(key); const result = original.apply(this, args); cache.set(key, result); return result; }`.",
+      "tags": ["decorators", "method", "memoization"]
+    },
+    {
+      "id": "tsd-q18",
+      "type": "codeOutput",
+      "prompt": "What is the execution order for this class?",
+      "code": "function A(t: any) { console.log('A'); }\nfunction B(t: any) { console.log('B'); }\nfunction C(t: any) { console.log('C'); }\n\n@A\n@B\n@C\nclass Foo {}",
+      "choices": [
+        "A, B, C",
+        "C, B, A",
+        "All three at once",
+        "B, A, C"
+      ],
+      "answerIndex": 1,
+      "explanation": "Decorators are applied bottom-up. C is closest to the class, runs first. Then B, then A. Mental model: `A(B(C(Foo)))` — the innermost wrapping executes first.",
+      "tags": ["decorators", "execution-order", "stacking"]
+    },
+    {
+      "id": "tsd-q19",
+      "type": "mcq",
+      "prompt": "How does `@Bind` (an auto-bind decorator) fix the 'this' problem in event callbacks?",
+      "choices": [
+        "It converts the method to an arrow function at compile time",
+        "Its getter returns `original.bind(this)` — so every access to the method gets a version bound to the current instance",
+        "It stores 'this' in a closure at class creation time",
+        "It adds a constructor that binds all methods"
+      ],
+      "answerIndex": 1,
+      "explanation": "The `@Bind` descriptor getter returns `original.bind(this)` — where `this` is the object the property is accessed on. So `instance.handleClick` returns a pre-bound function. No manual `.bind(this)` in the constructor needed.",
+      "tags": ["decorators", "method", "this-binding"]
+    },
+    {
+      "id": "tsd-q20",
+      "type": "mcq",
+      "prompt": "What is the TC39 Stage 3 decorator proposal and how does it differ from legacy TypeScript decorators?",
+      "choices": [
+        "They are identical — Stage 3 is just a version number",
+        "Stage 3 decorators are the standardised JavaScript proposal — they have different semantics and APIs than the legacy TypeScript experimentalDecorators system used by Angular/NestJS",
+        "Stage 3 requires a separate npm package",
+        "Stage 3 only supports class decorators, not method decorators"
+      ],
+      "answerIndex": 1,
+      "explanation": "The TC39 Stage 3 decorator proposal (available in TypeScript 5.0+) is the future standard. It has different capabilities (e.g., decorators can return values and access private fields differently). Legacy `experimentalDecorators` is still required for Angular and NestJS today. Both coexist but are incompatible.",
+      "tags": ["decorators", "tc39", "typescript-5"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "tsd-fc1",
+      "front": "Decorator execution time",
+      "back": "Runs at class DEFINITION time (module load), not at instantiation. One run per class definition. Use for metadata registration, augmentation — not per-instance setup.",
+      "tags": ["decorators", "execution-order"]
+    },
+    {
+      "id": "tsd-fc2",
+      "front": "Stacked decorator order",
+      "back": "Applied bottom-up. `@A @B @C class` → C runs first, B, then A. Factories evaluated top-down; returned decorators applied bottom-up. Mental: `A(B(C(Foo)))`.",
+      "tags": ["decorators", "stacking"]
+    },
+    {
+      "id": "tsd-fc3",
+      "front": "experimentalDecorators + emitDecoratorMetadata",
+      "back": "Both needed for Angular/NestJS. `experimentalDecorators: true` enables decorator syntax. `emitDecoratorMetadata: true` emits Reflect.metadata calls for DI type info.",
+      "tags": ["decorators", "tsconfig"]
+    },
+    {
+      "id": "tsd-fc4",
+      "front": "Method decorator — descriptor.value",
+      "back": "Save original = descriptor.value. Replace descriptor.value with a wrapper. Call `original.apply(this, args)` inside wrapper to preserve context. Return modified descriptor.",
+      "tags": ["decorators", "method"]
+    },
+    {
+      "id": "tsd-fc5",
+      "front": "Property decorator limitation",
+      "back": "Receives (target, propertyKey) — NO descriptor, no current value. Property doesn't exist yet at class definition. Use for metadata storage; use Object.defineProperty if you need a getter/setter.",
+      "tags": ["decorators", "property"]
+    },
+    {
+      "id": "tsd-fc6",
+      "front": "Parameter decorator signature",
+      "back": "Receives (target, methodName, paramIndex). paramIndex is zero-based. Used by NestJS/Angular to map @Body(), @Param() to the correct argument slot.",
+      "tags": ["decorators", "parameter"]
+    },
+    {
+      "id": "tsd-fc7",
+      "front": "reflect-metadata requirement",
+      "back": "Must `import 'reflect-metadata'` at app entry. It polyfills `Reflect.defineMetadata / getMetadata`. Without it, emitted metadata calls throw at runtime.",
+      "tags": ["decorators", "reflect-metadata"]
+    },
+    {
+      "id": "tsd-fc8",
+      "front": "Generic type in reflect-metadata",
+      "back": "`design:type` for `Array<string>` reports `Array` (Object). Generics are erased. DI containers cannot distinguish `Array<string>` from `Array<number>` — use injection tokens for generic deps.",
+      "tags": ["decorators", "type-erasure"]
+    }
+  ],
+  "project": {
+    "brief": "Design a lightweight validation decorator system. You have a `User` class with `name: string` and `age: number`. Tasks: 1) Write a `@MinLength(n)` property decorator factory that stores a minimum-length rule in Reflect.metadata on the class prototype. 2) Write a `@Min(n)` decorator for number properties. 3) Write a `validate(instance: object): string[]` function that reads the stored metadata and returns error messages for violations. 4) Apply both decorators and call validate — trace through what the runtime metadata looks like. 5) Explain why the decorator factory pattern (not direct decorator) is necessary here.",
+    "checklist": [
+      { "id": "c1", "text": "MinLength factory stores { property, type: 'minLength', value: n } in Reflect.metadata", "weight": 1 },
+      { "id": "c2", "text": "Min factory stores equivalent metadata for numbers", "weight": 1 },
+      { "id": "c3", "text": "validate() reads metadata array, checks each rule against instance properties", "weight": 1 },
+      { "id": "c4", "text": "Trace shows metadata array after both decorators run", "weight": 1 },
+      { "id": "c5", "text": "Explains factory is needed because n (the config) must be captured in a closure", "weight": 1 }
+    ],
+    "hints": [
+      "Metadata array key: 'validations'. Use Reflect.getMetadata('validations', target) || [] to initialise.",
+      "The property decorator target is the PROTOTYPE, not a specific instance — that's correct for class-level metadata.",
+      "validate() receives an instance, reads metadata from Object.getPrototypeOf(instance), then checks instance[rule.property].",
+      "Factory is needed because @MinLength(3) is a call that evaluates first — the return value is the decorator. Direct @MinLength would only work without config."
+    ]
+  }
+}
+

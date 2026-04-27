@@ -113,6 +113,13 @@ export function setSettings(s: AppSettings): void {
   set('settings', s)
 }
 
+export function getLastStudied(): string | null {
+  return get<string>('lastStudied') ?? null
+}
+export function setLastStudied(iso: string): void {
+  set('lastStudied', iso)
+}
+
 export function getActiveMinutes(): number {
   return get<number>('activeMinutes') ?? 0
 }

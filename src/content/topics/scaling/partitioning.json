@@ -1,0 +1,127 @@
+{
+  "id": "partitioning",
+  "unit": 4,
+  "order": 21,
+  "title": "Partitioning",
+  "summary": "Master Partitioning: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "sharding"
+  ],
+  "guide": "# Database Partitioning\n\nPartitioning splits a large table into smaller **physical pieces** while appearing as a single logical table, improving query performance and manageability.\n\n## Partitioning vs Sharding\n\n```\nPartitioning:\n  Single database server\n  Table split into partitions internally\n  Transparent to the application (same query to same table)\n  Goal: query performance (skip irrelevant partitions)\n\nSharding:\n  Multiple database servers\n  Data distributed across different machines\n  Application must know which shard to query\n  Goal: write scalability and scale beyond single machine\n```\n\n## Partition Types\n\n```\nRange Partitioning:\n  orders_2024_q1 (Jan-Mar 2024)\n  orders_2024_q2 (Apr-Jun 2024)\n  orders_2024_q3 (Jul-Sep 2024)\n  Pruning: WHERE order_date BETWEEN '2024-01-01' AND '2024-03-31'\n     \u2192 only scans orders_2024_q1 partition\n\nList Partitioning:\n  users_us (country = 'US')\n  users_eu (country IN ('DE', 'FR', 'GB'))\n  users_other (DEFAULT)\n\nHash Partitioning:\n  hash(user_id) % 8 \u2192 8 partitions\n  Even distribution, no hotspots, good for bulk data\n\nComposite:\n  Range by year \u2192 Hash by userId within each year\n```\n\n## PostgreSQL Example\n\n```sql\n-- Partitioned table declaration\nCREATE TABLE orders (\n  id         BIGINT NOT NULL,\n  user_id    BIGINT,\n  amount     DECIMAL,\n  created_at TIMESTAMPTZ NOT NULL\n) PARTITION BY RANGE (created_at);\n\n-- Partition for each quarter\nCREATE TABLE orders_2024_q1\n  PARTITION OF orders\n  FOR VALUES FROM ('2024-01-01') TO ('2024-04-01');\n\nCREATE TABLE orders_2024_q2\n  PARTITION OF orders\n  FOR VALUES FROM ('2024-04-01') TO ('2024-07-01');\n\n-- Index on each partition (auto-inherited)\nCREATE INDEX ON orders_2024_q1 (user_id);\n\n-- Query uses same table name \u2014 planner auto-prunes\nSELECT * FROM orders WHERE created_at > '2024-06-01' AND created_at < '2024-07-01';\n-- Scans only orders_2024_q2 \u2190 partition pruning\n```\n\n## Partition Pruning\n\nThe optimizer skips irrelevant partitions when the WHERE clause includes the partition key. This is the primary performance benefit \u2014 query scans 1/N of the data instead of the whole table.\n\n## Common Pitfalls\n- **Partition key not in WHERE** \u2014 without the partition key in WHERE, ALL partitions are scanned (worse than no partitioning due to overhead).\n- **Too many partitions** \u2014 each partition has overhead. Planning cost grows. Keep a reasonable number (100s, not 10,000s).\n- **Not automating new partitions** \u2014 for time-based partitioning, create future partitions ahead of time (pg_partman handles this automatically).\n",
+  "questions": [
+    {
+      "id": "part-q1",
+      "type": "mcq",
+      "prompt": "How does partition pruning improve query performance?",
+      "choices": [
+        "Partitions are stored in faster storage",
+        "Query planner skips partitions that cannot contain matching rows based on the WHERE clause. Scanning 1 of 12 monthly partitions instead of the full table = near 12x speedup",
+        "Indexing is replaced",
+        "Partitions use less memory"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partition pruning = compile-time optimization. SELECT ... WHERE created_at BETWEEN Jan-Mar \u2192 planner reads only the Q1 partition. Critical: WHERE must include the partition key for pruning to activate.",
+      "tags": [
+        "partitioning",
+        "partition-pruning"
+      ]
+    },
+    {
+      "id": "part-q2",
+      "type": "mcq",
+      "prompt": "Main difference between partitioning and sharding?",
+      "choices": [
+        "Partitioning is newer",
+        "Partitioning: within a single DB server, transparent to app (pruning benefit). Sharding: across multiple DB servers, app must route queries, enables horizontal write scaling",
+        "Both distribute across servers",
+        "Sharding is partitioning plus replication"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partitioning is a single-server optimization technique. Sharding distributes across machines for capacity. They combine: 3 shards each with range-partitioned tables.",
+      "tags": [
+        "partitioning",
+        "sharding"
+      ]
+    },
+    {
+      "id": "part-q3",
+      "type": "mcq",
+      "prompt": "For a time-series `events` table queried mostly by date range, best partition strategy?",
+      "choices": [
+        "Hash partitioning",
+        "Range partitioning by date (e.g., monthly) \u2014 queries with date range WHERE clauses prune to 1-2 partitions. Old data can be archived by dropping old partitions (DROP PARTITION = instantaneous, vs DELETE which is slow)",
+        "List partitioning",
+        "No partitioning needed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Time-series + range queries = range partitioning by date. Bonus: DROP TABLE orders_2022_q1 is instant O(1) archival. Deleting rows from a huge table requires writing a DELETE that scans indexes.",
+      "tags": [
+        "partitioning",
+        "time-series"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "part-fc1",
+      "front": "Partition types",
+      "back": "Range: ordered ranges (dates, IDs). List: discrete values (country, category). Hash: hash(key) % N = even distribution. Composite: range + hash layered.",
+      "tags": [
+        "partitioning"
+      ]
+    },
+    {
+      "id": "part-fc2",
+      "front": "Partition pruning",
+      "back": "Planner skips irrelevant partitions. Requires partition key in WHERE clause. Scanning 1/12 partition for monthly queries = ~12x speedup. Key: WHERE must use partition column.",
+      "tags": [
+        "partitioning",
+        "pruning"
+      ]
+    },
+    {
+      "id": "part-fc3",
+      "front": "Partitioning vs sharding",
+      "back": "Partitioning: single server, transparent to app, pruning benefit. Sharding: multi-server, app routes, write scaling. Combined: shards each with partitioned tables.",
+      "tags": [
+        "partitioning",
+        "sharding"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Partitioning\n\nDesign a realistic production service with Partitioning at its core. No code required:\n\n1. Why Partitioning over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "partitioning-pc1",
+        "text": "Justified use of Partitioning for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "partitioning-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "partitioning-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "partitioning-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "partitioning-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Partitioning remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

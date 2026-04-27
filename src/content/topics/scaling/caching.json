@@ -1,0 +1,104 @@
+{
+  "id": "caching",
+  "unit": 4,
+  "order": 19,
+  "title": "Caching",
+  "summary": "LRU, write-through/back, CDN, cache invalidation: the hardest problem in CS.",
+  "prereqs": [
+    "load-balancing"
+  ],
+  "guide": "# Caching\n\nCaching stores **frequently accessed data** in fast-access storage so future requests are served without re-computing or re-fetching from slow sources.\n\n## Caching Layers\n\n```\nL1: CPU cache (nanoseconds) \u2014 hardware managed\nL2: In-process memory (microseconds) \u2014 Map/LRU cache in app\nL3: Distributed cache (sub-millisecond) \u2014 Redis, Memcached\nL4: CDN edge cache (milliseconds, geographically close)\nL5: Browser cache \u2014 local to user\n```\n\n## Cache Policies\n\n```\nEviction policies (when cache is full):\n  LRU (Least Recently Used): evict what hasn't been accessed recently\n  LFU (Least Frequently Used): evict what's accessed least overall\n  TTL (Time To Live): expire after fixed duration regardless of access\n\nWrite patterns:\n  Write-through: write to cache AND DB simultaneously\n    \u2192 No stale data, slightly slower writes\n  Write-behind (write-back): write to cache only, async to DB\n    \u2192 Faster writes, risk of data loss on crash\n  Cache-aside (lazy loading): app checks cache, misses load from DB + cache\n    \u2192 Most common pattern\n```\n\n## Redis Cache-Aside Pattern\n\n```javascript\nasync function getUser(userId) {\n  const cacheKey = `user:${userId}`;\n\n  // 1. Try cache\n  const cached = await redis.get(cacheKey);\n  if (cached) return JSON.parse(cached);  // Cache HIT\n\n  // 2. Cache MISS \u2014 fetch from DB\n  const user = await db.users.findById(userId);\n  if (!user) return null;\n\n  // 3. Store in cache with TTL\n  await redis.setex(cacheKey, 300, JSON.stringify(user));  // 5 min TTL\n  return user;\n}\n\n// Cache invalidation on update:\nasync function updateUser(userId, data) {\n  await db.users.update(userId, data);\n  await redis.del(`user:${userId}`);   // \u2190 invalidate\n}\n```\n\n## Cache Invalidation Problem\n\n\"There are only two hard things in CS: cache invalidation and naming things.\"\n\n```\nStrategies:\n  TTL-based: expire after N seconds \u2014 simple, eventual consistency\n  Event-driven: invalidate on write \u2014 consistent, needs coordination\n  Version-based: cache key includes version (user:123:v3) \u2014 safe but cache bloat\n  Write-through: always update cache AND DB together\n```\n\n## Cache Stampede / Thundering Herd\n\n```\nProblem: popular key expires \u2192 1000 concurrent requests miss \u2192\n  all 1000 query DB simultaneously \u2192 DB overloads\n\nSolutions:\n  Mutex locking: first miss locks, fetches, others wait for lock\n  Probabilistic early expiry: randomly refresh before TTL expires\n  Background refresh: proactively refresh popular keys before they expire\n```\n\n## Common Pitfalls\n- **Caching mutable data without invalidation** \u2014 cache serves stale data forever. Always set TTL or invalidate on write.\n- **Caching large objects** \u2014 large cached objects waste memory. Consider caching IDs only, or paginated results.\n- **Not handling cache misses gracefully** \u2014 if Redis is down, app must fall back to DB, not crash.\n- **Cache key collisions** \u2014 namespace keys: `user:123`, `product:123` not just `123`.\n",
+  "questions": [
+    {
+      "id": "cache-q1",
+      "type": "mcq",
+      "prompt": "Cache-aside (lazy loading) pattern \u2014 how does it work?",
+      "choices": [
+        "Cache reads DB automatically",
+        "App checks cache first. On miss: load from DB, store in cache with TTL, return. On hit: return from cache. Cache only populated for items actually requested",
+        "Write-through is always used",
+        "Cache is pre-warmed with all data"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cache-aside is the most common pattern: read cache \u2192 miss \u2192 read DB \u2192 store in cache \u2192 return. Benefits: only cache what's used. Tradeoff: cache misses add latency (two operations).",
+      "tags": [
+        "caching",
+        "patterns"
+      ]
+    },
+    {
+      "id": "cache-q2",
+      "type": "mcq",
+      "prompt": "Cache stampede problem and a solution?",
+      "choices": [
+        "Too many cache hits",
+        "Popular key expires \u2192 all concurrent requesters cache-miss simultaneously \u2192 all query DB \u2192 DB overloaded. Solution: mutex lock (first miss fetches + populates; others wait) or probabilistic early expiration",
+        "Stampede is a feature",
+        "Solved by LRU eviction"
+      ],
+      "answerIndex": 1,
+      "explanation": "Thundering herd: 1000 concurrent requests all get miss at the same moment \u2192 1000 DB queries. Mutex/probabilistic expiry prevents stampede by serializing the cache population.",
+      "tags": [
+        "caching",
+        "stampede"
+      ]
+    },
+    {
+      "id": "cache-q3",
+      "type": "mcq",
+      "prompt": "Write-through vs write-behind caching \u2014 key tradeoff?",
+      "choices": [
+        "Same behavior",
+        "Write-through: write to cache AND DB synchronously \u2014 consistent, slightly slower writes. Write-behind: write cache only, async DB write \u2014 faster writes but risk of data loss if cache crashes before DB write completes",
+        "Write-through doesn't exist",
+        "Write-behind is deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "Write-behind is faster (fire and forget) but introduces a window where cache has data that DB doesn't. Crash during that window = data loss. Write-through is safer at the cost of write latency.",
+      "tags": [
+        "caching",
+        "write-patterns"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "cache-fc1",
+      "front": "Cache-aside pattern",
+      "back": "1. Check cache (hit \u2192 return). 2. Miss \u2192 query DB. 3. Store result in cache with TTL. 4. Return. Invalidate on write: del(key). Most common, handles cold start gracefully.",
+      "tags": [
+        "caching"
+      ]
+    },
+    {
+      "id": "cache-fc2",
+      "front": "Cache eviction policies",
+      "back": "LRU: evict least recently used (good for recency bias). LFU: evict least frequently used (good for hot keys). TTL: expire after time. Redis default: noeviction (fails on full). Set maxmemory-policy.",
+      "tags": [
+        "caching"
+      ]
+    },
+    {
+      "id": "cache-fc3",
+      "front": "Cache stampede / thundering herd",
+      "back": "Popular key expires \u2192 N concurrent misses \u2192 N DB queries. Fixes: mutex lock (one refetch, others wait), probabilistic early expiry (refresh before expiry), async background refresh for hot keys.",
+      "tags": [
+        "caching",
+        "stampede"
+      ]
+    },
+    {
+      "id": "cache-fc4",
+      "front": "Write patterns",
+      "back": "Write-through: update cache + DB together (consistent, slower writes). Write-behind: cache only + async DB (fast, loss risk). Cache-aside: invalidate on write (simple, eventual). Cache should never be source of truth.",
+      "tags": [
+        "caching"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "TODO: author project brief for Caching",
+    "checklist": [],
+    "hints": []
+  }
+}

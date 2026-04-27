@@ -1,0 +1,88 @@
+{
+  "id": "ftp",
+  "unit": 3,
+  "order": 11,
+  "title": "FTP",
+  "summary": "File Transfer Protocol: active vs passive mode, security issues, and SFTP/FTPS alternatives.",
+  "prereqs": [
+    "firewalls"
+  ],
+  "guide": "# FTP \u2014 File Transfer Protocol\n\nFTP (RFC 959) is a **dual-channel TCP protocol** for transferring files. It uses separate **control** and **data** connections on ports 21 and 20 respectively.\n\n## The Dual-Channel Design\n\n```\nActive Mode:\n  Client port 21  \u2190\u2500\u2500\u2500\u2500 Control \u2500\u2500\u2500\u2500\u2500\u2192  Server port 21\n  Client port N   \u2190\u2500\u2500 Data (server initiates) \u2190 Server port 20\n  (Server dials BACK to client \u2014 blocked by NAT/firewalls)\n\nPassive Mode (PASV):\n  Client port 21  \u2190\u2500\u2500\u2500\u2500 Control \u2500\u2500\u2500\u2500\u2500\u2192  Server port 21\n  Client          \u2500\u2500\u2500\u2500 Data \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192  Server ephemeral port\n  (Client initiates data \u2014 works through NAT)\n\nModern deployments use PASV (passive mode) almost exclusively.\n```\n\n## Command flow\n\n```\nClient              Server\n  \u2502 \u2500\u2500 220 ready \u2500\u2500\u2192  \u2502\n  \u2502 \u2190 USER alice  \u2500\u2500\u2500 \u2502\n  \u2502 \u2500\u2500 331 pwd req \u2500\u2192 \u2502\n  \u2502 \u2190 PASS secret \u2500\u2500\u2500 \u2502\n  \u2502 \u2500\u2500 230 logged in \u2192 \u2502\n  \u2502 \u2190 LIST /uploads \u2500\u2500 \u2502   (active: server connects back; passive: client opens data conn)\n  \u2502 \u2500\u2500 150 opening \u2500\u2192  \u2502\n  \u2502 \u2500\u2500\u2500 file listing \u2500\u2192 \u2502\n  \u2502 \u2500\u2500 226 transfer OK \u2500\u2192 \u2502\n  \u2502 \u2190 QUIT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \u2502\n```\n\n## FTP vs SFTP vs FTPS\n\n| Protocol | Port | Security | Transport |\n|---|---|---|---|\n| FTP | 21/20 | None \u2014 credentials and data in plaintext | TCP |\n| FTPS | 21/990 | TLS/SSL wrapping FTP | TCP |\n| SFTP | 22 | SSH-based \u2014 completely different protocol | SSH |\n\n**FTP is insecure** \u2014 never use it over public networks. SFTP (via SSH) is the modern replacement.\n\n## Common Pitfalls\n- **Active mode blocked by firewalls/NAT** \u2014 server tries to connect back to the client, which is typically behind NAT. Always configure PASV mode.\n- **Credentials in plaintext** \u2014 FTP sends username/password as clear text. Use SFTP or FTPS.\n- **Firewall port ranges** \u2014 PASV uses random high ports; configure the server's PASV port range AND open those ports on the firewall.\n",
+  "questions": [
+    {
+      "id": "ftp-q1",
+      "type": "mcq",
+      "prompt": "Why does active mode FTP fail behind NAT/firewalls?",
+      "choices": [
+        "FTP doesn't support NAT",
+        "In active mode the server initiates the data connection back to the client \u2014 NAT blocks incoming connections the client didn't initiate",
+        "Active mode uses UDP",
+        "Port 21 is blocked"
+      ],
+      "answerIndex": 1,
+      "explanation": "Active mode: server dials the client's ephemeral port for data. NAT translates client addresses \u2014 the server can't reach the client. Passive mode: client initiates both connections, solving the NAT problem.",
+      "tags": [
+        "ftp",
+        "active-passive"
+      ]
+    },
+    {
+      "id": "ftp-q2",
+      "type": "mcq",
+      "prompt": "Main security difference between FTP and SFTP?",
+      "choices": [
+        "SFTP is faster",
+        "FTP sends credentials and data in plaintext. SFTP runs over SSH \u2014 everything is encrypted",
+        "SFTP uses TLS",
+        "FTP supports authentication; SFTP doesn't"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTP has no built-in encryption. SFTP is a completely different protocol built on SSH \u2014 all data (including passwords) is encrypted. FTPS wraps FTP in TLS but is more complex to configure through firewalls.",
+      "tags": [
+        "ftp",
+        "security"
+      ]
+    },
+    {
+      "id": "ftp-q3",
+      "type": "mcq",
+      "prompt": "FTP uses how many TCP connections?",
+      "choices": [
+        "One",
+        "Two \u2014 a control channel (port 21) and a separate data channel (port 20 or ephemeral)",
+        "Three \u2014 control, data, and heartbeat",
+        "One per file"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTP's dual-channel design: control channel (commands/responses on port 21) stays open for the session. Data channel opens and closes for each file transfer or directory listing.",
+      "tags": [
+        "ftp",
+        "architecture"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ftp-fc1",
+      "front": "FTP active vs passive mode",
+      "back": "Active: server initiates data connection back to client (blocked by NAT). Passive (PASV): client initiates both connections \u2014 works through NAT/firewalls. Always use PASV in production.",
+      "tags": [
+        "ftp"
+      ]
+    },
+    {
+      "id": "ftp-fc2",
+      "front": "FTP vs SFTP vs FTPS",
+      "back": "FTP: plaintext, dual TCP, legacy. FTPS: FTP + TLS/SSL. SFTP: SSH-based, encrypted, single connection, modern standard. Use SFTP. Never use plain FTP over public networks.",
+      "tags": [
+        "ftp",
+        "security"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "TODO: author project brief for FTP",
+    "checklist": [],
+    "hints": []
+  }
+}

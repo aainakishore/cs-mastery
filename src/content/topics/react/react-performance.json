@@ -1,0 +1,358 @@
+{
+  "id": "react-performance",
+  "unit": 10,
+  "order": 95,
+  "title": "React Performance Optimisation",
+  "summary": "Code splitting, React.lazy, Suspense, bundle analysis, profiling, and production performance patterns.",
+  "prereqs": ["react-forms"],
+  "guide": "# React Performance Optimisation\n\n## The Performance Mind Map\n\n```\nPerformance problems in React come from two sources:\n\n1. Too many renders\n   └── Fix: React.memo, useMemo, useCallback, split context\n\n2. Renders are too expensive\n   └── Fix: virtualize long lists, defer expensive work,\n             code split to reduce initial bundle\n\nAdditionally:\n3. Bundle too large → slow initial load\n   └── Fix: code splitting, tree shaking, lazy imports\n```\n\n## Code Splitting — only load what you need\n\nWithout code splitting, every route's code is in one JavaScript bundle. Users download ALL of it on first visit — even if they only visit `/home`.\n\n```\nWithout splitting:\n  User visits / → downloads app.js (1.2 MB)\n  app.js includes: Home + Dashboard + Admin + Charts + ...\n  Most of it unused on /\n\nWith splitting:\n  User visits / → downloads home-chunk.js (100 KB)\n  User visits /dashboard → downloads dashboard-chunk.js (300 KB) on demand\n  Admin never visited? Admin code never downloaded.\n```\n\n```tsx\n// React.lazy: dynamically import a component\nconst Dashboard = React.lazy(() => import('./routes/Dashboard'));\nconst Admin     = React.lazy(() => import('./routes/Admin'));\n\n// Wrap with Suspense to handle loading state\nfunction App() {\n  return (\n    <Suspense fallback={<PageSpinner />}>\n      <Routes>\n        <Route path='/dashboard' element={<Dashboard />} />\n        <Route path='/admin'     element={<Admin />}     />\n      </Routes>\n    </Suspense>\n  );\n}\n// Dashboard.js only loads when user navigates to /dashboard\n```\n\n## Suspense — declarative loading states\n\n```\nSuspense works by catching a 'promise throw' from lazy components\nand rendering the fallback until the promise resolves.\n\n<Suspense fallback={<Spinner />}>\n  <LazyComponent />\n</Suspense>\n\nTimeline:\n  1. React renders LazyComponent\n  2. LazyComponent throws a Promise (the dynamic import)\n  3. Suspense catches the Promise → renders <Spinner />\n  4. Promise resolves (JS loaded) → React renders LazyComponent\n  5. Spinner goes away, real content appears\n\nNesting Suspense boundaries:\n  <Suspense fallback={<PageSpinner />}>   ← outer (full page)\n    <Header />\n    <Suspense fallback={<CardSkeleton />}> ← inner (just this section)\n      <SlowSection />\n    </Suspense>\n  </Suspense>\n  Only the innermost containing Suspense shows its fallback.\n```\n\n## Virtualisation — rendering long lists\n\nRendering 10,000 `<Row>` components creates 10,000 DOM nodes — the browser slows to a crawl. Virtualisation renders only the rows visible in the viewport.\n\n```\nWithout virtualisation:\n  10,000 items → 10,000 DOM nodes → slow scroll/paint\n\nWith virtualisation (e.g. react-virtual, react-window):\n  10,000 items → ~20 DOM nodes in viewport\n  Scroll down → reuse those 20 rows, update their data\n  10,000 items → snappy scroll\n\nMental model:\n  ┌─────────────────────┐\n  │  Row 100 (visible)  │  ← real DOM node\n  │  Row 101 (visible)  │  ← real DOM node\n  │  Row 102 (visible)  │  ← real DOM node\n  └─────────────────────┘\n  Rows 1-99 and 103-10000: not in DOM\n```\n\n## useDeferredValue — downgrade priority of heavy renders\n\n```tsx\nfunction SearchResults({ query }: { query: string }) {\n  const deferredQuery = useDeferredValue(query);\n  // deferredQuery lags behind query during fast typing\n  // React prioritises updating the input over filtering results\n\n  const filtered = useMemo(\n    () => heavyFilter(allItems, deferredQuery),\n    [deferredQuery]\n  );\n\n  return (\n    <ul style={{ opacity: deferredQuery !== query ? 0.5 : 1 }}>\n      {/* Show stale results (dimmed) while new ones compute */}\n      {filtered.map(item => <li key={item.id}>{item.name}</li>)}\n    </ul>\n  );\n}\n```\n\n## Bundle Analysis\n\n```bash\n# Vite bundle visualiser\nnpm install --save-dev rollup-plugin-visualizer\n\n# vite.config.ts:\nimport { visualizer } from 'rollup-plugin-visualizer';\nplugins: [react(), visualizer({ open: true })]\n\n# After build:\nnpm run build  → opens interactive treemap in browser\n# Look for:\n#   Large third-party packages (moment.js 300KB → use date-fns)\n#   Duplicated dependencies\n#   Packages that should be split away\n```\n\n```\nCommon bundle bloat sources:\n  ┌─────────────────────────────────────────┐\n  │ moment.js           → 300KB (use date-fns/dayjs)\n  │ lodash (full)       → 70KB  (use lodash-es + tree shaking)\n  │ chart libraries     → 500KB (split away with lazy)\n  │ icon libraries full → 200KB (import individual icons)\n  └─────────────────────────────────────────┘\n```\n\n## Profiling in React DevTools\n\n```\nProfiler workflow:\n  1. Open DevTools → Components tab → Profiler\n  2. Click 'Record'\n  3. Perform the slow interaction\n  4. Click 'Stop'\n  5. Inspect flame chart:\n     - Gray bars: components that didn't render\n     - Colored bars: components that DID render\n     - Bar width = render duration\n  6. Click a component → see WHY it rendered:\n     - 'Props changed' → useCallback/useMemo needed\n     - 'Context changed' → split context\n     - 'State changed' → normal (expected)\n     - 'Parent rendered' → React.memo needed\n```\n\n## Web Vitals — what to actually measure\n\n```\nCore Web Vitals (Google's performance metrics):\n\n  LCP (Largest Contentful Paint)  < 2.5s\n    What: time until main content loads\n    Fix: code split, lazy load below-fold, preload fonts\n\n  INP (Interaction to Next Paint)  < 200ms\n    What: delay from interaction to visible response\n    Fix: useTransition, defer heavy renders, virtualise lists\n\n  CLS (Cumulative Layout Shift)  < 0.1\n    What: content jumping around while loading\n    Fix: reserve space for images/charts with skeleton placeholders\n```\n\n## Prefetching Route Chunks\n\n```tsx\n// Tell the browser to load a chunk before the user navigates\nimport { prefetch } from 'react-router-dom'; // or manual:\n\n// On Dashboard hover, preload Admin bundle\n<Link\n  to='/admin'\n  onMouseEnter={() => import('./routes/Admin')} // prefetches on hover\n>\n  Admin\n</Link>\n// When user clicks, chunk is already downloaded → instant navigation\n```\n\n## Common Pitfalls\n- Adding `React.memo` everywhere without profiling — adds overhead without benefit for cheap components\n- Lazy loading components that are needed immediately (above the fold) — causes layout shift and worse LCP\n- Not wrapping lazy routes in Suspense — React throws on missing Suspense\n- Using `useMemo` for values passed directly to JSX attributes — React.memo on the child component is the right tool\n- Not measuring before optimising — profile first, optimise second\n\n## Connections\n- **react-rendering** — React.memo + useMemo/useCallback are rendering-layer optimisations\n- **react-router** — lazy loading route components via React.lazy\n- **ts-tsconfig** — `noEmit: true` + `isolatedModules: true` is how Vite handles TS in this performance setup",
+  "questions": [
+    {
+      "id": "rprf-q1",
+      "type": "mcq",
+      "prompt": "Code splitting via `React.lazy(() => import('./Dashboard'))` means:",
+      "choices": [
+        "Dashboard component is evaluated at startup and cached",
+        "Dashboard's JavaScript bundle is downloaded only when React first renders the Dashboard component",
+        "Dashboard renders without JavaScript",
+        "Dashboard is shared between all users on the server"
+      ],
+      "answerIndex": 1,
+      "explanation": "React.lazy wraps a dynamic `import()`. When React first tries to render Dashboard, it triggers the import — downloading the chunk from the server. Until the download completes, the nearest Suspense shows its fallback. After download: component renders normally.",
+      "tags": ["code-splitting", "React.lazy", "performance"]
+    },
+    {
+      "id": "rprf-q2",
+      "type": "mcq",
+      "prompt": "Suspense works by:",
+      "choices": [
+        "Sets a timer before rendering",
+        "Catching a thrown Promise from a lazy component — showing fallback until Promise resolves",
+        "Deferring all updates to the end of the event loop",
+        "using requestIdleCallback"
+      ],
+      "answerIndex": 1,
+      "explanation": "React.lazy throws a Promise (the dynamic import) during render. Suspense is a special component that catches these thrown Promises in its subtree. It renders the fallback until the Promise resolves, then re-renders the child. This is React's 'suspend during render' mechanism.",
+      "tags": ["Suspense", "code-splitting", "lazy"]
+    },
+    {
+      "id": "rprf-q3",
+      "type": "mcq",
+      "prompt": "Virtualising a list of 10,000 items solves:",
+      "choices": [
+        "Slow network requests",
+        "Too many DOM nodes — only visible rows exist in the DOM; others are recycled on scroll",
+        "State management complexity",
+        "Bundle size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each DOM node has memory and rendering cost. 10,000 rows = 10,000 DOM nodes = browser memory pressure + slow paint. Virtualisation (react-virtual, react-window) only renders the ~20 visible rows, recycling them as the user scrolls. 10,000 rows scroll like 20.",
+      "tags": ["virtualisation", "performance", "lists"]
+    },
+    {
+      "id": "rprf-q4",
+      "type": "mcq",
+      "prompt": "What is `useDeferredValue` and when should you use it?",
+      "choices": [
+        "Delays state updates until the next day",
+        "Returns a lagged version of a value — React prioritises urgent updates (input change) over the deferred computation (heavy filter/sort using the value)",
+        "Memoises a value permanently",
+        "Replaces useEffect for async operations"
+      ],
+      "answerIndex": 1,
+      "explanation": "useDeferredValue is a Concurrent React hook. It returns a version of the value that may trail the actual value when React is busy. This keeps urgent interactions (typing) snappy while heavy operations (filtering 50K items) complete in the background.",
+      "tags": ["useDeferredValue", "concurrent", "performance"]
+    },
+    {
+      "id": "rprf-q5",
+      "type": "mcq",
+      "prompt": "When using `React.lazy` without a `<Suspense>` boundary anywhere above in the tree, what happens?",
+      "choices": [
+        "The component renders synchronously",
+        "React throws an error — every lazy component must have a Suspense boundary ancestor",
+        "The lazy component silently shows nothing",
+        "React automatically adds a fallback"
+      ],
+      "answerIndex": 1,
+      "explanation": "React.lazy throws a Promise during render. If there's no Suspense boundary to catch it, the Promise propagates as an uncaught error — React renders the nearest ErrorBoundary (or crashes with an unhandled error). Always wrap lazy routes in at least one Suspense.",
+      "tags": ["Suspense", "lazy", "error-handling"]
+    },
+    {
+      "id": "rprf-q6",
+      "type": "mcq",
+      "prompt": "What is the main benefit of nested Suspense boundaries?",
+      "choices": [
+        "Better error handling",
+        "Fine-grained loading states — each section shows its own skeleton/spinner independently rather than the whole page waiting for the slowest chunk",
+        "Multiple fallbacks merge into one",
+        "Required for nested routes"
+      ],
+      "answerIndex": 1,
+      "explanation": "A single top-level Suspense shows one spinner for everything — all sections wait for the slowest one. Nested Suspense lets fast sections display immediately while slow sections show local skeletons. Users see progressive content instead of one long blank wait.",
+      "tags": ["Suspense", "loading-states", "performance"]
+    },
+    {
+      "id": "rprf-q7",
+      "type": "mcq",
+      "prompt": "React DevTools Profiler shows a component rendered with reason 'Props changed'. The component is identical visually. The root cause is likely:",
+      "choices": [
+        "A bug in React",
+        "An object or function prop created inline in the parent's JSX — new reference every render despite same content",
+        "The component has too many hooks",
+        "Strict Mode"
+      ],
+      "answerIndex": 1,
+      "explanation": "`<Component data={{ key: 'val' }} />` creates a new object every parent render. `onClick={() => handler()}` creates a new function every render. Both cause Object.is comparison to fail and the component re-renders 'because props changed' even though the values are logically identical. Fix: useMemo/useCallback.",
+      "tags": ["profiling", "React.memo", "performance"]
+    },
+    {
+      "id": "rprf-q8",
+      "type": "multi",
+      "prompt": "Which improve Time to Interactive (initial load performance)?",
+      "choices": [
+        "Code splitting routes with React.lazy",
+        "Tree shaking unused library code",
+        "Wrapping all components in React.memo",
+        "Lazy loading images below the fold"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "Code splitting (A), tree shaking (B), and lazy images (D) all reduce the amount of data downloaded on first visit. React.memo (C) affects runtime rendering performance — not initial load or bundle size.",
+      "tags": ["performance", "bundle", "loading"]
+    },
+    {
+      "id": "rprf-q9",
+      "type": "mcq",
+      "prompt": "LCP (Largest Contentful Paint) measures:",
+      "choices": [
+        "How long JavaScript takes to execute",
+        "When the largest content element (image, text block) becomes visible — a Core Web Vital targeting perceived load speed",
+        "Memory usage",
+        "Number of re-renders"
+      ],
+      "answerIndex": 1,
+      "explanation": "LCP < 2.5s is Google's 'good' threshold. It measures when the main content becomes visible. Large hero images, above-fold text, and large videos affect LCP. React optimisations: preload fonts, lazy load below-fold images, code split to reduce initial JS parse time.",
+      "tags": ["performance", "web-vitals", "LCP"]
+    },
+    {
+      "id": "rprf-q10",
+      "type": "mcq",
+      "prompt": "Prefetching a route chunk on Link hover (`onMouseEnter`) improves:",
+      "choices": [
+        "First page load time",
+        "Subsequent navigation speed — the chunk is downloaded during hover (300-500ms user decision time) so it's ready when they click",
+        "SEO scores",
+        "Server response time"
+      ],
+      "answerIndex": 1,
+      "explanation": "There's typically 300-500ms between 'mouse hovers link' and 'user clicks'. Triggering `import('./Route')` on hover downloads the chunk during that window. When the user clicks, navigation is instant — the chunk is already cached. A simple and high-value optimisation.",
+      "tags": ["performance", "prefetching", "code-splitting"]
+    },
+    {
+      "id": "rprf-q11",
+      "type": "mcq",
+      "prompt": "You lazy load a hero banner component that renders above the fold. The result is:",
+      "choices": [
+        "Improved LCP — less initial JS",
+        "Worse LCP — the banner is delayed behind a dynamic import; users see a spinner where content should immediately appear",
+        "No change",
+        "Improved FCP only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lazy loading should only apply to below-fold or rarely visited code. Above-fold content must load eagerly for good LCP. Lazy loading the hero banner means users see a blank/spinner where the main content should be — hurting LCP and user experience.",
+      "tags": ["performance", "lazy", "LCP"]
+    },
+    {
+      "id": "rprf-q12",
+      "type": "mcq",
+      "prompt": "What does a bundle analyser (rollup-plugin-visualizer) help you find?",
+      "choices": [
+        "Runtime performance bottlenecks",
+        "Which packages contribute most to bundle size — helping identify oversized dependencies to replace or split",
+        "Memory leaks in components",
+        "Which hooks fire too often"
+      ],
+      "answerIndex": 1,
+      "explanation": "The visualiser opens an interactive treemap of your bundle. You can see that `moment.js` is 300KB versus `date-fns` at 20KB for the used functions. Or that a chart library is 500KB and should be lazy loaded. Runtime performance problems need the React Profiler.",
+      "tags": ["performance", "bundle-analysis"]
+    },
+    {
+      "id": "rprf-q13",
+      "type": "mcq",
+      "prompt": "CLS (Cumulative Layout Shift) is caused by:",
+      "choices": [
+        "Too many React components",
+        "Content shifting position after initial render — usually images/ads/fonts loading without reserved space",
+        "Slow API responses",
+        "CSS transitions"
+      ],
+      "answerIndex": 1,
+      "explanation": "CLS measures visual instability. An image that loads and pushes text down = layout shift. Fix: always set `width` and `height` on images. Use skeleton placeholders that reserve the same space as the real content. Avoid inserting content above existing content (ads, banners).",
+      "tags": ["performance", "web-vitals", "CLS"]
+    },
+    {
+      "id": "rprf-q14",
+      "type": "mcq",
+      "prompt": "When is `useDeferredValue` better than `useTransition`?",
+      "choices": [
+        "useDeferredValue is always better",
+        "When you don't control the state setter — e.g., you receive a prop value and want to defer expensive work based on it",
+        "For async operations",
+        "For form inputs only"
+      ],
+      "answerIndex": 1,
+      "explanation": "`useTransition` wraps a setter: `startTransition(() => setState(x))`. `useDeferredValue` wraps the value: `const deferred = useDeferredValue(prop)`. When you receive a value from a parent (no access to the setter), useDeferredValue is the tool. When you control the setter, both work — useTransition gives you isPending.",
+      "tags": ["useDeferredValue", "useTransition", "concurrent"]
+    },
+    {
+      "id": "rprf-q15",
+      "type": "multi",
+      "prompt": "Which are valid strategies for a search box that triggers expensive filtering of 50,000 items?",
+      "choices": [
+        "useDeferredValue on the query string",
+        "useTransition around setFilteredResults",
+        "useMemo for the filter computation",
+        "useRef to track previous query"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "All three: useDeferredValue (A) lags the query update for filtering. useTransition (B) marks the setFilteredResults as non-urgent. useMemo (C) caches the filtered result. All three together keep the search input snappy while filtering runs in background. useRef (D) doesn't help with performance here.",
+      "tags": ["performance", "search", "concurrent"]
+    },
+    {
+      "id": "rprf-q16",
+      "type": "mcq",
+      "prompt": "Tree shaking eliminates:",
+      "choices": [
+        "Unused React components from your source",
+        "Exported functions from libraries that you imported but never called — only the used exports are included in the bundle",
+        "Duplicate npm packages",
+        "Dead CSS rules"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tree shaking is a build step that removes 'dead code' — exports that were never imported anywhere. Libraries must use ES module syntax (`export const foo = ...`) for tree shaking to work. CommonJS (`module.exports = { foo, bar, baz }`) is opaque to the shaker.",
+      "tags": ["performance", "bundle", "tree-shaking"]
+    },
+    {
+      "id": "rprf-q17",
+      "type": "mcq",
+      "prompt": "What is the main difference between INP and FID (First Input Delay)?",
+      "choices": [
+        "INP is for images; FID is for inputs",
+        "INP measures responsiveness of ALL interactions in the session. FID measured only the first interaction. Google replaced FID with INP in 2024",
+        "They measure the same thing",
+        "INP requires JavaScript disabled"
+      ],
+      "answerIndex": 1,
+      "explanation": "FID measured only the first interaction — if your page was slow on the 5th click but fast on the first, FID looked fine. INP (Interaction to Next Paint) measures the slowest interaction in the session, giving a more accurate picture of real-world responsiveness.",
+      "tags": ["performance", "web-vitals", "INP"]
+    },
+    {
+      "id": "rprf-q18",
+      "type": "mcq",
+      "prompt": "You have a `<DataChart />` component that takes 500ms to render and appears mid-page. The best approach is:",
+      "choices": [
+        "Add React.memo to DataChart",
+        "Wrap it in Suspense + React.lazy to split its bundle, and possibly useTransition to defer its render on initial page load",
+        "Move DataChart to the top of the page",
+        "Use useMemo inside DataChart"
+      ],
+      "answerIndex": 1,
+      "explanation": "React.lazy splits the chart library out of the initial bundle. Suspense shows a skeleton while it loads. useTransition can defer the chart's data processing so the rest of the page renders first. useMemo (D) helps if the chart renders repeatedly with the same data — but doesn't speed up the initial render.",
+      "tags": ["performance", "code-splitting", "Suspense"]
+    },
+    {
+      "id": "rprf-q19",
+      "type": "mcq",
+      "prompt": "React's Profiler component in JSX can be used to:",
+      "choices": [
+        "Show performance metrics to end users",
+        "Measure render durations programmatically in development — captures id, phase, actualDuration for each render of wrapped components",
+        "Enable Concurrent Mode",
+        "Replace useMemo"
+      ],
+      "answerIndex": 1,
+      "explanation": "`<Profiler id='Dashboard' onRender={callback}>` calls the callback with: id, phase ('mount'/'update'), actualDuration (render time), baseDuration (without memo). Useful for automated performance regressions in tests or logging high render times in production.",
+      "tags": ["profiling", "Profiler"]
+    },
+    {
+      "id": "rprf-q20",
+      "type": "mcq",
+      "prompt": "The best performance optimisation practice is:",
+      "choices": [
+        "Add React.memo and useMemo everywhere proactively",
+        "Measure first (DevTools Profiler, Lighthouse, bundle analyser), identify the actual bottleneck, apply the targeted fix",
+        "Always split every component into its own lazy chunk",
+        "Move all state to the top of the component tree"
+      ],
+      "answerIndex": 1,
+      "explanation": "Premature optimisation adds complexity (useMemo hooks, memo wrapping, lazy boundaries) without benefit — and can actually worsen performance (memo comparison overhead on cheap components). Profile first, find the actual bottleneck (bundle size? render count? render duration?), then apply the appropriate fix.",
+      "tags": ["performance", "profiling", "best-practices"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rprf-fc1",
+      "front": "React.lazy + Suspense pattern",
+      "back": "`const C = React.lazy(() => import('./C'))` downloads C's chunk on first render. Wrap in `<Suspense fallback={<Spinner/>}>`. Must have Suspense ancestor or React errors.",
+      "tags": ["code-splitting", "lazy"]
+    },
+    {
+      "id": "rprf-fc2",
+      "front": "Virtualisation — when to use",
+      "back": "When rendering 100+ items in a list causes jank. Libraries: react-virtual, react-window. Only renders visible rows (~20). Reuses DOM nodes on scroll.",
+      "tags": ["virtualisation", "performance"]
+    },
+    {
+      "id": "rprf-fc3",
+      "front": "useDeferredValue",
+      "back": "Returns a lagged version of a value. React prioritises urgent updates, defers expensive computation based on deferred value. Use when you receive a value as prop (no access to setter).",
+      "tags": ["useDeferredValue", "concurrent"]
+    },
+    {
+      "id": "rprf-fc4",
+      "front": "Core Web Vitals",
+      "back": "LCP < 2.5s (main content visible). INP < 200ms (interaction responsiveness). CLS < 0.1 (layout stability). Optimise with code split, deferred render, skeleton placeholders.",
+      "tags": ["web-vitals", "performance"]
+    },
+    {
+      "id": "rprf-fc5",
+      "front": "Bundle analyser (Vite)",
+      "back": "rollup-plugin-visualizer. Shows treemap of bundle. Find: moment.js (300KB → use dayjs), full lodash (use lodash-es), chart library (lazy load), duplicate deps.",
+      "tags": ["bundle", "performance"]
+    },
+    {
+      "id": "rprf-fc6",
+      "front": "Lazy load only below the fold",
+      "back": "Above-fold content must be eagerly loaded for good LCP. Lazy loading hero images/components causes spinner where content should immediately appear.",
+      "tags": ["code-splitting", "LCP"]
+    },
+    {
+      "id": "rprf-fc7",
+      "front": "Profiler 'why did it render' reasons",
+      "back": "Props changed → useMemo/useCallback. Context changed → split context. State changed → expected. Parent rendered → React.memo.",
+      "tags": ["profiling", "performance"]
+    },
+    {
+      "id": "rprf-fc8",
+      "front": "Prefetch on hover",
+      "back": "`onMouseEnter={() => import('./Route')}` — downloads chunk during 300ms hover-to-click window. Navigation is instant on click. Simple high-value optimisation.",
+      "tags": ["prefetching", "performance"]
+    }
+  ],
+  "project": {
+    "brief": "You are optimising a product listing page that shows 500 products with images, performs client-side filter/sort, and has a sidebar with complex chart components. Users report: slow initial load (5s), jank when filtering, layout shift when images load. 1) Identify which performance problems correspond to which metrics (LCP, INP, CLS). 2) Design the code-splitting strategy — what gets lazy loaded and what doesn't? 3) How do you handle the 500-item filter without jank? 4) How do you eliminate layout shift from product images? 5) Which bundle analysis step would you run first?",
+    "checklist": [
+      { "id": "c1", "text": "Correctly maps: 5s load = LCP/FCP problem (bundle), filter jank = INP, image shift = CLS", "weight": 1 },
+      { "id": "c2", "text": "Lazy loads: chart sidebar (rarely needed), detail modal. Eager: product list, critical images above fold", "weight": 1 },
+      { "id": "c3", "text": "Filter jank: useDeferredValue on filter query + useMemo for filtered list. Or useTransition around filter state setter", "weight": 1 },
+      { "id": "c4", "text": "Image layout shift: set width + height attributes on <img>, or aspect-ratio CSS containers", "weight": 1 },
+      { "id": "c5", "text": "Bundle: npm run build → rollup-plugin-visualizer treemap → identify top 3 largest chunks first", "weight": 1 }
+    ],
+    "hints": [
+      "LCP fix: code split chart library (500KB) — it's not needed for initial page render.",
+      "INP / filter jank: useDeferredValue(filterQuery) + useMemo(() => filter(products, deferredQuery), [deferredQuery]).",
+      "CLS / image shift: always provide width and height on product images — browser reserves space before image loads.",
+      "Bundle analysis: npm run build then open stats.html from visualizer — sort by size."
+    ]
+  }
+}
+

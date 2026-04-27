@@ -1,0 +1,435 @@
+{
+  "id": "dsa-java-sorting",
+  "unit": 9,
+  "order": 67,
+  "title": "Sorting Algorithms in Java",
+  "summary": "Merge sort, quick sort, heap sort, stability, complexity table, and Arrays.sort internals.",
+  "prereqs": [
+    "dsa-java-recursion",
+    "dsa-java-arrays"
+  ],
+  "guide": "# Sorting Algorithms in Java\n\nSorting underpins binary search, interval merging, two-pointer problems, and much more. Know each algorithm's time/space complexity, stability, and when to prefer one over another. Java's standard library uses dual-pivot Quicksort for primitives and TimSort for objects.\n\n## Merge Sort \u2014 stable, O(n log n) guaranteed\n```java\nvoid mergeSort(int[] a, int l, int r) {\n    if (l >= r) return;\n    int m = l + (r - l) / 2;\n    mergeSort(a, l, m);\n    mergeSort(a, m + 1, r);\n    merge(a, l, m, r);  // combine two sorted halves\n}\n// Time: O(n log n) best/avg/worst\n// Space: O(n) auxiliary array\n// Stable: YES\n```\n\n## Quick Sort \u2014 fast in practice, O(n\u00b2) worst case\n```java\nvoid quickSort(int[] a, int l, int r) {\n    if (l >= r) return;\n    int p = partition(a, l, r);  // Lomuto: pivot = a[r]\n    quickSort(a, l, p - 1);\n    quickSort(a, p + 1, r);\n}\n// Time: O(n log n) avg, O(n\u00b2) worst (sorted input + bad pivot)\n// Space: O(log n) call stack avg\n// Stable: NO\n```\n\n## Heap Sort \u2014 O(n log n) worst, in-place\n```java\nvoid heapSort(int[] a) {\n    int n = a.length;\n    // Build max-heap bottom-up\n    for (int i = n/2 - 1; i >= 0; i--) heapify(a, n, i);\n    // Extract max one by one\n    for (int i = n - 1; i > 0; i--) {\n        swap(a, 0, i);\n        heapify(a, i, 0);\n    }\n}\n// Time: O(n log n) always\n// Space: O(1)\n// Stable: NO\n```\n\n## Complexity comparison table\n| Algorithm  | Best      | Average   | Worst     | Space    | Stable |\n|------------|-----------|-----------|-----------|----------|--------|\n| Bubble     | O(n)      | O(n\u00b2)     | O(n\u00b2)     | O(1)     | Yes    |\n| Selection  | O(n\u00b2)     | O(n\u00b2)     | O(n\u00b2)     | O(1)     | No     |\n| Insertion  | O(n)      | O(n\u00b2)     | O(n\u00b2)     | O(1)     | Yes    |\n| Merge      | O(n lg n) | O(n lg n) | O(n lg n) | O(n)     | Yes    |\n| Quick      | O(n lg n) | O(n lg n) | O(n\u00b2)     | O(log n) | No     |\n| Heap       | O(n lg n) | O(n lg n) | O(n lg n) | O(1)     | No     |\n| Counting   | O(n+k)    | O(n+k)    | O(n+k)    | O(k)     | Yes    |\n\n## Java Arrays.sort and Comparator\n```java\n// Primitives \u2192 dual-pivot Quicksort (fast, NOT stable)\nArrays.sort(intArray);\n\n// Objects \u2192 TimSort (stable, adaptive \u2014 O(n) on nearly-sorted)\nArrays.sort(strArray);\n\n// Custom order with Comparator\nArrays.sort(people, Comparator.comparingInt(p -> p.age));\nArrays.sort(people, (a, b) -> a.name.compareTo(b.name));\n```\n\n## Common Pitfalls\n- Assuming Arrays.sort is stable for int[] \u2014 it uses Quicksort (NOT stable)\n- Off-by-one in Lomuto partition: pivot ends at index p, not p-1\n- Not handling many duplicates in Quicksort \u2014 degrades to O(n\u00b2) without 3-way partition\n- Using O(n log n) comparison sort when counting sort (O(n+k)) is applicable\n\n## Connections\n- **Arrays**: sorting is a prerequisite for binary search and interval problems\n- **Recursion**: merge sort and quick sort are recursive divide-and-conquer\n- **Heaps**: heap sort uses the heap data structure directly\n- **Two Pointers**: after sorting, merge and Dutch-flag patterns apply naturally",
+  "questions": [
+    {
+      "id": "dso-q1",
+      "type": "mcq",
+      "prompt": "Merge sort worst-case time complexity:",
+      "choices": [
+        "O(n)",
+        "O(n log n)",
+        "O(n\u00b2)",
+        "O(2^n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Always splits into equal halves and merges \u2014 O(n log n) regardless of input.",
+      "tags": [
+        "merge-sort"
+      ]
+    },
+    {
+      "id": "dso-q2",
+      "type": "mcq",
+      "prompt": "Quick sort worst-case time complexity:",
+      "choices": [
+        "O(n log n)",
+        "O(n\u00b2)",
+        "O(n)",
+        "O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Occurs when the pivot is always the smallest or largest element (e.g. sorted input with last-element pivot).",
+      "tags": [
+        "quick-sort"
+      ]
+    },
+    {
+      "id": "dso-q3",
+      "type": "mcq",
+      "prompt": "Which of these sorting algorithms is stable?",
+      "choices": [
+        "Quick sort",
+        "Heap sort",
+        "Merge sort",
+        "Selection sort"
+      ],
+      "answerIndex": 2,
+      "explanation": "Stable = equal elements keep their original relative order. Merge sort never swaps equal elements past each other.",
+      "tags": [
+        "stability"
+      ]
+    },
+    {
+      "id": "dso-q4",
+      "type": "mcq",
+      "prompt": "Arrays.sort(int[]) in Java uses:",
+      "choices": [
+        "Merge sort",
+        "Bubble sort",
+        "Dual-pivot Quicksort",
+        "Heap sort"
+      ],
+      "answerIndex": 2,
+      "explanation": "Java uses Yaroslavskiy's dual-pivot Quicksort for primitive arrays \u2014 fast but NOT stable.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "dso-q5",
+      "type": "mcq",
+      "prompt": "Arrays.sort(String[]) in Java uses:",
+      "choices": [
+        "Quicksort",
+        "TimSort (merge + insertion)",
+        "Bubble sort",
+        "Radix sort"
+      ],
+      "answerIndex": 1,
+      "explanation": "Object arrays use TimSort \u2014 stable and adaptive, O(n) on nearly-sorted data.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "dso-q6",
+      "type": "mcq",
+      "prompt": "Merge sort space complexity:",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n)",
+        "O(n log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Requires an O(n) auxiliary array to hold merged results.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "dso-q7",
+      "type": "mcq",
+      "prompt": "Heap sort space complexity:",
+      "choices": [
+        "O(n)",
+        "O(log n)",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Sorts in-place \u2014 only the O(log n) heapify call stack, considered O(1) extra.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "dso-q8",
+      "type": "mcq",
+      "prompt": "Bubble sort best case with an early-exit flag (already sorted):",
+      "choices": [
+        "O(n\u00b2)",
+        "O(n log n)",
+        "O(n)",
+        "O(1)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Zero swaps occur on the first pass \u2014 the flag exits immediately after O(n) comparisons.",
+      "tags": [
+        "bubble-sort"
+      ]
+    },
+    {
+      "id": "dso-q9",
+      "type": "mcq",
+      "prompt": "Quick sort with a random pivot achieves on average:",
+      "choices": [
+        "O(n\u00b2)",
+        "O(n log n)",
+        "O(n)",
+        "O(n log\u00b2 n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Random pivot keeps partitions balanced in expectation.",
+      "tags": [
+        "quick-sort"
+      ]
+    },
+    {
+      "id": "dso-q10",
+      "type": "mcq",
+      "prompt": "Counting sort time complexity:",
+      "choices": [
+        "O(n log n)",
+        "O(n\u00b2)",
+        "O(n + k)",
+        "O(k log k)"
+      ],
+      "answerIndex": 2,
+      "explanation": "One pass to count (O(n)), one pass over range (O(k)), one pass to output (O(n)).",
+      "tags": [
+        "counting-sort"
+      ]
+    },
+    {
+      "id": "dso-q11",
+      "type": "multi",
+      "prompt": "Which algorithms guarantee O(n log n) worst-case?",
+      "choices": [
+        "Bubble sort",
+        "Merge sort",
+        "Heap sort",
+        "Quick sort"
+      ],
+      "answerIndexes": [
+        1,
+        2
+      ],
+      "explanation": "Quick sort degrades to O(n\u00b2) worst case. Merge and heap are always O(n log n).",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "dso-q12",
+      "type": "mcq",
+      "prompt": "Stability is important when:",
+      "choices": [
+        "Sorting primitive integers",
+        "The sort key is the only field",
+        "Multiple sort passes must preserve prior ordering of equal elements",
+        "Input is completely random"
+      ],
+      "answerIndex": 2,
+      "explanation": "E.g. sort by department then by salary \u2014 second sort must be stable to keep department order.",
+      "tags": [
+        "stability"
+      ]
+    },
+    {
+      "id": "dso-q13",
+      "type": "mcq",
+      "prompt": "Lomuto partition scheme uses which element as pivot?",
+      "choices": [
+        "First",
+        "Middle",
+        "Last",
+        "Median-of-three"
+      ],
+      "answerIndex": 2,
+      "explanation": "Lomuto always picks a[r] (last element) as the pivot.",
+      "tags": [
+        "quick-sort"
+      ]
+    },
+    {
+      "id": "dso-q14",
+      "type": "codeOutput",
+      "prompt": "After one full pass of bubble sort on [5, 3, 1, 4]:",
+      "code": "// one complete left-to-right pass comparing adjacent pairs",
+      "choices": [
+        "[1, 3, 4, 5]",
+        "[3, 1, 4, 5]",
+        "[1, 5, 3, 4]",
+        "[3, 5, 1, 4]"
+      ],
+      "answerIndex": 1,
+      "explanation": "Swaps: (5,3)\u2192[3,5,1,4], (5,1)\u2192[3,1,5,4], (5,4)\u2192[3,1,4,5]. Max bubbles to end.",
+      "tags": [
+        "bubble-sort"
+      ]
+    },
+    {
+      "id": "dso-q15",
+      "type": "mcq",
+      "prompt": "TimSort is a hybrid of:",
+      "choices": [
+        "Radix + counting",
+        "Merge sort + insertion sort",
+        "Heap + merge",
+        "Quick + heap"
+      ],
+      "answerIndex": 1,
+      "explanation": "Runs insertion sort on small natural runs then merges them \u2014 excellent for real-world nearly-sorted data.",
+      "tags": [
+        "timsort"
+      ]
+    },
+    {
+      "id": "dso-q16",
+      "type": "mcq",
+      "prompt": "To sort objects by a field in Java:",
+      "choices": [
+        "Cast field to int and subtract",
+        "Pass a Comparator to Arrays.sort",
+        "Use == operator",
+        "Sort the field array separately"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arrays.sort(arr, Comparator.comparingInt(o -> o.field)) is idiomatic.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "dso-q17",
+      "type": "mcq",
+      "prompt": "3-way partition (Dutch National Flag) variant of Quicksort is best when:",
+      "choices": [
+        "All elements are distinct",
+        "There are many duplicate elements equal to the pivot",
+        "Array is already sorted",
+        "Array contains floats"
+      ],
+      "answerIndex": 1,
+      "explanation": "Groups all pivot-equal elements in the middle, skipping them in recursive calls.",
+      "tags": [
+        "quick-sort"
+      ]
+    },
+    {
+      "id": "dso-q18",
+      "type": "mcq",
+      "prompt": "Merge sort is preferred over quick sort when:",
+      "choices": [
+        "In-place sorting is required",
+        "Stability is required OR worst-case guarantee matters",
+        "Memory is very scarce",
+        "Data fits entirely in CPU cache"
+      ],
+      "answerIndex": 1,
+      "explanation": "Merge provides stability and O(n log n) worst case at the cost of O(n) extra space.",
+      "tags": [
+        "comparison"
+      ]
+    },
+    {
+      "id": "dso-q19",
+      "type": "mcq",
+      "prompt": "For sorting 8 elements inside TimSort, Java uses:",
+      "choices": [
+        "Merge sort",
+        "Quick sort",
+        "Heap sort",
+        "Insertion sort"
+      ],
+      "answerIndex": 3,
+      "explanation": "Insertion sort has very low overhead for tiny arrays \u2014 TimSort uses it on small runs.",
+      "tags": [
+        "timsort"
+      ]
+    },
+    {
+      "id": "dso-q20",
+      "type": "codeOutput",
+      "prompt": "Arrays.sort on int[] {3,1,2} \u2014 sort is:",
+      "code": "int[] arr = {3,1,2};\nArrays.sort(arr);\nSystem.out.println(Arrays.toString(arr));",
+      "choices": [
+        "[3, 1, 2]",
+        "[1, 2, 3]",
+        "[1, 3, 2]",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arrays.sort sorts in ascending order by default.",
+      "tags": [
+        "java"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "dso-fc1",
+      "front": "Merge sort",
+      "back": "O(n log n) always. Stable. O(n) extra space. Divide \u2192 recurse \u2192 merge.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc2",
+      "front": "Quick sort",
+      "back": "O(n log n) avg, O(n\u00b2) worst. NOT stable. O(log n) stack space. Use random pivot.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc3",
+      "front": "Heap sort",
+      "back": "O(n log n) always. NOT stable. O(1) extra. Build max-heap then extract.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc4",
+      "front": "Arrays.sort \u2014 primitives",
+      "back": "Dual-pivot Quicksort: fast in practice, NOT stable.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc5",
+      "front": "Arrays.sort \u2014 objects",
+      "back": "TimSort: stable, adaptive, O(n) on nearly-sorted data.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc6",
+      "front": "Stability definition",
+      "back": "Equal elements keep their original relative order after sorting.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc7",
+      "front": "Counting sort",
+      "back": "O(n+k) for integers in [0, k). Non-comparison \u2014 beats O(n log n) lower bound.",
+      "tags": [
+        "sorting"
+      ]
+    },
+    {
+      "id": "dso-fc8",
+      "front": "Comparator pattern",
+      "back": "Arrays.sort(arr, (a,b) -> a.field - b.field) \u2014 custom sort key in one line.",
+      "tags": [
+        "sorting"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Write SortingLab.java with:\n1. mergeSort(int[] a) \u2014 recursive, in-place via auxiliary array\n2. quickSort(int[] a) \u2014 random pivot to avoid O(n\u00b2) on sorted input\n3. topKFrequent(int[] nums, int k) \u2014 HashMap + min-heap of size k\n4. A main() that times mergeSort vs Arrays.sort on a shuffled 100 000-element array.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "mergeSort passes all correctness tests including duplicates",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "quickSort uses random pivot (Math.random() or swap with random index before partition)",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "topKFrequent returns exactly k most frequent elements",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Timing output shows both complete in < 200 ms on 100k elements",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "mergeSort: allocate the temp array once at the top level \u2014 pass it down to avoid repeated allocation.",
+      "quickSort: swap arr[l + random % (r-l+1)] with arr[r] before calling Lomuto partition.",
+      "topKFrequent: min-heap of size k \u2014 add every element, then poll when pq.size() > k."
+    ]
+  }
+}

@@ -20,7 +20,12 @@ import {
   setReviewSchedules,
   getFlashcardSchedules,
   setFlashcardSchedules,
+  setLastStudied,
 } from '../lib/storage'
+
+function resetNudgeTierOnStudy() {
+  try { sessionStorage.removeItem('csm:nudgeTierFired') } catch { /* ignore */ }
+}
 import { topics } from '../content'
 
 interface ProgressState {
@@ -132,6 +137,8 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
           reviewSchedules: newReview,
         }
         save(next)
+        setLastStudied(new Date().toISOString())
+        resetNudgeTierOnStudy()
         return next
       })
     },

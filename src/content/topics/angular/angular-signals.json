@@ -1,0 +1,436 @@
+{
+  "id": "angular-signals",
+  "unit": 10,
+  "order": 104,
+  "title": "Angular Signals",
+  "summary": "Signals, computed, effect, signal inputs/outputs, and fine-grained change detection.",
+  "prereqs": [
+    "angular-data-binding",
+    "angular-rxjs"
+  ],
+  "guide": "# Angular Signals\n\nSignals (stable Angular 17) are reactive value containers. Angular tracks which template expressions read a signal and updates only those — surgical vs Zone.js broad-checking everything. Think of signals as **spreadsheet cells**: a cell has a value, other cells can reference it, and downstream cells auto-update when it changes.\n\n```\nZone.js approach:                 Signals approach:\n  Any async event                   count.set(5)\n       ↓                                ↓\n  Check EVERY component            Mark only watchers of count\n  top to bottom                    Update those bindings only\n  O(n) component tree              O(k) listeners\n```\n\n## Creating and Reading Signals\n```typescript\nconst count = signal(0);       // WritableSignal<number>\ncount();                        // read: 0  — CALL the function!\ncount.set(5);                   // replace\ncount.update(v => v + 1);      // compute from old: 6\n```\n\n## computed — Lazy Derived Values\n```typescript\nconst doubled = computed(() => count() * 2);  // memoized\n// Recalculates ONLY when count() changes\n// Lazy: only evaluates when someone reads it\n```\n\n```\ncount (signal)  →  doubled (computed)  →  template\n   signal(3)            () => count()*2       {{ doubled() }}\n        ↓                    lazy\n   count.set(4)         invalidated (not yet recalculated)\n                              ↓\n                        template reads doubled()\n                        → recalculated: 8\n```\n\n## effect — Side Effects\n```typescript\nconstructor() {\n  effect(() => {\n    document.body.className = this.theme();\n    // Re-runs whenever theme() changes\n  });\n  // Must be called in injection context\n}\n```\n**Use effect() for**: storage, analytics, non-Angular DOM.\n**NOT for**: deriving values (use computed instead).\n\n## Signal Inputs / Outputs (Angular 17.1+)\n```typescript\nlabel    = input<string>();             // InputSignal<string | undefined>\ndisabled = input(false);               // with default\nsize     = input.required<'sm'|'lg'>(); // required\nclicked  = output<void>();             // OutputEmitterRef\nvalue    = model(0);                   // two-way: [(value)]\n```\n\n## Bridging RxJS\n```typescript\nusers    = toSignal(this.svc.users$(), { initialValue: [] });  // Observable → Signal\nresults$ = toObservable(searchTerm).pipe(debounceTime(300), switchMap(s => this.search(s)));\n```\n\n## Signals + OnPush: The Optimal Combo\n```\nComponent(OnPush)\n  count = signal(0)\n  doubled = computed(() => count() * 2)\n  template: {{ doubled() }}\n\n  count.set(5)  →  Angular marks component dirty (not immediate)\n                →  On next CD cycle, only this component checked\n                →  doubled() recalculated: 10\n                →  DOM patched\n```\n\n## Common Pitfalls\n- Read with `()`: `count()` not `count`.\n- Arrays: `arr.update(a => [...a, item])` not `arr().push(item)`.\n- `effect()` must be in injection context.\n- Never `effect(() => other.set(...))` — use `computed()`.\n- `toSignal` initial value: undefined by default if no `initialValue` — causes null-check issues in template.\n- `untracked(() => signalName())` reads a signal without creating a dependency in computed/effect.\n",
+  "questions": [
+    {
+      "id": "asig-q1",
+      "type": "mcq",
+      "prompt": "Primary advantage of signals over Zone.js?",
+      "choices": [
+        "Shorter syntax",
+        "Fine-grained: Angular knows exactly which expressions to re-evaluate when each signal changes",
+        "Signals replace all APIs",
+        "Zone.js is gone"
+      ],
+      "answerIndex": 1,
+      "explanation": "Zone.js checks everything; signals carry targeted 'I changed' notifications.",
+      "tags": [
+        "signals",
+        "change-detection"
+      ]
+    },
+    {
+      "id": "asig-q2",
+      "type": "codeOutput",
+      "prompt": "What does count() return?",
+      "code": "const count = signal(10);\ncount.update(v => v * 2);\ncount.set(5);\ncount.update(v => v + 3);\nconsole.log(count());",
+      "choices": [
+        "10",
+        "20",
+        "5",
+        "8"
+      ],
+      "answerIndex": 3,
+      "explanation": "10 * 2 = 20; set(5) = 5; +3 = 8.",
+      "tags": [
+        "signals"
+      ]
+    },
+    {
+      "id": "asig-q3",
+      "type": "mcq",
+      "prompt": "computed() recalculates:",
+      "choices": [
+        "Every CD cycle",
+        "Only when a signal it reads changes \u2014 lazy and memoized",
+        "Asynchronously",
+        "Never after init"
+      ],
+      "answerIndex": 1,
+      "explanation": "computed() tracks reads. Recalculates on those signals changing only.",
+      "tags": [
+        "signals",
+        "computed"
+      ]
+    },
+    {
+      "id": "asig-q4",
+      "type": "mcq",
+      "prompt": "Why use computed() not effect() for derived values?",
+      "choices": [
+        "Computed is faster",
+        "effect() \u2192 set() creates cycles; computed() is the correct reactive derivation tool",
+        "Identical",
+        "effect() can't read signals"
+      ],
+      "answerIndex": 1,
+      "explanation": "effect(() => total.set(a() * b())) = cycle. Use computed(() => a() * b()).",
+      "tags": [
+        "signals",
+        "computed",
+        "effect"
+      ]
+    },
+    {
+      "id": "asig-q5",
+      "type": "mcq",
+      "prompt": "What does model() provide?",
+      "choices": [
+        "Read-only input",
+        "Two-way bindable signal \u2014 parent binds with [(value)], component reads and updates",
+        "Model layer only",
+        "Async input"
+      ],
+      "answerIndex": 1,
+      "explanation": "model() replaces @Input + @Output valueChange pair with a single two-way signal.",
+      "tags": [
+        "signals",
+        "model"
+      ]
+    },
+    {
+      "id": "asig-q6",
+      "type": "mcq",
+      "prompt": "Where can effect() safely be called?",
+      "choices": [
+        "Anywhere",
+        "Only constructor",
+        "Injection context \u2014 constructor, field initializer, or runInInjectionContext",
+        "Only services"
+      ],
+      "answerIndex": 2,
+      "explanation": "effect() registers cleanup on destroy via the injection context.",
+      "tags": [
+        "signals",
+        "effect"
+      ]
+    },
+    {
+      "id": "asig-q7",
+      "type": "mcq",
+      "prompt": "What does toSignal(obs$) do?",
+      "choices": [
+        "Converts to Promise",
+        "Creates a Signal reflecting latest Observable value; auto-subscribes and auto-unsubscribes",
+        "Makes Observable sync",
+        "Wraps in BehaviorSubject"
+      ],
+      "answerIndex": 1,
+      "explanation": "toSignal bridges RxJS \u2192 Signals. Synchronously readable in templates.",
+      "tags": [
+        "signals",
+        "rxjs-interop"
+      ]
+    },
+    {
+      "id": "asig-q8",
+      "type": "multi",
+      "prompt": "Valid ways to mutate a WritableSignal?",
+      "choices": [
+        "count.set(5)",
+        "count.update(v => v+1)",
+        "count.mutate(arr => arr.push(x))",
+        "count.next(5)"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "set, update, mutate \u2014 the three mutation methods. .next() is RxJS.",
+      "tags": [
+        "signals"
+      ]
+    },
+    {
+      "id": "asig-q9",
+      "type": "multi",
+      "prompt": "Valid use cases for effect()?",
+      "choices": [
+        "Sync signal to localStorage",
+        "Analytics on signal change",
+        "Derive a computed value",
+        "Sync document.title on title signal"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "effect() for side effects. computed() for derived values.",
+      "tags": [
+        "signals",
+        "effect"
+      ]
+    },
+    {
+      "id": "asig-q10",
+      "type": "mcq",
+      "prompt": "Correct way to add an item to an array signal?",
+      "choices": [
+        "arr().push(item)",
+        "arr.update(a => [...a, item])",
+        "Arrays work like plain arrays",
+        "Signals don't support arrays"
+      ],
+      "answerIndex": 1,
+      "explanation": "Signals track by reference. Push mutates in place — same reference, no update triggered.",
+      "tags": [
+        "signals",
+        "arrays"
+      ]
+    },
+    {
+      "id": "asig-q11",
+      "type": "mcq",
+      "prompt": "What does `untracked(() => count())` do inside a computed?",
+      "choices": [
+        "Throws error — untracked not allowed in computed",
+        "Reads count without creating a dependency — computed won't re-run when count changes",
+        "Makes count read-only inside the computed",
+        "Same as count()"
+      ],
+      "answerIndex": 1,
+      "explanation": "untracked() reads a signal without registering a dependency. Useful when you need a value but don't want re-computation on its change.",
+      "tags": ["signals", "computed"]
+    },
+    {
+      "id": "asig-q12",
+      "type": "codeOutput",
+      "prompt": "What logs?",
+      "code": "const a = signal(1);\nconst b = computed(() => a() * 10);\na.set(3);\nconsole.log(b());  // first read after mutation",
+      "choices": [
+        "10",
+        "30",
+        "1",
+        "undefined"
+      ],
+      "answerIndex": 1,
+      "explanation": "computed is lazy — recalculates on first read after a dependency changes. a.set(3) invalidates b; b() triggers recalc: 3 * 10 = 30.",
+      "tags": ["signals", "computed"]
+    },
+    {
+      "id": "asig-q13",
+      "type": "mcq",
+      "prompt": "toSignal(obs$) without initialValue. What is the signal's value before obs$ emits?",
+      "choices": [
+        "null",
+        "undefined",
+        "Throws error",
+        "Empty array"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default initialValue is undefined. In strict templates this causes type errors unless you provide initialValue or mark the type as T | undefined.",
+      "tags": ["signals", "rxjs-interop"]
+    },
+    {
+      "id": "asig-q14",
+      "type": "mcq",
+      "prompt": "Signal input vs @Input() decorator — key advantage?",
+      "choices": [
+        "Signal input is faster to type",
+        "Signal input returns an InputSignal — reactive, readable in template/computed without ngOnChanges",
+        "Signal input supports default values; @Input does not",
+        "Signal input is required only"
+      ],
+      "answerIndex": 1,
+      "explanation": "@Input requires ngOnChanges to react to changes. InputSignal is a readable signal: use in computed() or template directly.",
+      "tags": ["signals", "signal-inputs"]
+    },
+    {
+      "id": "asig-q15",
+      "type": "mcq",
+      "prompt": "The best Angular 17+ combo for performance is:",
+      "choices": [
+        "Default CD + Zone.js",
+        "OnPush + signals — signals notify Angular which component tree node to update",
+        "OnPush + @Input only",
+        "Zoneless only"
+      ],
+      "answerIndex": 1,
+      "explanation": "OnPush alone limits checks to inputs/events. Signals add surgical intra-component tracking — only the exact DOM binding updates.",
+      "tags": ["signals", "change-detection"]
+    },
+    {
+      "id": "asig-q16",
+      "type": "multi",
+      "prompt": "Which are TRUE about computed()?",
+      "choices": [
+        "It is read-only (no set/update)",
+        "Re-evaluates eagerly whenever dependencies change",
+        "Memoized — same value returned until dependencies change",
+        "Can read other computed() signals"
+      ],
+      "answerIndexes": [0, 2, 3],
+      "explanation": "computed() is read-only, lazy, memoized. It evaluates only when read after a dependency change — not eagerly. It can depend on other computed signals.",
+      "tags": ["signals", "computed"]
+    },
+    {
+      "id": "asig-q17",
+      "type": "mcq",
+      "prompt": "model() in a component replaces which pattern?",
+      "choices": [
+        "@ViewChild + reference",
+        "@Input() value + @Output() valueChange — the traditional two-way binding pair",
+        "ngModel for form controls",
+        "BehaviorSubject service pattern"
+      ],
+      "answerIndex": 1,
+      "explanation": "model() creates a WritableSignal that the parent binds with [(modelName)]. Internally emits a change event on .set().",
+      "tags": ["signals", "model"]
+    },
+    {
+      "id": "asig-q18",
+      "type": "codeOutput",
+      "prompt": "What happens at runtime?",
+      "code": "// Outside constructor\nclass MyComponent {\n  data = signal(0);\n  // NOT in constructor:\n  sideEffect = effect(() => console.log(this.data()));\n}",
+      "choices": [
+        "Works fine — field initializers are injection context",
+        "Runtime error: effect() called outside injection context",
+        "Works but effect never runs",
+        "Compiles but leaks memory"
+      ],
+      "answerIndex": 0,
+      "explanation": "Field initializers in Angular components run inside the injection context. Both constructor body and field initializers are valid for effect().",
+      "tags": ["signals", "effect"]
+    },
+    {
+      "id": "asig-q19",
+      "type": "mcq",
+      "prompt": "How do you stop an effect from running?",
+      "choices": [
+        "effectRef.stop()",
+        "effect().unsubscribe()",
+        "const ref = effect(...); ref.destroy()",
+        "Effects auto-stop only on component destroy"
+      ],
+      "answerIndex": 2,
+      "explanation": "effect() returns an EffectRef. Call ref.destroy() to manually stop it. It also auto-cleans up with the injector on component destroy.",
+      "tags": ["signals", "effect"]
+    },
+    {
+      "id": "asig-q20",
+      "type": "mcq",
+      "prompt": "toObservable(signal) emits:",
+      "choices": [
+        "Once with initial value then never",
+        "Each time the signal's value changes — synchronously in the same microtask",
+        "In an async scheduled microtask after each signal change",
+        "Only on component lifecycle hooks"
+      ],
+      "answerIndex": 2,
+      "explanation": "toObservable schedules emissions via effect() under the hood. Emissions happen asynchronously — not in the same synchronous flush as the signal set().",
+      "tags": ["signals", "rxjs-interop"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "asig-fc1",
+      "front": "signal() mutations",
+      "back": "set(val): replace. update(fn): compute from old. mutate(fn): in-place (deprecated). Always read by calling: count() not count.",
+      "tags": [
+        "signals"
+      ]
+    },
+    {
+      "id": "asig-fc2",
+      "front": "computed() guarantees",
+      "back": "Lazy, memoized, auto-tracked. Only recalculates when a read signal changes. Read-only \u2014 no set/update.",
+      "tags": [
+        "signals",
+        "computed"
+      ]
+    },
+    {
+      "id": "asig-fc3",
+      "front": "effect() rules",
+      "back": "Side effects only. Injection context required. Never set another signal inside \u2014 use computed() for derivations.",
+      "tags": [
+        "signals",
+        "effect"
+      ]
+    },
+    {
+      "id": "asig-fc4",
+      "front": "Signal inputs (Angular 17.1+)",
+      "back": "input<T>(): optional. input(default). input.required<T>(). Returns InputSignal \u2014 reactive, no ngOnChanges needed.",
+      "tags": [
+        "signals",
+        "signal-inputs"
+      ]
+    },
+    {
+      "id": "asig-fc5",
+      "front": "toSignal / toObservable",
+      "back": "toSignal(obs$, { initialValue: [] }): Observable \u2192 Signal. toObservable(sig): Signal \u2192 Observable (for RxJS pipelines). Both require injection context.",
+      "tags": [
+        "signals",
+        "rxjs-interop"
+      ]
+    },
+    {
+      "id": "asig-fc6",
+      "front": "Signals + OnPush",
+      "back": "Optimal combo \u2014 OnPush + signals. Angular tracks template signal reads. Updates only affected components. No markForCheck() needed.",
+      "tags": [
+        "signals",
+        "change-detection"
+      ]
+    },
+    {
+      "id": "asig-fc7",
+      "front": "untracked()",
+      "back": "untracked(() => sig()) reads a signal without registering it as a dependency. Use in computed/effect when you need a value but don't want re-run on its change.",
+      "tags": ["signals"]
+    },
+    {
+      "id": "asig-fc8",
+      "front": "model() two-way signal",
+      "back": "model(initialValue): WritableSignal that parent binds with [(name)]. Replaces @Input() value + @Output() valueChange pair. Component calls value.set() to emit upstream.",
+      "tags": ["signals", "model"]
+    }
+  ],
+  "project": {
+    "brief": "Design a live dashboard: (1) metrics Observable \u2192 toSignal; (2) selectedId: writable signal; (3) selectedMetric: computed from both; (4) theme toggle \u2192 effect to localStorage; (5) search: toObservable(term) \u2192 debounce \u2192 switchMap \u2192 toSignal. Where are signals vs computed vs effect?",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "metrics = toSignal(svc.getMetrics$(), { initialValue: [] }) \u2014 Observable bridged to Signal",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "selectedId = signal<string|null>(null) \u2014 writable, user updates on click",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "selectedMetric = computed(() => metrics().find(m => m.id === selectedId()))",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "effect(() => localStorage.setItem('theme', theme())) \u2014 legitimate side effect",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "searchResults = toSignal(toObservable(term).pipe(debounceTime(300), switchMap(search)), { initialValue: [] })",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "effect() must NOT set another signal \u2014 that's computed()'s domain.",
+      "All toSignal/toObservable calls go in constructor (injection context).",
+      "selectedMetric defaults to metrics()[0] if selectedId() is null."
+    ]
+  }
+}

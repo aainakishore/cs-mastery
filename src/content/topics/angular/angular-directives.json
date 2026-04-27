@@ -1,0 +1,360 @@
+{
+  "id": "angular-directives",
+  "unit": 10,
+  "order": 99,
+  "title": "Angular Directives",
+  "summary": "Structural directives (*ngIf, *ngFor, *ngSwitch) vs attribute directives, how they work under the hood, and how to write custom directives.",
+  "prereqs": ["angular-data-binding"],
+  "guide": "# Angular Directives\n\nA directive is Angular's way of **attaching behaviour or structure to a DOM element without writing a component**. Think of them as instructions you attach to HTML elements: 'if this condition is false, remove this block from the DOM entirely' or 'highlight this element when hovered'.\n\n```\nDirectives\n  ├── Component Directives   — directive WITH a template (most common)\n  │\n  ├── Structural Directives  — change DOM STRUCTURE (add/remove elements)\n  │     ├── *ngIf\n  │     ├── *ngFor\n  │     └── *ngSwitch\n  │\n  └── Attribute Directives   — change APPEARANCE/BEHAVIOUR of element\n        ├── ngClass\n        ├── ngStyle\n        └── Custom (e.g., [appHighlight])\n```\n\n## The Asterisk * — Syntactic Sugar\n\nThe `*` prefix on structural directives is shorthand. Angular expands it into an `<ng-template>` block:\n\n```html\n<!-- What you write: -->\n<p *ngIf=\"isVisible\">Hello</p>\n\n<!-- What Angular expands it to: -->\n<ng-template [ngIf]=\"isVisible\">\n  <p>Hello</p>\n</ng-template>\n```\n\n```\n<ng-template> is a ghost element — it never appears in the real DOM.\nAngular uses it as a blueprint: stamp or destroy its content based on conditions.\n\nDOM when isVisible = true:   <p>Hello</p>\nDOM when isVisible = false:  <!-- nothing — the element is REMOVED, not hidden -->\n```\n\nThis is the critical difference from `[hidden]=\"!isVisible\"` which hides via CSS but keeps the element in the DOM.\n\n## *ngIf — Conditional Rendering\n\n```html\n<!-- Basic -->\n<div *ngIf=\"user\">Welcome {{ user.name }}</div>\n\n<!-- With else branch using ng-template -->\n<div *ngIf=\"user; else loading\">\n  Welcome {{ user.name }}\n</div>\n<ng-template #loading>\n  <p>Loading...</p>\n</ng-template>\n\n<!-- With then and else -->\n<ng-template [ngIf]=\"isAdmin\" [ngIfThen]=\"adminTpl\" [ngIfElse]=\"userTpl\"></ng-template>\n<ng-template #adminTpl><p>Admin Panel</p></ng-template>\n<ng-template #userTpl><p>User View</p></ng-template>\n\n<!-- Capture the value with as -->\n<div *ngIf=\"user$ | async as user\">\n  {{ user.name }}\n</div>\n```\n\n## *ngFor — List Rendering\n\n```html\n<ul>\n  <li *ngFor=\"let item of items; index as i; trackBy: trackById\">\n    {{ i + 1 }}. {{ item.name }}\n  </li>\n</ul>\n```\n\n**Local variables available inside *ngFor:**\n\n```\n*ngFor=\"let item of items;\n              index    as i       ← current index (0-based)\n              first    as isFirst ← boolean, true for index 0\n              last     as isLast  ← boolean, true for last item\n              even     as isEven  ← boolean, true for even index\n              odd      as isOdd   ← boolean, true for odd index\"\n```\n\n**trackBy — performance optimisation:**\n\n```typescript\n// Without trackBy: Angular re-renders entire list on any data change\n// With trackBy: Angular reuses DOM nodes for items with same identity\n\ntrackById(index: number, item: Item): number {\n  return item.id;  // Angular uses this to identify each item\n}\n```\n\n```\nWithout trackBy — data refreshes:\n  [A, B, C] → [A, B, D]:  Angular destroys C, creates D\n                           (3 DOM operations)\n\nWith trackBy (by id):\n  [A, B, C] → [A, B, D]:  Angular reuses A and B DOM nodes,\n                           only destroys C, creates D\n                           (1 destroy + 1 create)\n```\n\n## *ngSwitch — Multi-Branch Rendering\n\n```html\n<div [ngSwitch]=\"status\">\n  <p *ngSwitchCase=\"'loading'\">Loading...</p>\n  <p *ngSwitchCase=\"'error'\">Error occurred</p>\n  <p *ngSwitchCase=\"'success'\">Data loaded!</p>\n  <p *ngSwitchDefault>Unknown status</p>\n</div>\n```\n\nNote: `[ngSwitch]` itself is an attribute directive (no `*`). The `*ngSwitchCase` and `*ngSwitchDefault` are structural.\n\n## Attribute Directives — Modify Without Removing\n\nUnlike structural directives, attribute directives don't add/remove elements. They modify the element they're applied to.\n\n```html\n<!-- Built-in attribute directives -->\n<div [ngClass]=\"{ 'active': isActive, 'disabled': !isEnabled }\">...</div>\n<div [ngStyle]=\"{ 'color': textColor, 'font-size': fontSize + 'px' }\">...</div>\n```\n\n## Writing a Custom Attribute Directive\n\n```typescript\nimport { Directive, ElementRef, HostListener, Input, OnInit } from '@angular/core';\n\n@Directive({\n  selector: '[appHighlight]',  // CSS selector attribute\n  standalone: true\n})\nexport class HighlightDirective implements OnInit {\n  @Input() appHighlight = 'yellow';  // same name as selector for input shorthand\n\n  constructor(private el: ElementRef) {}\n\n  ngOnInit() {\n    this.el.nativeElement.style.backgroundColor = this.appHighlight;\n  }\n\n  @HostListener('mouseenter') onMouseEnter() {\n    this.el.nativeElement.style.backgroundColor = 'orange';\n  }\n\n  @HostListener('mouseleave') onMouseLeave() {\n    this.el.nativeElement.style.backgroundColor = this.appHighlight;\n  }\n}\n```\n\n```html\n<!-- Usage: -->\n<p appHighlight>Default yellow highlight</p>\n<p [appHighlight]=\"'lightblue'\">Light blue highlight</p>\n```\n\n```\n@Directive lifecycle:\n  1. created — constructor, ElementRef injected\n  2. ngOnInit — @Input values available\n  3. @HostListener — responds to host element events\n  4. ngOnDestroy — cleanup\n```\n\n## Writing a Custom Structural Directive\n\n```typescript\n@Directive({\n  selector: '[appRepeat]',\n  standalone: true\n})\nexport class RepeatDirective {\n  constructor(\n    private templateRef: TemplateRef<any>,\n    private viewContainer: ViewContainerRef\n  ) {}\n\n  @Input() set appRepeat(times: number) {\n    this.viewContainer.clear();\n    for (let i = 0; i < times; i++) {\n      this.viewContainer.createEmbeddedView(this.templateRef, { $implicit: i });\n    }\n  }\n}\n```\n\n```html\n<p *appRepeat=\"3; let i\">Row {{ i }}</p>\n<!-- Renders 3 <p> elements: Row 0, Row 1, Row 2 -->\n```\n\n## ng-container — Structural Grouping Without a DOM Element\n\n```html\n<!-- Problem: you need *ngIf AND *ngFor on the same element -->\n<!-- This is invalid — two structural directives on one element: -->\n<li *ngFor=\"let item of items\" *ngIf=\"item.active\">{{ item.name }}</li>\n\n<!-- Solution: use ng-container for the outer directive -->\n<ng-container *ngFor=\"let item of items\">\n  <li *ngIf=\"item.active\">{{ item.name }}</li>\n</ng-container>\n<!-- ng-container adds zero DOM elements -- it's invisible -->\n```\n\n## Common Pitfalls\n- **Two structural directives on one element** — not allowed. Use `<ng-container>` to wrap.\n- **Not using trackBy in long lists** — leads to unnecessary full re-renders on data updates.\n- **`*ngIf` vs `[hidden]`** — `*ngIf` destroys/recreates the component (lifecycle runs); `[hidden]` keeps it in DOM (no lifecycle, but DOM overhead). `*ngIf` is better for conditionally loading expensive components.\n- **Not importing standalone directive** — in standalone components, add directives to `imports: []` array. In NgModule, add to `declarations` and `exports`.\n- **Mutating the array in ngFor** — `this.items[0] = newItem` (index replacement) won't trigger re-render without trackBy. Use `this.items = [...this.items]` to force detection.\n\n## Connections\n- **angular-data-binding** — structural directives use property/event binding internally; ng-template uses template reference variables\n- **angular-forms** — reactive forms use structural directives for validation message display\n- **angular-signals** — `@if` and `@for` (Angular 17+) are new built-in control flow blocks replacing *ngIf/*ngFor",
+  "questions": [
+    {
+      "id": "adir-q1",
+      "type": "mcq",
+      "prompt": "What does the `*` prefix on `*ngIf` and `*ngFor` signify?",
+      "choices": [
+        "It marks the directive as required",
+        "It's syntactic sugar that Angular expands into an <ng-template> with property binding",
+        "It runs the directive with higher priority",
+        "It marks the directive as structural (purely a naming convention, no functional difference)"
+      ],
+      "answerIndex": 1,
+      "explanation": "`*ngIf=\"condition\"` expands to `<ng-template [ngIf]=\"condition\">...</ng-template>`. The `*` is shorthand so you don't write the ng-template manually. This matters because it means the content is a template blueprint, not live DOM — Angular stamps or removes it.",
+      "tags": ["directives", "structural-directives", "ng-template"]
+    },
+    {
+      "id": "adir-q2",
+      "type": "mcq",
+      "prompt": "What is the key difference between `*ngIf=\"false\"` and `[hidden]=\"true\"` on an element?",
+      "choices": [
+        "They are equivalent — both hide the element",
+        "*ngIf removes the element completely from the DOM (and destroys child components). [hidden] keeps the element in DOM but applies display:none CSS",
+        "[hidden] is deprecated; always use *ngIf",
+        "*ngIf only works on block elements; [hidden] works on all elements"
+      ],
+      "answerIndex": 1,
+      "explanation": "`*ngIf=\"false\"` removes the element from the DOM entirely — no HTML, no memory, child component lifecycle destroyed. `[hidden]=\"true\"` adds `display: none` CSS — the element still exists, child components still run, just invisible. Use `*ngIf` to avoid running expensive child components. Use `[hidden]` when you need to preserve state without re-initialising.",
+      "tags": ["directives", "ngIf", "performance"]
+    },
+    {
+      "id": "adir-q3",
+      "type": "codeOutput",
+      "prompt": "How many `<li>` elements render in the DOM?",
+      "code": "<ul>\n  <li *ngFor=\"let x of [10, 20, 30]\">{{ x }}</li>\n</ul>",
+      "choices": [
+        "0 — missing trackBy",
+        "1 — *ngFor renders once",
+        "3 — one per array item",
+        "4 — including the template placeholder"
+      ],
+      "answerIndex": 2,
+      "explanation": "`*ngFor` iterates the array and creates one `<li>` per element. Three items → three `<li>` elements. The `<ng-template>` wrapper disappears — only the stamped content appears in the real DOM. trackBy is optional (omitting it is a performance concern, not a correctness error).",
+      "tags": ["directives", "ngFor"]
+    },
+    {
+      "id": "adir-q4",
+      "type": "mcq",
+      "prompt": "Why does `trackBy` significantly improve *ngFor performance when data refreshes from an API?",
+      "choices": [
+        "trackBy pre-fetches items from the server",
+        "Without trackBy Angular assumes all items are new on each data change and re-creates all DOM nodes. trackBy lets Angular reuse DOM nodes for items with matching identities — only changed items get updated",
+        "trackBy caches API responses",
+        "trackBy is only needed for lists over 1000 items"
+      ],
+      "answerIndex": 1,
+      "explanation": "When items change, Angular needs to know which items are 'the same' between old and new lists. Without trackBy, it compares by object reference — a fresh API response creates new objects even for unchanged data, so Angular destroys and re-creates all DOM nodes. trackBy gives Angular a stable key (like item.id) to identify items across renders.",
+      "tags": ["directives", "ngFor", "trackBy", "performance"]
+    },
+    {
+      "id": "adir-q5",
+      "type": "mcq",
+      "prompt": "You need to apply both `*ngFor` and `*ngIf` to filter the same list. What's the correct approach?",
+      "choices": [
+        "<li *ngFor=\"let item of items\" *ngIf=\"item.active\"> — two structural directives on one element",
+        "Use ng-container: <ng-container *ngFor=\"let item of items\"><li *ngIf=\"item.active\"></li></ng-container>",
+        "Structural directives can't be combined — use a component instead",
+        "Use [ngIf] instead: <li *ngFor=\"let item of items\" [ngIf]=\"item.active\">"
+      ],
+      "answerIndex": 1,
+      "explanation": "Angular allows only ONE structural directive per element. For combinations, wrap with `<ng-container>` (adds no DOM nodes). Best practice: filter in the component with a getter or pipe — `*ngFor=\"let item of activeItems\"` — which is cleaner and more performant than filtering in the template.",
+      "tags": ["directives", "ng-container", "structural-directives"]
+    },
+    {
+      "id": "adir-q6",
+      "type": "codeOutput",
+      "prompt": "What appears in the DOM for this template when `status = 'pending'`?",
+      "code": "<div [ngSwitch]=\"status\">\n  <p *ngSwitchCase=\"'loading'\">Fetching...</p>\n  <p *ngSwitchCase=\"'success'\">Done</p>\n  <p *ngSwitchDefault>Waiting</p>\n</div>",
+      "choices": [
+        "<p>Fetching...</p>",
+        "<p>Done</p>",
+        "<p>Waiting</p>",
+        "All three paragraphs render"
+      ],
+      "answerIndex": 2,
+      "explanation": "'pending' matches neither 'loading' nor 'success', so `*ngSwitchDefault` renders. Only one branch of ngSwitch renders at a time — the others are removed from the DOM. [ngSwitch] on the container div does not add any DOM structure itself.",
+      "tags": ["directives", "ngSwitch"]
+    },
+    {
+      "id": "adir-q7",
+      "type": "mcq",
+      "prompt": "Which class is injected into a custom directive to gain direct access to the host DOM element?",
+      "choices": [
+        "DomSanitizer",
+        "Renderer2",
+        "ElementRef",
+        "TemplateRef"
+      ],
+      "answerIndex": 2,
+      "explanation": "`ElementRef` holds a `nativeElement` reference to the host DOM element. You can read/write properties directly. However, mutating `nativeElement` directly bypasses Angular's security and server-side rendering. Prefer `Renderer2` for platform-safe DOM manipulation.",
+      "tags": ["directives", "custom-directive", "ElementRef"]
+    },
+    {
+      "id": "adir-q8",
+      "type": "mcq",
+      "prompt": "What does `@HostListener('mouseenter')` do in a directive?",
+      "choices": [
+        "Listens for events on child elements",
+        "Listens for the mouseenter event on the host element (the element the directive is applied to) and calls the decorated method",
+        "Emits a mouseenter output event",
+        "Marks the method as an entry point"
+      ],
+      "answerIndex": 1,
+      "explanation": "`@HostListener` registers an event listener on the host element — the element that has the directive's selector attribute. The decorated method runs when the event fires. Angular automatically removes the listener on directive destroy, preventing memory leaks.",
+      "tags": ["directives", "HostListener", "custom-directive"]
+    },
+    {
+      "id": "adir-q9",
+      "type": "mcq",
+      "prompt": "What does `ng-container` add to the rendered HTML?",
+      "choices": [
+        "A <div> wrapper",
+        "An HTML comment placeholder",
+        "Nothing — it's a logical grouping; no DOM element is created",
+        "A <span> wrapper"
+      ],
+      "answerIndex": 2,
+      "explanation": "`<ng-container>` is Angular's invisible wrapper element. It exists only in the template for logical grouping (multiple structural directives, routing outlets, etc.) but produces zero DOM output. This is its main advantage over wrapping with `<div>` (which adds unneeded nesting).",
+      "tags": ["directives", "ng-container"]
+    },
+    {
+      "id": "adir-q10",
+      "type": "codeOutput",
+      "prompt": "What local variable is available as `isFirst` in `*ngFor=\"let item of items; first as isFirst\"`?",
+      "choices": [
+        "A boolean: true only for the first item (index 0)",
+        "The index of the first item (always 0)",
+        "The value of items[0]",
+        "undefined — `first as isFirst` is invalid syntax"
+      ],
+      "answerIndex": 0,
+      "explanation": "`first` is a local variable exported by NgForOf that is `true` only for the first iteration (index 0). Similarly: `last` (last item), `even` (even index), `odd` (odd index). These are useful for conditional styling on first/last rows without extra logic in the component.",
+      "tags": ["directives", "ngFor", "local-variables"]
+    },
+    {
+      "id": "adir-q11",
+      "type": "mcq",
+      "prompt": "What is `TemplateRef` used for in a custom structural directive?",
+      "choices": [
+        "To access the component's styles",
+        "It represents the `<ng-template>` that Angular creates from the `*` syntax — the directive uses it as a blueprint to stamp into the DOM via ViewContainerRef",
+        "To inject the NgModule's template",
+        "It's the same as ElementRef"
+      ],
+      "answerIndex": 1,
+      "explanation": "When Angular desugars `*myDirective` into an `<ng-template>`, the directive receives a `TemplateRef<any>` (the template blueprint) and a `ViewContainerRef` (where to insert). `viewContainer.createEmbeddedView(templateRef)` stamps the template into the DOM. This is how `*ngIf` and `*ngFor` work internally.",
+      "tags": ["directives", "custom-structural", "TemplateRef"]
+    },
+    {
+      "id": "adir-q12",
+      "type": "multi",
+      "prompt": "Which are structural directives (change DOM structure)?",
+      "choices": [
+        "*ngIf",
+        "*ngFor",
+        "ngClass",
+        "*ngSwitchCase"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "`*ngIf`, `*ngFor`, and `*ngSwitchCase` add or remove DOM elements — structural. `ngClass` only adds/removes CSS classes on an existing element — attribute directive. The `*` prefix is a reliable indicator of structural directives.",
+      "tags": ["directives", "structural-vs-attribute"]
+    },
+    {
+      "id": "adir-q13",
+      "type": "mcq",
+      "prompt": "In the template `<div *ngIf=\"user; else loading\">`, what does `#loading` refer to?",
+      "choices": [
+        "A CSS class called loading",
+        "A component called loading",
+        "A template reference variable pointing to an <ng-template> element that renders when the condition is false",
+        "A router link"
+      ],
+      "answerIndex": 2,
+      "explanation": "`#loading` is a template reference variable on a `<ng-template #loading>` defined elsewhere in the template. The `else loading` tells ngIf: 'when condition is false, stamp this template'. This avoids if/else component duplication.",
+      "tags": ["directives", "ngIf", "template-reference"]
+    },
+    {
+      "id": "adir-q14",
+      "type": "mcq",
+      "prompt": "What happens to a child component inside a `*ngIf=\"false\"` block?",
+      "choices": [
+        "It stays alive but hidden",
+        "It's destroyed — ngOnDestroy is called, subscriptions need cleanup",
+        "It's paused but not destroyed",
+        "It remains alive only if it has no state"
+      ],
+      "answerIndex": 1,
+      "explanation": "When `*ngIf` removes an element, Angular destroys any components inside it — `ngOnDestroy` fires. If the child has subscriptions, timers, or other side effects, they must be cleaned up in `ngOnDestroy`. This is why `*ngIf` is powerful for memory management but requires careful cleanup.",
+      "tags": ["directives", "ngIf", "lifecycle"]
+    },
+    {
+      "id": "adir-q15",
+      "type": "mcq",
+      "prompt": "How do you use a standalone directive in a standalone component?",
+      "choices": [
+        "Declare it in the AppModule",
+        "Import it in the component's `imports: []` array in @Component decorator",
+        "Automatically available with no action needed",
+        "Add it to the providers array"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standalone directives must be imported directly in the `imports` array of each component that uses them, or in a shared module that is imported. With NgModule architecture: add to module `declarations` first, then export if needed by other modules.",
+      "tags": ["directives", "standalone", "imports"]
+    },
+    {
+      "id": "adir-q16",
+      "type": "codeOutput",
+      "prompt": "What does `<ng-template #ref><p>Hi</p></ng-template>` render in the page?",
+      "choices": [
+        "<p>Hi</p>",
+        "Nothing — ng-template content is not rendered until instantiated",
+        "An HTML comment <!-- ng-template -->",
+        "An error — ng-template requires *ngIf"
+      ],
+      "answerIndex": 1,
+      "explanation": "`<ng-template>` is a blueprint. Its content is NOT rendered by default — it only appears when Angular explicitly stamps it (via *ngIf else, ViewContainerRef.createEmbeddedView, etc.). This is fundamental to how Angular's structural directives work.",
+      "tags": ["directives", "ng-template"]
+    },
+    {
+      "id": "adir-q17",
+      "type": "mcq",
+      "prompt": "What is `Renderer2` preferable to `ElementRef.nativeElement` for in custom directives?",
+      "choices": [
+        "Renderer2 is faster for most DOM operations",
+        "Renderer2 is platform-agnostic — it works in server-side rendering and web workers where direct DOM access fails. It also helps prevent XSS by routing through Angular's security layer",
+        "nativeElement is deprecated in Angular 15+",
+        "Renderer2 supports two-way binding on directives"
+      ],
+      "answerIndex": 1,
+      "explanation": "Direct `nativeElement` manipulation works in the browser but breaks in server-side rendering (no DOM) and web workers. `Renderer2` abstracts DOM operations, routing them correctly per platform. It also passes through Angular's DomSanitizer-like protection for certain operations.",
+      "tags": ["directives", "Renderer2", "ElementRef"]
+    },
+    {
+      "id": "adir-q18",
+      "type": "multi",
+      "prompt": "Which local variables are exported by `*ngFor`?",
+      "choices": [
+        "index",
+        "first",
+        "key",
+        "even"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "NgForOf exports: `index`, `first`, `last`, `even`, `odd`, and `count` (Angular 17+). `key` is not an ngFor export — that's a concept from map data structures. Syntax: `*ngFor=\"let item of items; index as i; first as isFirst\"` to capture them.",
+      "tags": ["directives", "ngFor", "local-variables"]
+    },
+    {
+      "id": "adir-q19",
+      "type": "mcq",
+      "prompt": "Angular 17 introduced `@if` and `@for` as alternatives to `*ngIf` and `*ngFor`. What is their main advantage?",
+      "choices": [
+        "They compile faster",
+        "Built-in control flow blocks — no directive import needed, better type narrowing inside @if blocks, and no ng-container workarounds",
+        "They replace all directives",
+        "They support async pipes natively"
+      ],
+      "answerIndex": 1,
+      "explanation": "Angular 17's `@if (condition) { ... } @else { ... }` and `@for (item of items; track item.id) { ... }` are template syntax (not directives) — no imports needed. They provide better TypeScript type narrowing (variable inside @if block is the narrowed type) and cleaner syntax without *-prefix tricks.",
+      "tags": ["directives", "angular-17", "control-flow"]
+    },
+    {
+      "id": "adir-q20",
+      "type": "mcq",
+      "prompt": "You notice an app renders a long list slowly. The list refreshes from an API every 5 seconds. Best fix:",
+      "choices": [
+        "Use *ngIf to hide the list during refresh",
+        "Add trackBy with list item id — Angular reuses DOM nodes for unchanged items instead of destroying and recreating everything",
+        "Switch to ngSwitch instead of ngFor",
+        "Move the loop to a Web Worker"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without trackBy, Angular treats every API response as a completely new list and re-creates all DOM nodes — even if 99% of items are identical. trackBy gives Angular a stable identity per item, allowing it to reuse existing DOM nodes and only update genuinely changed items.",
+      "tags": ["directives", "ngFor", "trackBy", "performance"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "adir-fc1",
+      "front": "Structural vs attribute directives",
+      "back": "Structural (*ngIf, *ngFor): add/remove DOM elements. Attribute (ngClass, ngStyle, custom): modify appearance/behaviour of existing elements. One structural directive per element — use ng-container to combine.",
+      "tags": ["directives"]
+    },
+    {
+      "id": "adir-fc2",
+      "front": "*ngIf vs [hidden]",
+      "back": "*ngIf: removes element from DOM, destroys child components (saves memory, triggers ngOnDestroy). [hidden]: adds display:none, component stays alive (preserves state). Use *ngIf for conditional loading of heavy components.",
+      "tags": ["directives", "ngIf"]
+    },
+    {
+      "id": "adir-fc3",
+      "front": "trackBy in *ngFor",
+      "back": "Without: Angular re-creates all list items on data refresh. With: Angular reuses DOM nodes for same-identity items. Provide a function returning a stable key (item.id). Required for lists refreshed from API.",
+      "tags": ["directives", "ngFor", "trackBy"]
+    },
+    {
+      "id": "adir-fc4",
+      "front": "* asterisk desugaring",
+      "back": "*ngIf=\"cond\" → <ng-template [ngIf]=\"cond\">...</ng-template>. The * wraps content in an ng-template blueprint. Angular stamps or removes the blueprint based on the directive logic.",
+      "tags": ["directives", "ng-template"]
+    },
+    {
+      "id": "adir-fc5",
+      "front": "ng-container purpose",
+      "back": "Invisible grouping element — adds no DOM nodes. Use when you need multiple structural directives (can't put two on one element), or to group elements without adding wrapper div.",
+      "tags": ["directives", "ng-container"]
+    },
+    {
+      "id": "adir-fc6",
+      "front": "@HostListener in directive",
+      "back": "Registers event listener on the host element. `@HostListener('click') onClick()` fires when the element the directive is on is clicked. Angular auto-removes listener on directive destroy.",
+      "tags": ["directives", "custom-directive"]
+    },
+    {
+      "id": "adir-fc7",
+      "front": "Custom structural directive needs",
+      "back": "Inject TemplateRef (the ng-template blueprint) and ViewContainerRef (where to insert). Call viewContainer.createEmbeddedView(templateRef) to stamp, viewContainer.clear() to remove.",
+      "tags": ["directives", "custom-structural"]
+    },
+    {
+      "id": "adir-fc8",
+      "front": "Angular 17 @if / @for",
+      "back": "@if (cond) { ... } @else { ... } — no import needed, better type narrowing. @for (item of items; track item.id) { ... } — trackBy built into syntax. Modern replacement for *ngIf/*ngFor.",
+      "tags": ["directives", "angular-17"]
+    }
+  ],
+  "project": {
+    "brief": "Design a reusable `StatusList` component that displays a list of tasks, each with a status ('pending', 'active', 'complete'). Requirements: (1) Use *ngFor with trackBy to render the task list. (2) Use *ngIf to show a 'No tasks' message when the list is empty. (3) Use *ngSwitch on each task's status to show different badges (with different CSS classes). (4) Use ng-container for any structural grouping needed. (5) Write a custom attribute directive `[appPulse]` that adds a CSS pulse animation to 'active' tasks and removes it otherwise. Explain: what happens to the directive when a task changes from 'active' to 'complete' (does it stay on the element? does ngOnDestroy fire?)?",
+    "checklist": [
+      { "id": "c1", "text": "trackBy function identifies tasks by unique id", "weight": 1 },
+      { "id": "c2", "text": "*ngIf on empty state message (not just ngFor of empty array)", "weight": 1 },
+      { "id": "c3", "text": "*ngSwitch / *ngSwitchCase for the three status badges", "weight": 1 },
+      { "id": "c4", "text": "Custom directive [appPulse] uses @Input and @HostListener or ElementRef", "weight": 1 },
+      { "id": "c5", "text": "Explains: directive stays on element (bound to element not condition), ngOnDestroy only fires if the element is removed from DOM", "weight": 1 }
+    ],
+    "hints": [
+      "trackBy: taskId(index, task) { return task.id; } — return a stable primitive.",
+      "For the empty message: <p *ngIf=\"tasks.length === 0\"> — or use a getter isTaskListEmpty.",
+      "ngSwitch: [ngSwitch]=\"task.status\" on a container, *ngSwitchCase on each badge.",
+      "Directive stays alive: the directive is bound to the DOM element. When the input [appPulse]=\"condition\" changes to false, the setter/ngOnChanges fires — remove the animation. ngOnDestroy fires only when the host element itself is removed (by *ngIf or navigation)."
+    ]
+  }
+}
+

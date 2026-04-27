@@ -1,0 +1,360 @@
+{
+  "id": "react-forms",
+  "unit": 10,
+  "order": 94,
+  "title": "React Forms",
+  "summary": "Controlled vs uncontrolled inputs, validation strategies, form libraries, and handling complex form state.",
+  "prereqs": ["react-router"],
+  "guide": "# React Forms\n\n## Controlled vs Uncontrolled — The Core Choice\n\n```\nControlled input — React owns the value:\n  <input value={state} onChange={e => setState(e.target.value)} />\n                ▲                      │\n                └──────────────────────┘\n           React sets it            React reads it\n  Single source of truth = React state\n\nUncontrolled input — DOM owns the value:\n  <input ref={inputRef} defaultValue='initial' />\n  Value lives in the DOM, read via inputRef.current.value on submit\n  React doesn't track every keystroke\n```\n\n### When to use each\n\n```\nControlled:\n  ✓ Real-time validation (error on every keystroke)\n  ✓ Dependent fields (select A changes options for select B)\n  ✓ Formatting as-you-type (phone number masking)\n  ✓ Disable submit button until valid\n  ✗ Many fields + fast typing = many re-renders\n\nUncontrolled:\n  ✓ Simple forms — just need values on submit\n  ✓ Integrating with non-React DOM libraries\n  ✓ Large forms where per-keystroke renders are expensive\n  ✗ Hard to validate in real-time\n```\n\n## Basic Controlled Form\n\n```tsx\nfunction LoginForm() {\n  const [email, setEmail] = useState('');\n  const [password, setPassword] = useState('');\n  const [errors, setErrors] = useState<Record<string, string>>({});\n\n  function validate() {\n    const errs: Record<string, string> = {};\n    if (!email.includes('@')) errs.email = 'Invalid email';\n    if (password.length < 8)  errs.password = 'Min 8 characters';\n    return errs;\n  }\n\n  async function handleSubmit(e: React.FormEvent) {\n    e.preventDefault();\n    const errs = validate();\n    if (Object.keys(errs).length > 0) { setErrors(errs); return; }\n    await login({ email, password });\n  }\n\n  return (\n    <form onSubmit={handleSubmit}>\n      <input type='email' value={email} onChange={e => setEmail(e.target.value)} />\n      {errors.email && <span>{errors.email}</span>}\n      <input type='password' value={password} onChange={e => setPassword(e.target.value)} />\n      {errors.password && <span>{errors.password}</span>}\n      <button type='submit'>Login</button>\n    </form>\n  );\n}\n```\n\n## Uncontrolled with useRef\n\n```tsx\nfunction SimpleSearchForm() {\n  const queryRef = useRef<HTMLInputElement>(null);\n\n  function handleSubmit(e: React.FormEvent) {\n    e.preventDefault();\n    const query = queryRef.current?.value ?? '';\n    doSearch(query);\n  }\n\n  return (\n    <form onSubmit={handleSubmit}>\n      <input ref={queryRef} defaultValue='' />\n      <button type='submit'>Search</button>\n    </form>\n  );\n  // No re-renders on every keystroke — input value lives in DOM\n}\n```\n\n## React Hook Form — controlled performance\n\nReact Hook Form uses uncontrolled inputs internally but provides a controlled-like API. It re-renders components only when necessary.\n\n```tsx\nimport { useForm, SubmitHandler } from 'react-hook-form';\n\ntype Inputs = { email: string; password: string };\n\nfunction LoginForm() {\n  const {\n    register,      // connect input to RHF\n    handleSubmit,  // wraps onSubmit, prevents default, validates\n    watch,         // subscribe to field values\n    formState: { errors, isSubmitting },\n  } = useForm<Inputs>();\n\n  const onSubmit: SubmitHandler<Inputs> = async (data) => {\n    await login(data);\n  };\n\n  return (\n    <form onSubmit={handleSubmit(onSubmit)}>\n      <input type='email' {...register('email', {\n        required: 'Email required',\n        pattern: { value: /\\S+@\\S+/, message: 'Invalid email' },\n      })} />\n      {errors.email && <span>{errors.email.message}</span>}\n      <button disabled={isSubmitting}>Login</button>\n    </form>\n  );\n}\n```\n\n```\nRHF under the hood:\n  register() attaches ref + event listeners to input\n  Tracks values in internal ref (not state) → NO re-renders on type\n  Re-renders only on: submit, error state change, watch()\n  10x fewer renders than pure controlled form for large forms\n```\n\n## Form Validation Strategies\n\n```\nStrategy 1: Validate on submit only\n  Simple. No live error feedback.\n  Use for: short forms, good defaults.\n\nStrategy 2: Validate on blur (field touched)\n  Errors appear after user leaves field.\n  Less noisy than validate-on-change.\n\nStrategy 3: Validate on change\n  Real-time feedback. Most renders.\n  Use for: password strength, search autocomplete.\n\nZod schema validation (library):\n  const schema = z.object({\n    email: z.string().email(),\n    age:   z.number().min(18),\n  });\n  const result = schema.safeParse(formData);\n  if (!result.success) { /* result.error.flatten() */ }\n\nRHF + Zod resolver:\n  useForm({ resolver: zodResolver(schema) })\n  → automatic type inference + validation in one step\n```\n\n## Difficult Input Types\n\n```tsx\n// Checkbox\nconst [agreed, setAgreed] = useState(false);\n<input type='checkbox' checked={agreed} onChange={e => setAgreed(e.target.checked)} />\n//                      ^^^^^ not value!  ^^^^^^^^^^^^^^ .checked not .value\n\n// Select\nconst [role, setRole] = useState('user');\n<select value={role} onChange={e => setRole(e.target.value)}>\n  <option value='user'>User</option>\n  <option value='admin'>Admin</option>\n</select>\n\n// File input — always uncontrolled\n<input type='file' ref={fileRef} />\n// fileRef.current.files[0] on submit\n// Cannot set value on file input (browser security)\n```\n\n## Dynamic Fields (Field Arrays)\n\n```tsx\n// Problem: adding/removing fields in a form\nconst [items, setItems] = useState([{ name: '', qty: 1 }]);\n\nfunction addItem() {\n  setItems(prev => [...prev, { name: '', qty: 1 }]);\n}\n\nreturn items.map((item, i) => (\n  <div key={i}>  {/* ← ideally use stable id */}\n    <input value={item.name} onChange={e => {\n      setItems(prev => prev.map((it, j) =>\n        j === i ? { ...it, name: e.target.value } : it\n      ));\n    }} />\n  </div>\n));\n// RHF's useFieldArray is much cleaner for this pattern\n```\n\n## Common Pitfalls\n- Using `value` without `onChange` — React renders input as read-only (controlled, no setter)\n- Mixing `value` and `defaultValue` on the same input — undefined to defined transition (uncontrolled → controlled warning)\n- `e.target.value` vs `e.target.checked` for checkboxes\n- File inputs cannot be controlled — always use ref\n- Using array index as key for dynamic fields — reorder breaks input state\n\n## Connections\n- **react-state-effects** — useState drives controlled inputs; useReducer for complex form state\n- **ts-utility-types** — Partial/Required for form field types\n- **react-hooks** — useRef for uncontrolled inputs, custom hooks for form logic extraction",
+  "questions": [
+    {
+      "id": "rfrm-q1",
+      "type": "mcq",
+      "prompt": "In a controlled input, which is the single source of truth for the input's value?",
+      "choices": [
+        "The browser DOM",
+        "React state — the value prop sets the input, onChange updates state",
+        "The form element",
+        "A global variable"
+      ],
+      "answerIndex": 1,
+      "explanation": "Controlled input: React state sets the `value` prop. User types → onChange fires → setState updates → React re-renders → input shows new value. State is always the source of truth. The flow is cyclic: state → DOM → event → state.",
+      "tags": ["forms", "controlled-input"]
+    },
+    {
+      "id": "rfrm-q2",
+      "type": "mcq",
+      "prompt": "Setting `value` on an input without an `onChange` handler makes the input:",
+      "choices": [
+        "Editable with auto-save",
+        "Read-only — controlled with no way to update the value, so the user can't type in it",
+        "Uncontrolled",
+        "Throws an error immediately"
+      ],
+      "answerIndex": 1,
+      "explanation": "A controlled input with `value` but no `onChange` is effectively read-only. The user types but React reasserts the value on every render. React will warn in dev: 'You provided a `value` prop without an `onChange` handler.' Fix: add onChange or use `readOnly`.",
+      "tags": ["forms", "controlled-input", "readonly"]
+    },
+    {
+      "id": "rfrm-q3",
+      "type": "mcq",
+      "prompt": "When is uncontrolled form handling (useRef) preferred?",
+      "choices": [
+        "When real-time validation is needed",
+        "For simple forms where values are only needed on submit, and per-keystroke re-renders are wasteful",
+        "For all forms in production",
+        "When using TypeScript"
+      ],
+      "answerIndex": 1,
+      "explanation": "Uncontrolled inputs store their value in the DOM — no React state updates on each keystroke. You read `ref.current.value` on submit. Best for simple forms without live validation. React Hook Form uses this pattern internally for performance.",
+      "tags": ["forms", "uncontrolled-input", "useRef"]
+    },
+    {
+      "id": "rfrm-q4",
+      "type": "codeOutput",
+      "prompt": "Why does this checkbox input not update when clicked?",
+      "code": "const [agreed, setAgreed] = useState(false);\n<input type='checkbox' value={agreed} onChange={e => setAgreed(e.target.value)} />",
+      "choices": [
+        "It works correctly",
+        "Two bugs: should use `checked` (not value) and `e.target.checked` (not e.target.value) for checkboxes",
+        "Checkboxes can't be controlled in React",
+        "onChange should be onClick for checkboxes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Checkboxes use `checked` prop (boolean), not `value`. And onChange reads `e.target.checked` (boolean), not `e.target.value` (string 'true'). `value={agreed}` sets the form submission value but doesn't control the checked state.",
+      "tags": ["forms", "checkbox", "controlled-input"]
+    },
+    {
+      "id": "rfrm-q5",
+      "type": "mcq",
+      "prompt": "React Hook Form's main performance advantage over pure controlled forms is:",
+      "choices": [
+        "It's built with WebAssembly",
+        "It uses refs (uncontrolled) internally — the form only re-renders on validation changes, not on every keystroke",
+        "It skips validation entirely",
+        "It requires less code"
+      ],
+      "answerIndex": 1,
+      "explanation": "RHF stores field values in refs, not React state. Typing in an input doesn't cause re-renders. Only events that need UI update (error appearing, submit state changing) trigger renders. For a 50-field form, this can mean 95% fewer renders.",
+      "tags": ["forms", "react-hook-form", "performance"]
+    },
+    {
+      "id": "rfrm-q6",
+      "type": "mcq",
+      "prompt": "What does `e.preventDefault()` do in a form's `onSubmit` handler?",
+      "choices": [
+        "Prevents React from processing the event",
+        "Prevents the browser's default form submission (page reload + data sent to action URL)",
+        "Clears the form fields",
+        "Stops propagation to parent elements"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without `e.preventDefault()`, submitting an HTML form causes a full page reload (the browser navigates to the form's action URL). In React SPAs, you always prevent this and handle submission in JavaScript instead.",
+      "tags": ["forms", "submit", "events"]
+    },
+    {
+      "id": "rfrm-q7",
+      "type": "mcq",
+      "prompt": "Why can't you control a file input with `value`?",
+      "choices": [
+        "React doesn't support file inputs",
+        "Browser security policy — you can read a selected file but cannot programmatically set a file input's value",
+        "File inputs use a different event name",
+        "TypeScript doesn't allow it"
+      ],
+      "answerIndex": 1,
+      "explanation": "Browsers prevent scripts from setting a file input's value — it would be a security vulnerability (silently selecting files to upload without user action). File inputs must always be uncontrolled; access selected files via `ref.current.files` or from the change event.",
+      "tags": ["forms", "file-input"]
+    },
+    {
+      "id": "rfrm-q8",
+      "type": "multi",
+      "prompt": "Which validation strategies are common in React forms?",
+      "choices": [
+        "Validate on submit",
+        "Validate on blur (field loses focus)",
+        "Validate on change (per keystroke)",
+        "Validate in the cloud"
+      ],
+      "answerIndexes": [0, 1, 2],
+      "explanation": "All three are valid: submit-only is simplest, blur balances UX without noisy errors, on-change gives live feedback at the cost of more renders. The choice depends on form complexity and UX requirements. 'Validate in the cloud' is not a standard pattern.",
+      "tags": ["forms", "validation"]
+    },
+    {
+      "id": "rfrm-q9",
+      "type": "mcq",
+      "prompt": "The warning 'A component is changing a controlled input to uncontrolled' happens when:",
+      "choices": [
+        "You change from useState to useRef",
+        "The value prop transitions from a defined value to undefined (or null without strictNullChecks)",
+        "You use defaultValue and value together",
+        "The form is submitted"
+      ],
+      "answerIndex": 1,
+      "explanation": "React tracks whether an input is controlled (has value prop) or uncontrolled. If `value` starts as a string then becomes `undefined`, React sees it switching from controlled to uncontrolled. Fix: always provide a fallback — `value={state ?? ''}` ensures the input stays controlled.",
+      "tags": ["forms", "controlled-input", "warning"]
+    },
+    {
+      "id": "rfrm-q10",
+      "type": "mcq",
+      "prompt": "When using Zod with React Hook Form (`zodResolver`), what is the key benefit?",
+      "choices": [
+        "Server-side validation",
+        "Single schema definition provides both TypeScript types AND runtime validation — no duplication",
+        "Eliminates all re-renders",
+        "Auto-generates form UI"
+      ],
+      "answerIndex": 1,
+      "explanation": "Zod schemas infer TypeScript types: `z.infer<typeof schema>` gives the exact form type. The same schema validates at runtime. RHF's zodResolver connects them: form data is validated against the schema on submit and on configured events. One source of truth for type and validation.",
+      "tags": ["forms", "zod", "validation"]
+    },
+    {
+      "id": "rfrm-q11",
+      "type": "mcq",
+      "prompt": "To handle a 'dependent select' (choice in field A changes options in field B), you need:",
+      "choices": [
+        "Uncontrolled inputs only",
+        "Controlled inputs — watch field A's state to compute field B's options reactively",
+        "Two separate forms",
+        "Context API"
+      ],
+      "answerIndex": 1,
+      "explanation": "Dependent fields require controlled inputs — you need to know field A's current value to compute field B's options. With uncontrolled inputs you'd have to read the DOM on every change. With RHF: use `watch('fieldA')` to subscribe to field A's value.",
+      "tags": ["forms", "controlled-input", "dependent-fields"]
+    },
+    {
+      "id": "rfrm-q12",
+      "type": "codeOutput",
+      "prompt": "What does `handleSubmit(onSubmit)` from React Hook Form do that raw `onSubmit` doesn't?",
+      "code": "<form onSubmit={handleSubmit(onSubmit)}>",
+      "choices": [
+        "Nothing extra — it's the same",
+        "It runs all field validations, prevents default browser submit, and only calls your onSubmit if validation passes — passing the typed data object",
+        "It serializes form to JSON automatically",
+        "It adds network retry logic"
+      ],
+      "answerIndex": 1,
+      "explanation": "RHF's handleSubmit: 1) calls `e.preventDefault()`, 2) runs all registered validation rules, 3) if valid: calls your `onSubmit(data)` with fully typed, validated form values. If invalid: sets `formState.errors` and does NOT call onSubmit. You never need to manually validate or prevent default.",
+      "tags": ["forms", "react-hook-form", "validation"]
+    },
+    {
+      "id": "rfrm-q13",
+      "type": "mcq",
+      "prompt": "Why should you use a stable ID (not array index) as `key` for dynamic form fields?",
+      "choices": [
+        "IDs render faster",
+        "When fields are removed or reordered, index keys cause React to attach the wrong input state to the wrong field — the input at index 0 keeps its old value when items before it are deleted",
+        "Required by React Hook Form",
+        "Required for form submission"
+      ],
+      "answerIndex": 1,
+      "explanation": "If items=[A,B,C] with keys [0,1,2] and you remove B: arr becomes [A,C] with keys [0,1]. React sees key=1 still present and maps it to C — but C was key=2. The internal state (input value, focus, cursor position) gets confused. Always generate stable IDs for dynamic list items.",
+      "tags": ["forms", "keys", "dynamic-fields"]
+    },
+    {
+      "id": "rfrm-q14",
+      "type": "mcq",
+      "prompt": "A `<select>` controlled by React state and bound to `e.target.value` initially shows the first option regardless of the state value. Why?",
+      "choices": [
+        "select needs defaultValue instead",
+        "The value prop on select must match one of the option values exactly — if state doesn't match any option, browser defaults to first option",
+        "select elements are always uncontrolled",
+        "onChange doesn't fire for select elements"
+      ],
+      "answerIndex": 1,
+      "explanation": "React sets the selected state via the `value` prop on the `<select>` element. If `value='admin'` but no `<option value='admin'>` exists, the browser shows the first option. Ensure initial state matches one of the option values exactly (including case).",
+      "tags": ["forms", "select", "controlled-input"]
+    },
+    {
+      "id": "rfrm-q15",
+      "type": "multi",
+      "prompt": "Which are advantages of React Hook Form over pure controlled form state?",
+      "choices": [
+        "No re-renders on every keystroke",
+        "Built-in validation with error messages",
+        "Works without JavaScript",
+        "Easier integration with schema validation libraries (Zod, Yup)"
+      ],
+      "answerIndexes": [0, 1, 3],
+      "explanation": "RHF advantages: uncontrolled-based performance (A), built-in validation (B), schema validation adapters (D). It still requires JavaScript — it's a JavaScript library (C is false).",
+      "tags": ["forms", "react-hook-form"]
+    },
+    {
+      "id": "rfrm-q16",
+      "type": "mcq",
+      "prompt": "What is `formState.isSubmitting` in React Hook Form?",
+      "choices": [
+        "True while the user is filling out the form",
+        "True while the async onSubmit function is executing — use to disable the submit button during the API call",
+        "True if there are validation errors",
+        "True if the form has been touched"
+      ],
+      "answerIndex": 1,
+      "explanation": "`isSubmitting` is true from when `handleSubmit` calls your `onSubmit` until it resolves/rejects. Disable the submit button with it to prevent double-submissions during async operations like API calls.",
+      "tags": ["forms", "react-hook-form", "submit"]
+    },
+    {
+      "id": "rfrm-q17",
+      "type": "mcq",
+      "prompt": "To reset a form to initial values after successful submission:",
+      "choices": [
+        "Unmount and remount the form",
+        "Call `reset()` from useForm() — resets all values to defaultValues and clears errors",
+        "Set each useState back to initial value manually",
+        "Reload the page"
+      ],
+      "answerIndex": 1,
+      "explanation": "RHF's `reset()` (destructured from useForm) resets all fields to their defaultValues and clears form state (errors, touched, dirty flags). You can call `reset(newDefaults)` to reset to different values after a successful save.",
+      "tags": ["forms", "react-hook-form", "reset"]
+    },
+    {
+      "id": "rfrm-q18",
+      "type": "mcq",
+      "prompt": "A form for editing a profile should prefill with existing user data. In React Hook Form:",
+      "choices": [
+        "useEffect to set values after form mounts",
+        "Pass `defaultValues: { name: user.name, email: user.email }` to useForm, or call reset(userData) when user data loads",
+        "Set values directly on inputRef.current.value",
+        "Use initialState prop"
+      ],
+      "answerIndex": 1,
+      "explanation": "defaultValues sets initialisation values for all fields. If user data is fetched async: start with empty defaults, call `reset(userData)` when the data arrives. RHF re-registers all fields with the new defaults without re-creating the form state structure.",
+      "tags": ["forms", "react-hook-form", "prefill"]
+    },
+    {
+      "id": "rfrm-q19",
+      "type": "mcq",
+      "prompt": "What does `watch('email')` do in React Hook Form?",
+      "choices": [
+        "Validates the email field",
+        "Returns the current value of the email field and re-renders the component when it changes",
+        "Watches for async validation",
+        "Adds a regex pattern to email"
+      ],
+      "answerIndex": 1,
+      "explanation": "`watch('email')` returns the live value of the field — and causes a re-render when it changes (unlike the default uncontrolled behavior). Use it when you need to read a field value to compute something else (like dependent options). Be careful: calling watch() without arguments watches ALL fields and re-renders on any change.",
+      "tags": ["forms", "react-hook-form", "watch"]
+    },
+    {
+      "id": "rfrm-q20",
+      "type": "mcq",
+      "prompt": "The `defaultValue` prop on an uncontrolled input vs `value` prop on a controlled input:",
+      "choices": [
+        "They are identical",
+        "defaultValue sets the initial DOM value but React doesn't track it afterwards. value makes React own the input completely",
+        "defaultValue only works with refs",
+        "value is for server-side rendering only"
+      ],
+      "answerIndex": 1,
+      "explanation": "`defaultValue` tells the DOM what to start with — then the user can type freely, React doesn't interfere. `value` makes React control the input every render cycle. Using both together creates the 'switching between controlled and uncontrolled' warning.",
+      "tags": ["forms", "controlled-input", "defaultValue"]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rfrm-fc1",
+      "front": "Controlled vs uncontrolled input",
+      "back": "Controlled: React state = source of truth, `value` + `onChange`. Uncontrolled: DOM = source of truth, `defaultValue` + `ref`. RHF uses uncontrolled internally for performance.",
+      "tags": ["forms"]
+    },
+    {
+      "id": "rfrm-fc2",
+      "front": "Checkbox controlled form",
+      "back": "`checked={bool}` not `value`. `onChange={e => setState(e.target.checked)}` not `e.target.value`. Different API from text inputs.",
+      "tags": ["forms", "checkbox"]
+    },
+    {
+      "id": "rfrm-fc3",
+      "front": "File input — always uncontrolled",
+      "back": "Browser security prevents setting file input value. Use ref. Read files via `ref.current.files` or `e.target.files` in onChange.",
+      "tags": ["forms", "file"]
+    },
+    {
+      "id": "rfrm-fc4",
+      "front": "React Hook Form performance",
+      "back": "Stores values in refs, not state. No re-renders per keystroke. Only re-renders on validation changes. 10x fewer renders than controlled for large forms.",
+      "tags": ["forms", "react-hook-form"]
+    },
+    {
+      "id": "rfrm-fc5",
+      "front": "Controlled→uncontrolled warning fix",
+      "back": "Ensure value never becomes undefined: `value={state ?? ''}`. Transition from defined to undefined = React switches mode = warning.",
+      "tags": ["forms", "controlled-input"]
+    },
+    {
+      "id": "rfrm-fc6",
+      "front": "Zod + RHF zodResolver",
+      "back": "Single schema = TypeScript types (z.infer) + runtime validation. zodResolver connects schema to RHF. One source of truth for type and validation rules.",
+      "tags": ["forms", "validation", "zod"]
+    },
+    {
+      "id": "rfrm-fc7",
+      "front": "isSubmitting (RHF)",
+      "back": "True while async onSubmit is executing. Use to disable submit button: `<button disabled={isSubmitting}>`. Prevents double-submit on slow networks.",
+      "tags": ["forms", "react-hook-form"]
+    },
+    {
+      "id": "rfrm-fc8",
+      "front": "e.preventDefault() in onSubmit",
+      "back": "Prevents browser's default form submission (page reload + navigate to action URL). Always call this first in form submit handlers in React SPAs.",
+      "tags": ["forms", "submit"]
+    }
+  ],
+  "project": {
+    "brief": "Design a multi-step checkout form with 3 steps: 1) Shipping (name, address, city, zip). 2) Payment (card number, expiry, CVV). 3) Review + submit. Requirements: validate each step before proceeding (Zod schema per step), show step-level progress indicator, prefill shipping from saved user profile if available, disable Next button while validating, show per-field errors inline. Answer: should this be one form or multiple? Where is form state stored between steps? How do you handle the payment fields' sensitive data (hint: CVV should never be stored in state after validation)?",
+    "checklist": [
+      { "id": "c1", "text": "Each step has its own Zod schema — validates only that step's fields on Next click", "weight": 1 },
+      { "id": "c2", "text": "RHF with zodResolver per step — or single RHF instance with mode: 'onChange'", "weight": 1 },
+      { "id": "c3", "text": "Step state stored in parent component or useReducer — passed as defaultValues to each step", "weight": 1 },
+      { "id": "c4", "text": "Shipping prefill: `reset(savedProfile)` when user profile loads", "weight": 1 },
+      { "id": "c5", "text": "CVV: validated and submitted immediately — never stored in state after the API call completes (clear with reset())", "weight": 1 }
+    ],
+    "hints": [
+      "One RHF instance at parent level with all fields — use trigger(['field1','field2']) to validate only step fields before advancing.",
+      "Or separate RHF per step, accumulate validated data in parent state.",
+      "prefill: async useEffect loads profile → call form.reset(profile) when data arrives.",
+      "CVV: validate on step 2, include in submit payload, then reset payment fields via reset({...currentValues, cvv: ''})."
+    ]
+  }
+}
+

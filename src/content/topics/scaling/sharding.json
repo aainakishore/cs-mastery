@@ -1,0 +1,126 @@
+{
+  "id": "sharding",
+  "unit": 4,
+  "order": 20,
+  "title": "Sharding",
+  "summary": "Master Sharding: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "relational-databases"
+  ],
+  "guide": "# Database Sharding\n\nSharding is a **horizontal partitioning** technique that distributes data across multiple database instances (shards) to scale beyond a single machine's capacity.\n\n## Sharding vs Replication\n\n```\nReplication (copies):\n  Master  \u2500\u2500\u2192  Replica 1   (same data, different server)\n           \u2514\u2500\u2500\u2192 Replica 2   (scale reads, HA)\n  Each replica has ALL the data. Read scale but write bottleneck.\n\nSharding (partitions):\n  Shard 1: users 0-3M      (different data, different server)\n  Shard 2: users 3M-6M\n  Shard 3: users 6M-9M+\n  Write scale \u2014 each shard handles a fraction of total write load.\n```\n\n## Sharding Strategies\n\n```\nRange-based:\n  users 1-1M \u2192 Shard 1, 1M-2M \u2192 Shard 2\n  Pros: range queries easy (all Jan orders on one shard)\n  Cons: hotspots if new data concentrates in one range (all new IDs \u2192 Shard 2)\n\nHash-based:\n  shard = hash(userId) % numShards\n  Pros: even distribution, no hotspots\n  Cons: range queries require all shards, resharding is expensive\n\nDirectory-based:\n  Lookup table: userId \u2192 shard (stored separately)\n  Pros: flexible, easy resharding\n  Cons: lookup table is a bottleneck/single point of failure\n\nGeographic:\n  US users \u2192 US shard, EU users \u2192 EU shard\n  Pros: latency, data residency compliance\n  Cons: uneven distribution possible\n```\n\n## Resharding Problem\n\n```\nhash(userId) % 3 shards:  hash(123) % 3 = 0 \u2192 Shard A\n\nAdd 4th shard:\n  hash(userId) % 4 shards: hash(123) % 4 = 3 \u2192 Shard D  (different!)\n  MOST existing keys must move \u2014 expensive data migration\n\nConsistent Hashing (solution):\n  Hash ring \u2014 keys and nodes on a circle\n  Key routes to the nearest node clockwise\n  Adding a node: only adjacent keys need moving (~1/N of data)\n```\n\n## Cross-Shard Challenges\n\n```\nProblem: JOIN across shards\n  SELECT u.*, o.* FROM users u JOIN orders o ON u.id = o.userId\n  WHERE u.country = 'US'\n\n  users on Shard 1,2 | orders on Shard 3,4 \u2192 can't join server-side\n\nSolutions:\n  1. Co-locate (same entity on same shard via same shard key)\n  2. Denormalize (duplicate user data in orders shard)\n  3. Application-level join (fetch from both, join in code)\n  4. Cross-shard query engine (Vitess, Citus)\n```\n\n## Common Pitfalls\n- **Choosing the wrong shard key** \u2014 bad key creates hotspots. Key should distribute writes evenly.\n- **Cross-shard queries** \u2014 avoid joins and transactions across shards. Design schema to keep related data on the same shard.\n- **Resharding without consistent hashing** \u2014 modular hashing requires migrating most data. Use consistent hashing for production.\n",
+  "questions": [
+    {
+      "id": "sh-q1",
+      "type": "mcq",
+      "prompt": "Sharding vs replication \u2014 fundamental difference?",
+      "choices": [
+        "Same thing",
+        "Replication: copies of all data on multiple servers (read scale, HA). Sharding: each server has a SUBSET of data (write scale). Sharding enables write scaling that replication cannot provide",
+        "Replication is slower",
+        "Sharding requires more memory"
+      ],
+      "answerIndex": 1,
+      "explanation": "Replication: all replicas have ALL rows \u2014 each write must propagate to all replicas (write bottleneck stays). Sharding: each shard has different rows \u2014 writes distribute across shards. Both are typically combined.",
+      "tags": [
+        "sharding",
+        "replication"
+      ]
+    },
+    {
+      "id": "sh-q2",
+      "type": "mcq",
+      "prompt": "Why is consistent hashing preferred over modular hashing (key % N) for sharding?",
+      "choices": [
+        "Consistent hashing is faster",
+        "Modular hashing: adding a shard changes hash(key) % N for most keys \u2014 mass data migration. Consistent hashing: adding a node only moves ~1/N of keys (adjacent ones) \u2014 minimal resharding cost",
+        "Same cost",
+        "Consistent hashing requires more servers"
+      ],
+      "answerIndex": 1,
+      "explanation": "hash(key) % 3 vs hash(key) % 4: most keys map to different shards. Consistent hashing places keys and nodes on a ring \u2014 adding a node only affects keys between the new node and its neighbor.",
+      "tags": [
+        "sharding",
+        "consistent-hashing"
+      ]
+    },
+    {
+      "id": "sh-q3",
+      "type": "mcq",
+      "prompt": "Best solution for cross-shard JOIN queries?",
+      "choices": [
+        "Global broadcast queries",
+        "Co-locate related data on the same shard by choosing a shard key that keeps related entities together (e.g., shard by userId for users + orders \u2014 all of user X's data on one shard)",
+        "Avoid JOINs entirely",
+        "Always denormalize"
+      ],
+      "answerIndex": 1,
+      "explanation": "Co-location is the architectural solution: if userId is the shard key for both users and orders tables, a specific user's data is co-located. Application only needs to query one shard for user + their orders.",
+      "tags": [
+        "sharding",
+        "cross-shard"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "sh-fc1",
+      "front": "Sharding strategies",
+      "back": "Range: easy range queries, hotspot risk. Hash: even distribution, expensive range queries. Directory: flexible lookup table, bottleneck risk. Geographic: latency/compliance, may be uneven.",
+      "tags": [
+        "sharding"
+      ]
+    },
+    {
+      "id": "sh-fc2",
+      "front": "Consistent hashing",
+      "back": "Keys and nodes on a hash ring. Key routes to next node clockwise. Adding a node: only the next clockwise node's keys move (~1/N). Normal modular hash: adding server moves most keys.",
+      "tags": [
+        "sharding",
+        "consistent-hashing"
+      ]
+    },
+    {
+      "id": "sh-fc3",
+      "front": "Cross-shard JOINs \u2014 solutions",
+      "back": "1. Co-locate (same shard key \u2192 related data on same shard). 2. Denormalize (duplicate data). 3. Application join (fetch separately). 4. Cross-shard engine (Vitess, Citus PG).",
+      "tags": [
+        "sharding"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Sharding\n\nDesign a realistic production service with Sharding at its core. No code required:\n\n1. Why Sharding over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "sharding-pc1",
+        "text": "Justified use of Sharding for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "sharding-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "sharding-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "sharding-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "sharding-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Sharding remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

@@ -1,0 +1,469 @@
+{
+  "id": "neural-nets",
+  "unit": 2,
+  "order": 6,
+  "title": "Neural Nets and Backprop Intuition",
+  "summary": "Master Neural Nets and Backprop Intuition: trade-offs, failure modes, and production patterns.",
+  "prereqs": [
+    "ml-basics"
+  ],
+  "guide": "# Neural Networks & Deep Learning\n\nNeural networks are universal function approximators built from layers of interconnected nodes (neurons) that learn by adjusting weights through backpropagation.\n\n## The Perceptron to Deep Network\n\n```\nSingle neuron (perceptron):\n  inputs × weights + bias → activation function → output\n  z = w₁x₁ + w₂x₂ + ... + wₙxₙ + b\n  output = σ(z)   where σ = activation (sigmoid, ReLU, tanh)\n\nDeep network (MLP):\n  Input layer → Hidden layer 1 → Hidden layer 2 → ... → Output layer\n  Each layer applies: activations = σ(weights × inputs + biases)\n  Multiple layers enable learning hierarchical features:\n    CNN image: layer 1 = edges, layer 2 = shapes, layer 3 = objects\n```\n\n## Activation Functions\n\n```\nReLU (Rectified Linear Unit): f(x) = max(0, x)\n  Most common for hidden layers: fast, no vanishing gradient for x > 0\n\nSigmoid: f(x) = 1 / (1 + e^-x) → output in [0,1]\n  Binary classification output. Suffers vanishing gradient if used in hidden layers.\n\nSoftmax: normalizes outputs to sum to 1\n  Multi-class classification output (gives probability distribution).\n\nTanh: f(x) = (e^x - e^-x) / (e^x + e^-x) → output in [-1,1]\n  Better than sigmoid in hidden layers; still vanishing gradient issue.\n```\n\n## Training: Forward + Backward Pass\n\n```\nForward pass:\n  Input → layers → prediction (ŷ)\n\nLoss function (measures error):\n  MSE (regression):        L = (ŷ - y)²\n  Cross-entropy (classify): L = -Σ y log(ŷ)\n\nBackward pass (backpropagation):\n  Compute ∂L/∂w for each weight using chain rule\n  Update: w = w - α × ∂L/∂w   (gradient descent)\n\nOptimizer:\n  SGD:   w -= lr × gradient  (simple)\n  Adam:  adaptive lr per weight + momentum (standard choice)\n  Learning rate α: too large = diverge; too small = slow convergence\n```\n\n## Regularization (Fighting Overfitting)\n\n```\nDropout:\n  Randomly set fraction (20-50%) of neurons to 0 during training.\n  Forces network to learn redundant representations.\n  Disabled at inference time.\n\nL2 Regularization (weight decay):\n  Add λ||w||² to loss — penalizes large weights.\n  Prevents single neurons from dominating.\n\nBatch Normalization:\n  Normalize activations within each mini-batch.\n  Enables higher learning rates, reduces dependency on initialization.\n\nEarly stopping:\n  Monitor validation loss; stop when it starts increasing (overfitting begins).\n```\n\n## Common Architectures\n\n```\nMLP:         Dense layers — tabular data\nCNN:         Convolutional layers — images, spatial data\nRNN/LSTM:    Sequential data — time series (largely replaced by Transformers)\nTransformer: Self-attention — NLP, images (ViT), multimodal\nGAN:         Generator + Discriminator — image generation\n```\n\n## Common Pitfalls\n- **Vanishing gradients** — deep networks with sigmoid/tanh suffer small gradients that don't propagate. Use ReLU and BatchNorm.\n- **Exploding gradients** — gradients grow exponentially. Use gradient clipping: `torch.nn.utils.clip_grad_norm_`.\n- **Not normalizing inputs** — feature with range 0-10,000 dominates. Always normalize to [0,1] or zero-mean.\n- **Overfitting without dropout/L2** — network memorizes training data. Monitor train vs val loss; add regularization.\n\n\n## Backpropagation — Intuition\n\n```\nForward pass:\n  Input → Layer1 → Layer2 → Output → Loss\n\nBackward pass (chain rule):\n  dL/dW2 = dL/dOutput × dOutput/dW2   (how does W2 affect loss?)\n  dL/dW1 = dL/dOutput × dOutput/dW2 × dW2/dW1  (chain back)\n\nGradient descent:\n  W := W - lr × dL/dW   (move weights in direction that reduces loss)\n```\n\n## Activation Functions Compared\n\n```\nsigmoid(x) = 1/(1+e^-x)    range (0,1)   — vanishing gradient for |x|>5\ntanh(x)                     range (-1,1)  — better than sigmoid, still saturates\nReLU(x) = max(0, x)         range [0,∞)   — fast, sparse, dying ReLU problem\nLeakyReLU = max(0.01x, x)   — fixes dying ReLU\nGELU(x) ≈ x·Φ(x)            — smooth ReLU, used in transformers (GPT, BERT)\n```\n\n## Batch Normalization\n\n```\nWithout BatchNorm:\n  Layer inputs shift drastically between batches → unstable training\n\nWith BatchNorm:\n  Normalize: x̂ = (x - μ_batch) / σ_batch\n  Scale/shift: y = γ·x̂ + β  (learnable)\n\nBenefits: faster training, higher learning rates, some regularization\nPitfall: bad with small batches, sequence models → use LayerNorm instead\n```\n\n## Overfitting Control Toolkit\n\n```\nProblem: model memorises training data, fails on val/test\n\nSolutions:\n  Dropout: randomly zero r% of neurons during training\n  L2 regularisation: add λ||W||² to loss (penalise large weights)\n  Data augmentation: flip, crop, noise — effectively infinite data\n  Early stopping: stop when val loss stops improving\n  BatchNorm: implicit regularisation via noise in batch statistics\n```\n\n## References & Further Learning\n- 🎥 **3Blue1Brown** \"Neural Networks\" series (4 videos, ~1hr total) — best visual intro (youtube.com/c/3blue1brown)\n- 🎥 **Andrej Karpathy** \"The spelled-out intro to neural networks and backpropagation: building micrograd\" (YouTube)\n- 📖 **Neural Networks and Deep Learning** — Michael Nielsen (free online book) neuralnetworksanddeeplearning.com\n- 📖 **Deep Learning** — Goodfellow, Bengio, Courville — deeplearningbook.org (free PDF)\n- 🖼️ **Playground**: tensorflow.org/tensorflowjs/demos/playground — interactive neural net visual\n- 🖼️ **Diagram**: CS231n Stanford — CNNs for Visual Recognition (course notes with diagrams) cs231n.github.io\n- 📄 **Dropout paper**: \"Dropout: A Simple Way to Prevent Neural Networks from Overfitting\" — Srivastava et al.\n",
+  "questions": [
+    {
+      "id": "nn-q1",
+      "type": "mcq",
+      "prompt": "Why is ReLU preferred over sigmoid for hidden layer activations in deep networks?",
+      "choices": [
+        "ReLU is newer",
+        "ReLU: f(x) = max(0, x) — doesn't saturate for positive inputs, so gradients don't vanish during backprop. Sigmoid outputs [0,1] — saturates at extremes, gradients near 0. Deep networks with sigmoid → vanishing gradients → no training",
+        "ReLU requires less memory",
+        "Sigmoid is deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sigmoid and tanh saturate (output near 0 or 1) → gradient ≈ 0 → earlier layers don't update (vanishing gradient problem). ReLU passes gradient directly for x > 0. Dead ReLU (x always < 0): switch to Leaky ReLU or GELU.",
+      "tags": [
+        "neural-nets",
+        "activation",
+        "vanishing-gradient"
+      ]
+    },
+    {
+      "id": "nn-q2",
+      "type": "mcq",
+      "prompt": "What does dropout do during training and why is it disabled at inference?",
+      "choices": [
+        "Dropout compresses the model",
+        "During training: randomly zeros out a fraction of neurons (e.g., 30%) per batch — forces the network to not rely on any single neuron. At inference: all neurons active, but outputs scaled by (1-dropout rate) to maintain expected value",
+        "Dropout reduces model size permanently",
+        "Dropout only works in CNNs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Dropout creates an ensemble effect — each training step uses a different subnetwork. The model learns redundant, robust features. At inference, all neurons contribute — scaling compensates for the expected activation value during training.",
+      "tags": [
+        "neural-nets",
+        "dropout",
+        "regularization"
+      ]
+    },
+    {
+      "id": "nn-q3",
+      "type": "mcq",
+      "prompt": "What does the optimizer do in neural network training?",
+      "choices": [
+        "It loads data",
+        "Updates model weights based on computed gradients to minimize the loss function. SGD: w -= lr × gradient. Adam: adaptive per-weight learning rates + momentum — converges faster, less tuning needed",
+        "It trains the model architecture",
+        "It measures accuracy"
+      ],
+      "answerIndex": 1,
+      "explanation": "After backprop computes ∂L/∂w for each weight, the optimizer determines HOW to update weights. Adam is the default choice: handles varying gradient magnitudes, works well on most problems out of the box.",
+      "tags": [
+        "neural-nets",
+        "optimizer",
+        "training"
+      ]
+    },
+    {
+      "id": "nn-q4",
+      "type": "mcq",
+      "prompt": "The dying ReLU problem refers to:",
+      "choices": [
+        "ReLU being slow to compute",
+        "Neurons that always output 0 because their weights drove input negative — they receive no gradient and can never recover",
+        "ReLU causing overfitting",
+        "Memory overflow"
+      ],
+      "answerIndex": 1,
+      "explanation": "If a ReLU neuron's weighted sum is always negative, output is always 0. Gradient through ReLU is 0 for negative inputs, so the neuron is permanently dead. LeakyReLU / ELU fix this.",
+      "tags": [
+        "neural-nets",
+        "activation"
+      ]
+    },
+    {
+      "id": "nn-q5",
+      "type": "mcq",
+      "prompt": "Why do transformers use LayerNorm instead of BatchNorm?",
+      "choices": [
+        "LayerNorm is faster",
+        "BatchNorm depends on batch statistics — inconsistent for variable-length sequences and problematic with batch size 1. LayerNorm normalizes across features per sample.",
+        "LayerNorm uses less memory",
+        "BatchNorm doesn't work on GPUs"
+      ],
+      "answerIndex": 1,
+      "explanation": "BatchNorm normalizes across the batch dimension — unreliable for sequences of different lengths. LayerNorm normalizes each token's feature vector independently.",
+      "tags": [
+        "neural-nets",
+        "normalization"
+      ]
+    },
+    {
+      "id": "nn-q6",
+      "type": "mcq",
+      "prompt": "Gradient vanishing in deep networks means:",
+      "choices": [
+        "Memory runs out",
+        "Gradients become exponentially small as they propagate back through many layers — early layers receive nearly zero signal and don't learn",
+        "Gradient descent fails",
+        "Loss becomes NaN"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chain rule multiplies gradients layer-by-layer. Activations like sigmoid saturate (derivative ≈ 0) — tiny gradients compound to ≈0 through 20 layers. ResNets and GELU/ReLU mitigate this.",
+      "tags": [
+        "neural-nets",
+        "backprop"
+      ]
+    },
+    {
+      "id": "nn-q7",
+      "type": "mcq",
+      "prompt": "Dropout during inference (test time) should be:",
+      "choices": [
+        "Kept the same as training",
+        "Disabled — all neurons active, weights scaled by (1-dropout_rate)",
+        "Set to 0.5 always",
+        "Randomly applied"
+      ],
+      "answerIndex": 1,
+      "explanation": "Dropout is a training regularizer. At inference, disable it and scale weights so expected activation matches training. PyTorch model.eval() handles this automatically.",
+      "tags": [
+        "neural-nets",
+        "regularization"
+      ]
+    },
+    {
+      "id": "nn-q8",
+      "type": "mcq",
+      "prompt": "Skip connections (ResNet) primarily solve:",
+      "choices": [
+        "Overfitting",
+        "Gradient vanishing in very deep networks — gradient can flow directly through the skip connection, bypassing potentially saturated layers",
+        "Memory usage",
+        "Slow training"
+      ],
+      "answerIndex": 1,
+      "explanation": "ResNet skip: h(x) = F(x) + x. Even if F(x) contributes zero gradient, x passes through. Enabled training of 1000+ layer networks.",
+      "tags": [
+        "neural-nets",
+        "architecture"
+      ]
+    },
+    {
+      "id": "nn-q9",
+      "type": "mcq",
+      "prompt": "Learning rate too high causes:",
+      "choices": [
+        "Slow convergence",
+        "Oscillating or diverging loss — overshoots the minimum, never settles",
+        "Underfitting",
+        "Correct fast convergence"
+      ],
+      "answerIndex": 1,
+      "explanation": "High LR = large gradient steps. Model jumps past the minimum, oscillates, or diverges (loss NaN). Use LR schedulers or warmup to start small and increase.",
+      "tags": [
+        "neural-nets",
+        "training"
+      ]
+    },
+    {
+      "id": "nn-q10",
+      "type": "mcq",
+      "prompt": "Mini-batch gradient descent vs full-batch vs SGD:",
+      "choices": [
+        "Full-batch is always best",
+        "Full-batch: exact gradient, slow per step. SGD (batch=1): noisy, fast. Mini-batch (32–256): balance — vectorized, parallelized on GPU, noisy enough to escape local minima",
+        "SGD doesn't work in deep learning",
+        "Mini-batch requires more memory"
+      ],
+      "answerIndex": 1,
+      "explanation": "Mini-batch is the standard. GPU parallelism makes batch processing efficient. Noise from sampling helps escape saddle points. Common sizes: 32, 64, 128, 256.",
+      "tags": [
+        "neural-nets",
+        "training"
+      ]
+    },
+    {
+      "id": "nn-q11",
+      "type": "mcq",
+      "prompt": "Weight initialization matters because:",
+      "choices": [
+        "Random weights cause memory issues",
+        "Poorly initialized weights cause vanishing/exploding gradients from the start — Xavier/He init sets variance to prevent this",
+        "Initialization affects only the first layer",
+        "LLMs don't need initialization"
+      ],
+      "answerIndex": 1,
+      "explanation": "Xavier init: Var(W) = 2/(fan_in + fan_out) for sigmoid/tanh. He init: 2/fan_in for ReLU. Prevents signal from dying or exploding in the first forward pass.",
+      "tags": [
+        "neural-nets",
+        "initialization"
+      ]
+    },
+    {
+      "id": "nn-q12",
+      "type": "mcq",
+      "prompt": "The universal approximation theorem states:",
+      "choices": [
+        "Neural nets can solve any optimization problem",
+        "A single hidden layer neural net with sufficient neurons can approximate any continuous function to arbitrary accuracy",
+        "All neural nets are equivalent",
+        "ReLU can approximate anything"
+      ],
+      "answerIndex": 1,
+      "explanation": "UAT: theoretical existence proof. In practice, deep networks are more parameter-efficient than wide shallow ones for complex functions. Deep > wide.",
+      "tags": [
+        "neural-nets",
+        "theory"
+      ]
+    },
+    {
+      "id": "nn-q13",
+      "type": "multi",
+      "prompt": "Which are valid overfitting mitigation techniques?",
+      "choices": [
+        "Dropout",
+        "L2 regularisation",
+        "Increasing learning rate",
+        "Data augmentation"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Dropout: random neuron deactivation. L2: penalise large weights. Data augmentation: expands training distribution. Increasing LR worsens overfitting by making training less stable.",
+      "tags": [
+        "neural-nets",
+        "regularization"
+      ]
+    },
+    {
+      "id": "nn-q14",
+      "type": "codeOutput",
+      "prompt": "After model.eval(), what happens to Dropout(0.5)?",
+      "code": "model = nn.Sequential(nn.Linear(10,10), nn.Dropout(0.5))\nmodel.eval()\noutput = model(input_tensor)  # what is the effective dropout rate?",
+      "choices": [
+        "0.5 — unchanged",
+        "0 — all neurons active, weights scaled",
+        "1.0",
+        "Random each call"
+      ],
+      "answerIndex": 1,
+      "explanation": "model.eval() disables dropout. All neurons active; PyTorch scales output by 1/(1-p) to match expected value from training.",
+      "tags": [
+        "neural-nets",
+        "regularization"
+      ]
+    },
+    {
+      "id": "nn-q15",
+      "type": "mcq",
+      "prompt": "Adam optimizer combines:",
+      "choices": [
+        "SGD + BatchNorm",
+        "Momentum (1st moment) + RMSProp (2nd moment adaptive learning rates) — adapts per-parameter LR based on gradient history",
+        "L2 + dropout",
+        "Multiple GPUs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Adam: m_t = β1×m_{t-1} + (1-β1)×g (momentum), v_t = β2×v_{t-1} + (1-β2)×g² (RMSProp). Update: θ -= lr × m̂/√v̂. Faster convergence than SGD for most tasks.",
+      "tags": [
+        "neural-nets",
+        "optimizers"
+      ]
+    },
+    {
+      "id": "nn-q16",
+      "type": "mcq",
+      "prompt": "What is a Convolutional Neural Network (CNN) designed for?",
+      "choices": [
+        "Sequence data",
+        "Spatial data (images) — conv layers learn translation-invariant local features (edges, textures, shapes), shared weights across positions",
+        "Text generation",
+        "Reinforcement learning"
+      ],
+      "answerIndex": 1,
+      "explanation": "Conv layers: shared filter scanned across input. Detects same pattern anywhere in image. Pooling reduces spatial size. Hierarchy: edges→textures→objects.",
+      "tags": [
+        "neural-nets",
+        "CNN"
+      ]
+    },
+    {
+      "id": "nn-q17",
+      "type": "mcq",
+      "prompt": "What does the loss function measure?",
+      "choices": [
+        "How many layers the network has",
+        "Scalar measure of how wrong the prediction is — gradient descent minimizes this",
+        "Model accuracy",
+        "Training speed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Loss = single number quantifying error. Cross-entropy for classification, MSE for regression. Backprop computes dL/dW for every parameter to update them.",
+      "tags": [
+        "neural-nets",
+        "training"
+      ]
+    },
+    {
+      "id": "nn-q18",
+      "type": "mcq",
+      "prompt": "An LSTM solves what limitation of vanilla RNNs?",
+      "choices": [
+        "MLPs can't handle sequences",
+        "Vanilla RNN gradients vanish over long sequences — LSTM uses gates (forget, input, output) to selectively preserve or discard information across many timesteps",
+        "LSTMs use less memory",
+        "Vanilla RNN doesn't support GPU"
+      ],
+      "answerIndex": 1,
+      "explanation": "RNN hidden state compresses all history — gradients of early timesteps vanish. LSTM cell state + gates allow the network to remember relevant information for hundreds of timesteps.",
+      "tags": [
+        "neural-nets",
+        "LSTM"
+      ]
+    },
+    {
+      "id": "nn-q19",
+      "type": "mcq",
+      "prompt": "Embedding layers in neural nets convert:",
+      "choices": [
+        "Float vectors to integers",
+        "Discrete tokens (word IDs) to dense continuous vectors — each ID maps to a learned d-dimensional representation",
+        "Images to text",
+        "Batches to single examples"
+      ],
+      "answerIndex": 1,
+      "explanation": "Embedding = lookup table of trainable vectors. word_id → 768-dim vector. Learned: semantically similar words cluster in embedding space (king - man + woman ≈ queen).",
+      "tags": [
+        "neural-nets",
+        "embeddings"
+      ]
+    },
+    {
+      "id": "nn-q20",
+      "type": "mcq",
+      "prompt": "Transfer learning in deep learning works by:",
+      "choices": [
+        "Transferring weights between GPUs",
+        "Using a pretrained model's learned representations as a starting point, fine-tuning only final layers on your task — far fewer examples needed",
+        "Copying hyperparameters",
+        "Ensemble of models"
+      ],
+      "answerIndex": 1,
+      "explanation": "Early layers learn universal features (edges, curves, n-grams). Fine-tuning re-uses these, only adapting final task-specific layers. ImageNet pretrained → medical imaging with 1000× fewer labeled examples.",
+      "tags": [
+        "neural-nets",
+        "transfer-learning"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "nn-fc1",
+      "front": "Activation functions",
+      "back": "ReLU: max(0,x), hidden layers default. Sigmoid: [0,1], binary output. Softmax: multi-class output (sum=1). Tanh: [-1,1]. Avoid sigmoid/tanh in deep hidden layers → vanishing gradients.",
+      "tags": [
+        "neural-nets"
+      ]
+    },
+    {
+      "id": "nn-fc2",
+      "front": "Backpropagation",
+      "back": "Forward: input → layers → loss. Backward: chain rule computes ∂L/∂w for each weight. Optimizer updates: w -= lr × ∂L/∂w. Repeat for each mini-batch until convergence.",
+      "tags": [
+        "neural-nets",
+        "training"
+      ]
+    },
+    {
+      "id": "nn-fc3",
+      "front": "Regularization techniques",
+      "back": "Dropout: zero random neurons (20-50%) during training → ensemble effect. L2: penalize large weights → generalization. BatchNorm: normalize activations. Early stopping: stop when val loss increases.",
+      "tags": [
+        "neural-nets",
+        "regularization"
+      ]
+    },
+    {
+      "id": "nn-fc4",
+      "front": "Vanishing gradient",
+      "back": "Deep sigmoid networks: gradients ≈ 0 at early layers — they don't learn. Fix: ReLU/GELU activations, skip connections (ResNet), batch/layer norm, careful initialization.",
+      "tags": [
+        "neural-nets",
+        "backprop"
+      ]
+    },
+    {
+      "id": "nn-fc5",
+      "front": "Adam optimizer",
+      "back": "Combines momentum (1st moment avg) + RMSProp (2nd moment adaptive LR per param). lr=1e-3, β1=0.9, β2=0.999 are defaults. Faster than SGD for most tasks.",
+      "tags": [
+        "neural-nets",
+        "optimizers"
+      ]
+    },
+    {
+      "id": "nn-fc6",
+      "front": "Dropout",
+      "back": "Training: randomly zero p% of neurons each forward pass. Inference: disable (model.eval()), scale weights by 1/(1-p). Acts as ensemble of 2^n sub-networks.",
+      "tags": [
+        "neural-nets",
+        "regularization"
+      ]
+    },
+    {
+      "id": "nn-fc7",
+      "front": "Skip connection (ResNet)",
+      "back": "h(x) = F(x) + x. Gradient can flow directly through x even if F(x) saturates. Enabled 100–1000 layer networks. Core building block of modern architectures.",
+      "tags": [
+        "neural-nets",
+        "architecture"
+      ]
+    },
+    {
+      "id": "nn-fc8",
+      "front": "Xavier / He initialization",
+      "back": "Xavier: Var(W) = 2/(fan_in+fan_out) — sigmoid/tanh. He: Var(W) = 2/fan_in — ReLU. Prevents signal from vanishing or exploding at network start.",
+      "tags": [
+        "neural-nets",
+        "initialization"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a System Using Neural Nets and Backprop Intuition\n\nDesign a realistic production service with Neural Nets and Backprop Intuition at its core. No code required:\n\n1. Why Neural Nets and Backprop Intuition over a simpler alternative?\n2. Key configuration decisions and reasoning\n3. Failure scenarios and recovery mechanisms\n4. Monitoring: metrics and alert thresholds\n5. How does it scale to 10x load?\n",
+    "checklist": [
+      {
+        "id": "neural-nets-pc1",
+        "text": "Justified use of Neural Nets and Backprop Intuition for a specific use case",
+        "weight": 20
+      },
+      {
+        "id": "neural-nets-pc2",
+        "text": "Named 3+ key configuration decisions with justifications",
+        "weight": 20
+      },
+      {
+        "id": "neural-nets-pc3",
+        "text": "Identified 2+ failure scenarios with recovery mechanisms",
+        "weight": 20
+      },
+      {
+        "id": "neural-nets-pc4",
+        "text": "Specified 3+ monitoring metrics with example thresholds",
+        "weight": 20
+      },
+      {
+        "id": "neural-nets-pc5",
+        "text": "Described scaling approach and first bottleneck",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Start with the problem. What pain does Neural Nets and Backprop Intuition remove?",
+      "Configuration: think timeouts, retries, consistency levels, batch sizes.",
+      "Monitoring: error_rate, p50/p99 latency, queue_depth, saturation are starting points."
+    ]
+  }
+}

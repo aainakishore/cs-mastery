@@ -1,0 +1,106 @@
+{
+  "id": "docker",
+  "unit": 5,
+  "order": 26,
+  "title": "Docker",
+  "summary": "Containers, images, Dockerfile, layers, networking, volumes, and docker-compose.",
+  "prereqs": [
+    "cloud-fundamentals"
+  ],
+  "guide": "# Docker\n\nDocker packages applications and their dependencies into **containers** \u2014 isolated, portable, reproducible environments that run consistently across any machine.\n\n## The Container vs VM Distinction\n\n```\nVM:                           Container:\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 App A  \u2502 App B     \u2502        \u2502 App A  \u2502 App B  App C \u2502\n  \u2502 OS A   \u2502 OS B      \u2502        \u2502 Lib A  \u2502 Lib B  Lib C \u2502\n  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2502        \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502\n  \u2502   Hypervisor       \u2502        \u2502   Container Runtime  \u2502\n  \u2502   Host OS          \u2502        \u2502   Host OS (shared)   \u2502\n  \u2502   Hardware         \u2502        \u2502   Hardware           \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n  Full OS per app                Shares host OS kernel\n  GBs of overhead                MBs of overhead\n  Seconds to start               Milliseconds to start\n```\n\n## Dockerfile\n\n```dockerfile\n# Multi-stage build \u2014 final image doesn't need build tools\nFROM node:20-alpine AS builder\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\nFROM node:20-alpine AS runtime\nWORKDIR /app\nCOPY --from=builder /app/dist ./dist\nCOPY --from=builder /app/node_modules ./node_modules\nEXPOSE 3000\nUSER node                          # don't run as root!\nCMD [\"node\", \"dist/server.js\"]\n```\n\n## Essential Commands\n\n```bash\ndocker build -t myapp:1.0 .         # Build image from Dockerfile\ndocker run -p 3000:3000 myapp:1.0   # Run container (host:container port mapping)\ndocker run -d --name api myapp:1.0  # Run detached, named\ndocker exec -it api /bin/sh         # Shell into running container\ndocker logs -f api                  # Follow container logs\ndocker ps                           # List running containers\ndocker images                       # List local images\ndocker push registry/myapp:1.0      # Push to registry\ndocker stop api && docker rm api    # Stop and remove\n```\n\n## docker-compose \u2014 Multi-Container\n\n```yaml\n# docker-compose.yml\nversion: '3.9'\nservices:\n  api:\n    build: ./api\n    ports: [\"3000:3000\"]\n    environment:\n      DATABASE_URL: postgres://user:pass@db:5432/myapp\n    depends_on: [db]\n    restart: unless-stopped\n\n  db:\n    image: postgres:16\n    volumes: [\"pgdata:/var/lib/postgresql/data\"]\n    environment:\n      POSTGRES_DB: myapp\n      POSTGRES_USER: user\n      POSTGRES_PASSWORD: pass\n\nvolumes:\n  pgdata:\n```\n\n## Layer Caching\n\n```\nDockerfile layers cache from bottom of unchanged layer:\n  COPY package.json .   \u2190 if unchanged, next layer uses cache\n  RUN npm install       \u2190 expensive, skipped if package.json unchanged\n  COPY . .              \u2190 changes frequently, but install already cached\n\nBest practice: copy package.json BEFORE src to cache node_modules.\n```\n\n## Common Pitfalls\n- **Running as root** \u2014 adds `USER node` or `USER nobody` in Dockerfile. Root in container can be root on host with misconfigured kernel.\n- **Storing secrets in images** \u2014 secrets baked into layers persist forever in history. Use secrets management (Docker secrets, Vault, env vars at runtime).\n- **Large images** \u2014 use Alpine base images, multi-stage builds, `.dockerignore`. Smaller = faster pulls = smaller attack surface.\n- **Not using .dockerignore** \u2014 COPY . . copies `node_modules`, `.git`, `.env`. Always exclude these.\n",
+  "questions": [
+    {
+      "id": "dkr-q1",
+      "type": "mcq",
+      "prompt": "Container vs VM: key performance difference?",
+      "choices": [
+        "Containers are safer",
+        "Containers share the host OS kernel \u2014 no guest OS per container. Start in milliseconds, use MBs of overhead vs GBs for VMs",
+        "VMs are always faster",
+        "VMs share the kernel too"
+      ],
+      "answerIndex": 1,
+      "explanation": "Docker containers share the host OS kernel via Linux namespaces and cgroups. No full OS booting \u2192 near-instant startup, tiny memory footprint. Tradeoff: less isolation than VMs (same kernel).",
+      "tags": [
+        "docker",
+        "containers"
+      ]
+    },
+    {
+      "id": "dkr-q2",
+      "type": "mcq",
+      "prompt": "Why use multi-stage Docker builds?",
+      "choices": [
+        "Required by Docker 20+",
+        "Separate build tools (compilers, test runners) from the final runtime image \u2014 production image only contains what's needed to run, not build. Dramatically reduces image size and attack surface",
+        "Multi-stage is slower",
+        "Only for compiled languages"
+      ],
+      "answerIndex": 1,
+      "explanation": "Build stage: includes compiler, dev dependencies, test tools. Runtime stage: copies only built artifacts. Node app: FROM node AS builder (npm install + build) \u2192 FROM node-alpine AS runtime (copy dist). Final image has no npm, no source code, no dev deps.",
+      "tags": [
+        "docker",
+        "multi-stage",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "dkr-q3",
+      "type": "mcq",
+      "prompt": "Why order Dockerfile instructions with COPY package.json before COPY . .?",
+      "choices": [
+        "Syntax requirement",
+        "Docker caches each layer. package.json rarely changes \u2014 npm install (expensive) uses cache on most builds. Source code changes frequently, but the cached node_modules layer is reused",
+        "Improves security",
+        "Required for docker-compose"
+      ],
+      "answerIndex": 1,
+      "explanation": "Layer caching: if COPY . . comes first and any source file changes, ALL subsequent layers (including npm install) must re-run. Separating dependency files from source allows npm install to be cached.",
+      "tags": [
+        "docker",
+        "layer-caching"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "dkr-fc1",
+      "front": "Container vs VM",
+      "back": "Container: shares host OS kernel, MBs overhead, ms startup, namespace/cgroup isolation. VM: own OS per machine, GBs overhead, s startup, hypervisor isolation. Containers faster but less isolated.",
+      "tags": [
+        "docker"
+      ]
+    },
+    {
+      "id": "dkr-fc2",
+      "front": "Multi-stage Dockerfile",
+      "back": "FROM heavy AS builder (compile). FROM alpine AS runtime. COPY --from=builder /app/dist ./. Final image contains only runtime artifacts \u2014 no compilers, dev deps, or source. Smaller and more secure.",
+      "tags": [
+        "docker",
+        "multi-stage"
+      ]
+    },
+    {
+      "id": "dkr-fc3",
+      "front": "Key Docker commands",
+      "back": "build -t name:tag . | run -p host:container name | exec -it name /bin/sh | logs -f name | ps | push registry/name:tag",
+      "tags": [
+        "docker"
+      ]
+    },
+    {
+      "id": "dkr-fc4",
+      "front": "docker-compose",
+      "back": "Orchestrates multi-container apps locally. services, ports, volumes, environment, depends_on. Startup order but not readiness \u2014 use health checks for depends_on to respect DB ready.",
+      "tags": [
+        "docker",
+        "compose"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "TODO: author project brief for Docker",
+    "checklist": [],
+    "hints": []
+  }
+}

@@ -1,0 +1,438 @@
+{
+  "id": "dsa-java-queues",
+  "unit": 9,
+  "order": 64,
+  "title": "Queues and Deques in Java",
+  "summary": "Queue, deque, circular queue, BFS level-order traversal, and sliding window maximum.",
+  "prereqs": [
+    "dsa-java-stacks"
+  ],
+  "guide": "# Queues and Deques in Java\n\nA queue is **FIFO** (First In, First Out). Think of a checkout line at a supermarket: the first customer to join is the first to be served. Elements enter at the rear and leave from the front.\n\n```\nEnqueue (add to rear)                Dequeue (remove from front)\n        \u2193                                    \u2191\n  rear \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 front\n       \u2502 C \u2502 B \u2502 A \u2502               A leaves first (arrived first)\n  rear \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 front\n```\n\n## Java API \u2014 prefer ArrayDeque over LinkedList\n\n```java\nQueue<Integer> q = new ArrayDeque<>();\n\nq.offer(1);         // add to rear \u2014 returns false if capacity exceeded (never for ArrayDeque)\nq.add(2);           // add to rear \u2014 throws on failure\nint front = q.peek();   // view front WITHOUT removing \u2014 null if empty\nint out   = q.poll();   // remove front \u2014 null if empty\nq.remove();             // remove front \u2014 throws NoSuchElementException if empty\nq.isEmpty();\nq.size();\n```\n\n## ArrayDeque \u2014 the Swiss army knife\n\nA Deque (Double-Ended Queue) allows insert/remove at **both** ends:\n\n```\naddFirst(X) \u2500\u2500\u2192 [X | A | B | C] \u2190\u2500\u2500 addLast(Y) \u2192 [X | A | B | C | Y]\nremoveFirst() returns X            removeLast() returns Y\n```\n\n```java\nDeque<Integer> dq = new ArrayDeque<>();\ndq.addFirst(1);    // push to front\ndq.addLast(2);     // push to rear\ndq.removeFirst();  // pop front\ndq.removeLast();   // pop rear\ndq.peekFirst();    dq.peekLast();\n\n// Use as Stack:  push/pop/peek  (front operations)\n// Use as Queue:  offer/poll     (addLast / removeFirst)\n```\n\n## Circular Queue \u2014 wrapping indices in an array\n\n```\ncapacity = 5, initial front=0, rear=0, size=0\n\nEnqueue A,B,C:  [A|B|C| | ]   front=0, rear=3, size=3\nDequeue A,B:    [ | |C| | ]   front=2, rear=3, size=1\nEnqueue D,E,F:  [F| |C|D|E]   front=2, rear=1, size=4 \u2190 wraps!\n\nWrap formula:  rear = (rear + 1) % capacity\n               front = (front + 1) % capacity\n```\n\n```java\nclass CircularQueue {\n    int[] arr; int front, size, cap;\n    CircularQueue(int k) { arr = new int[k]; cap = k; }\n    boolean enqueue(int val) {\n        if (size == cap) return false;\n        arr[(front + size) % cap] = val;\n        size++; return true;\n    }\n    int dequeue() {\n        if (size == 0) return -1;\n        int v = arr[front];\n        front = (front + 1) % cap; size--; return v;\n    }\n    boolean isFull()  { return size == cap; }\n    boolean isEmpty() { return size == 0; }\n}\n```\n\n## BFS \u2014 the queue's killer application\n\nBFS expands outward from the source **one ring at a time**, like ripples in water.\nEvery node at distance k is processed before any at distance k+1.\n\n```\nGraph:  0\u2500\u25001\u2500\u25003\n        |  |\n        2\u2500\u25004\n\nBFS from 0:\nQueue: [0]      \u2192 process 0 \u2192 enqueue 1, 2 \u2192 Queue: [1,2]\nQueue: [1,2]    \u2192 process 1 \u2192 enqueue 3, 4 \u2192 Queue: [2,3,4]\nQueue: [2,3,4]  \u2192 process 2 (no new) \u2192 Queue: [3,4]\n\u2026\nDistances: {0:0, 1:1, 2:1, 3:2, 4:2}\n```\n\nMark visited **when enqueuing**, not when dequeuing \u2014 prevents duplicates.\n\n## Level-Order Tree Traversal\n\nSnapshot the queue size at the start of each outer loop iteration \u2014 that count tells you how many nodes are on the **current level**.\n\n```java\nQueue<TreeNode> q = new ArrayDeque<>();\nif (root != null) q.offer(root);\nwhile (!q.isEmpty()) {\n    int levelSize = q.size();        // \u2190 snapshot: exactly one level's worth\n    for (int i = 0; i < levelSize; i++) {\n        TreeNode n = q.poll();\n        process(n);\n        if (n.left  != null) q.offer(n.left);\n        if (n.right != null) q.offer(n.right);\n    }\n}\n```\n\n## Sliding Window Maximum with Monotonic Deque\n\nMaintain a **decreasing deque** of indices. Front = current window maximum.\n\n```\nnums = [1,3,-1,-3,5,3,6,7],  k=3\n\nWindow [1,3,-1]: deque=[1(idx1)]  max=3\nWindow [3,-1,-3]: deque=[1(idx1),4(idx\u2026)]  after evictions max=3\n\u2026\nO(n) total: each element pushed and popped at most once.\n```\n\n## Complexity Cheatsheet\n\n| Operation | ArrayDeque |\n|---|---|\n| offer / add (rear) | O(1) amortised |\n| poll / remove (front) | O(1) |\n| peek | O(1) |\n| BFS (V vertices, E edges) | O(V+E) |\n| Level-order traversal | O(n) |\n| Sliding window max | O(n) |\n\n## Common Pitfalls\n- `poll()` returns `null` on empty queue \u2014 use `isEmpty()` before polling, or use `remove()` if you want an exception\n- LinkedList vs ArrayDeque: LinkedList allocates a node object per element (slower, more GC pressure); prefer ArrayDeque\n- BFS: marking visited **after** polling (too late) lets the same node be enqueued multiple times\n\n## Connections\n- **Stacks** \u2014 LIFO counterpart; ArrayDeque can be both\n- **Trees** \u2014 level-order traversal IS BFS on a tree\n- **Graphs** \u2014 BFS finds shortest path (hop count) in unweighted graphs\n- **Sliding Window** \u2014 monotonic deque optimises fixed-window max/min to O(n)\n",
+  "questions": [
+    {
+      "id": "djq-q1",
+      "type": "mcq",
+      "prompt": "Queue removal order is:",
+      "choices": [
+        "LIFO",
+        "FIFO",
+        "Sorted ascending",
+        "Random"
+      ],
+      "answerIndex": 1,
+      "explanation": "First In, First Out \u2014 items leave in the order they arrived.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-q2",
+      "type": "mcq",
+      "prompt": "Preferred Java Queue implementation:",
+      "choices": [
+        "java.util.Stack",
+        "LinkedList",
+        "ArrayDeque",
+        "TreeSet"
+      ],
+      "answerIndex": 2,
+      "explanation": "ArrayDeque has better cache locality and no node overhead.",
+      "tags": [
+        "java"
+      ]
+    },
+    {
+      "id": "djq-q3",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "Queue<Integer> q = new ArrayDeque<>();\nq.offer(1); q.offer(2); q.offer(3);\nSystem.out.println(q.poll());",
+      "choices": [
+        "3",
+        "2",
+        "1",
+        "null"
+      ],
+      "answerIndex": 2,
+      "explanation": "poll() removes the front element, which is 1 (first added).",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-q4",
+      "type": "mcq",
+      "prompt": "offer() vs add() on a Queue:",
+      "choices": [
+        "No difference",
+        "offer() returns false on failure; add() throws an exception",
+        "offer() is slower",
+        "add() is deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "offer() is preferred for bounded queues.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-q5",
+      "type": "mcq",
+      "prompt": "BFS uses a queue because:",
+      "choices": [
+        "It is faster than DFS",
+        "It processes nodes level by level (FIFO order)",
+        "Queues use less memory",
+        "Recursion requires a queue"
+      ],
+      "answerIndex": 1,
+      "explanation": "FIFO ensures all distance-k nodes are visited before distance-k+1.",
+      "tags": [
+        "bfs"
+      ]
+    },
+    {
+      "id": "djq-q6",
+      "type": "mcq",
+      "prompt": "Circular queue index wrap-around formula:",
+      "choices": [
+        "idx++",
+        "(idx + 1) % capacity",
+        "idx * 2 % capacity",
+        "capacity - idx"
+      ],
+      "answerIndex": 1,
+      "explanation": "Modulo constrains the index within [0, capacity).",
+      "tags": [
+        "circular-queue"
+      ]
+    },
+    {
+      "id": "djq-q7",
+      "type": "mcq",
+      "prompt": "poll() on an empty Queue returns:",
+      "choices": [
+        "0",
+        "-1",
+        "null",
+        "Throws NoSuchElementException"
+      ],
+      "answerIndex": 2,
+      "explanation": "poll() returns null; remove() would throw.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-q8",
+      "type": "mcq",
+      "prompt": "Deque stands for:",
+      "choices": [
+        "Dynamic Entry Queue",
+        "Double-Ended Queue",
+        "Duplicate Elimination Queue",
+        "Distributed Efficient Queue"
+      ],
+      "answerIndex": 1,
+      "explanation": "Supports insert/remove at both front and rear.",
+      "tags": [
+        "deque"
+      ]
+    },
+    {
+      "id": "djq-q9",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "Deque<Integer> dq = new ArrayDeque<>();\ndq.addFirst(10); dq.addLast(20);\nSystem.out.println(dq.removeFirst());",
+      "choices": [
+        "20",
+        "10",
+        "null",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "addFirst(10) places 10 at front; removeFirst() takes it.",
+      "tags": [
+        "deque"
+      ]
+    },
+    {
+      "id": "djq-q10",
+      "type": "mcq",
+      "prompt": "Level-order tree traversal uses a queue to:",
+      "choices": [
+        "Sort nodes by value",
+        "Process each level before descending to the next",
+        "Find cycles",
+        "Build a min-heap"
+      ],
+      "answerIndex": 1,
+      "explanation": "Queue FIFO order mirrors level-by-level processing.",
+      "tags": [
+        "bfs",
+        "trees"
+      ]
+    },
+    {
+      "id": "djq-q11",
+      "type": "mcq",
+      "prompt": "Snapshot q.size() at the start of each BFS iteration lets you:",
+      "choices": [
+        "Measure total nodes",
+        "Process exactly one level per outer loop iteration",
+        "Speed up BFS",
+        "Detect cycles"
+      ],
+      "answerIndex": 1,
+      "explanation": "size() at that moment equals the number of nodes on the current level.",
+      "tags": [
+        "bfs"
+      ]
+    },
+    {
+      "id": "djq-q12",
+      "type": "mcq",
+      "prompt": "BFS guarantees shortest path in:",
+      "choices": [
+        "Any weighted graph",
+        "Unweighted graphs only",
+        "DAGs only",
+        "Trees only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Equal edge weights mean BFS distance = hop count = shortest path.",
+      "tags": [
+        "bfs"
+      ]
+    },
+    {
+      "id": "djq-q13",
+      "type": "mcq",
+      "prompt": "To find the sliding-window maximum in O(n), use:",
+      "choices": [
+        "Sorted array",
+        "Max-heap",
+        "Monotonic decreasing deque",
+        "Two pointers"
+      ],
+      "answerIndex": 2,
+      "explanation": "Deque stores candidate indices in decreasing value order; front is always the max.",
+      "tags": [
+        "deque",
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "djq-q14",
+      "type": "mcq",
+      "prompt": "A Deque can replace:",
+      "choices": [
+        "ArrayList",
+        "Both a Stack and a Queue",
+        "HashMap",
+        "PriorityQueue"
+      ],
+      "answerIndex": 1,
+      "explanation": "addFirst/removeFirst = stack; addLast/removeFirst = queue.",
+      "tags": [
+        "deque"
+      ]
+    },
+    {
+      "id": "djq-q15",
+      "type": "multi",
+      "prompt": "Which real-world systems model a queue?",
+      "choices": [
+        "CPU task scheduler",
+        "Printer spooler",
+        "Browser undo history",
+        "Web server request queue"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Undo history is LIFO (stack). The others are FIFO queues.",
+      "tags": [
+        "applications"
+      ]
+    },
+    {
+      "id": "djq-q16",
+      "type": "mcq",
+      "prompt": "Queue push/pop/peek all run in:",
+      "choices": [
+        "O(log n)",
+        "O(n)",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "ArrayDeque front/rear operations are amortized O(1).",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "djq-q17",
+      "type": "mcq",
+      "prompt": "To avoid infinite loops in BFS on a graph:",
+      "choices": [
+        "Limit iterations",
+        "Mark nodes visited before enqueuing",
+        "Use a priority queue",
+        "Sort adjacency lists"
+      ],
+      "answerIndex": 1,
+      "explanation": "A visited set prevents re-enqueuing already-seen nodes.",
+      "tags": [
+        "bfs"
+      ]
+    },
+    {
+      "id": "djq-q18",
+      "type": "codeOutput",
+      "prompt": "Output?",
+      "code": "Queue<String> q = new ArrayDeque<>();\nq.offer(\"a\"); q.offer(\"b\");\nq.poll();\nSystem.out.println(q.peek());",
+      "choices": [
+        "a",
+        "b",
+        "null",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "poll() removes 'a'; peek() sees 'b' without removing it.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-q19",
+      "type": "mcq",
+      "prompt": "Circular queue is full when:",
+      "choices": [
+        "rear == front",
+        "size == capacity",
+        "front == -1",
+        "rear == capacity - 1"
+      ],
+      "answerIndex": 1,
+      "explanation": "Track size separately to distinguish full from empty.",
+      "tags": [
+        "circular-queue"
+      ]
+    },
+    {
+      "id": "djq-q20",
+      "type": "mcq",
+      "prompt": "LinkedList vs ArrayDeque for a queue:",
+      "choices": [
+        "LinkedList is faster",
+        "ArrayDeque is faster due to array locality",
+        "They are identical",
+        "LinkedList uses less memory"
+      ],
+      "answerIndex": 1,
+      "explanation": "ArrayDeque avoids per-node heap allocation; better cache performance.",
+      "tags": [
+        "performance"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "djq-fc1",
+      "front": "Queue order",
+      "back": "FIFO \u2014 First In, First Out.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc2",
+      "front": "offer / poll / peek",
+      "back": "offer: add rear. poll: remove front (null if empty). peek: view front.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc3",
+      "front": "Deque",
+      "back": "Double-Ended Queue. add/remove at both ends. Use as stack or queue.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc4",
+      "front": "BFS core pattern",
+      "back": "offer start \u2192 while not empty: poll \u2192 process \u2192 offer unvisited neighbours.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc5",
+      "front": "Circular queue wrap",
+      "back": "(index + 1) % capacity \u2014 keeps pointer inside the array bounds.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc6",
+      "front": "Level-order by level",
+      "back": "Snapshot q.size() before inner loop to process exactly one level.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc7",
+      "front": "Sliding window max",
+      "back": "Monotonic decreasing deque of indices; front is window maximum.",
+      "tags": [
+        "queue"
+      ]
+    },
+    {
+      "id": "djq-fc8",
+      "front": "ArrayDeque vs LinkedList",
+      "back": "ArrayDeque is faster (array locality, no node allocation).",
+      "tags": [
+        "queue"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Implement three things in QueueLab.java:\n1. A CircularQueue class backed by an int[] (enqueue, dequeue, isFull, isEmpty).\n2. A method levelOrder(TreeNode root) returning List<List<Integer>>.\n3. A method maxSlidingWindow(int[] nums, int k) using a deque.\nInclude a main() with small test cases for each.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "CircularQueue handles wrap-around correctly with modulo",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "levelOrder groups nodes by level using q.size() snapshot",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "maxSlidingWindow evicts out-of-window indices from deque front",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "All three handle empty/edge inputs without exceptions",
+        "weight": 1
+      }
+    ],
+    "hints": [
+      "Circular queue: track size separately \u2014 avoids front==rear ambiguity.",
+      "Level-order: take levelSize = q.size() before the inner for loop.",
+      "Sliding window: poll front when index - front > k - 1."
+    ]
+  }
+}
