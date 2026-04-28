@@ -7,7 +7,7 @@
   "prereqs": [
     "sharding"
   ],
-  "guide": "# Apache Kafka \u2014 Event Streaming Platform\n\nKafka is a **distributed, durable, high-throughput event streaming platform**. Unlike traditional message queues, Kafka retains messages for days/weeks \u2014 consumers can replay events from any point.\n\n## Kafka Architecture\n\n```\nProducer \u2500\u2500\u2192 Topic (partitioned) \u2500\u2500\u2192 Consumer Groups\n\nTopic: logical stream of events\n  Partition 0: [event1, event3, event5...]  \u2190 ordered within partition\n  Partition 1: [event2, event4, event6...]\n  Partition 2: [...]\n\nEach partition is an append-only log stored on disk.\nRetention: events kept for configurable time (7 days default) regardless of read.\n```\n\n## Partitions and Consumer Groups\n\n```\nConsumer Group \"order-service\" (3 consumers, 3 partitions):\n  Consumer A \u2190 Partition 0  (exclusive assignment)\n  Consumer B \u2190 Partition 1\n  Consumer C \u2190 Partition 2\n\nNew consumer joins (4 consumers, 3 partitions):\n  Consumer A \u2190 Partition 0\n  Consumer B \u2190 Partition 1\n  Consumer D \u2190 Partition 2\n  Consumer C \u2190 idle (no partition \u2014 more consumers than partitions is wasteful)\n\nDifferent group \"analytics-service\" reads the SAME topic independently:\n  Doesn't affect order-service offsets/position\n  Can read from beginning or latest  \u2190 Kafka's key advantage over RabbitMQ\n```\n\n## Producer (Node.js with kafkajs)\n\n```javascript\nconst { Kafka } = require('kafkajs');\nconst kafka = new Kafka({ brokers: ['localhost:9092'] });\nconst producer = kafka.producer();\n\nawait producer.connect();\nawait producer.send({\n  topic: 'orders',\n  messages: [\n    { key: String(order.userId), value: JSON.stringify(order) }\n    //       \u2191 same key \u2192 same partition \u2192 ordering per user\n  ]\n});\n```\n\n## Consumer\n\n```javascript\nconst consumer = kafka.consumer({ groupId: 'order-processor' });\nawait consumer.connect();\nawait consumer.subscribe({ topic: 'orders', fromBeginning: false });\n\nawait consumer.run({\n  eachMessage: async ({ topic, partition, message }) => {\n    const order = JSON.parse(message.value.toString());\n    await processOrder(order);\n    // Offset committed automatically (or manually for at-least-once)\n  }\n});\n```\n\n## Kafka vs RabbitMQ\n\n| Aspect | Kafka | RabbitMQ |\n|---|---|---|\n| Message retention | Days/weeks (configurable) | Until consumed (or TTL) |\n| Replay | Yes \u2014 seek to any offset | No |\n| Ordering | Per partition | Per queue |\n| Throughput | Very high (millions/sec) | Lower |\n| Consumer model | Pull-based | Push-based |\n| Best for | Event sourcing, analytics, log aggregation | Task queues, RPC patterns |\n\n## Common Pitfalls\n- **More consumers than partitions** \u2014 extra consumers are idle. Scale partitions first, then consumers (must match or exceed).\n- **Unordered messages** \u2014 ordering is per-partition only. Use the same key for events that must be ordered (all orders for user X get the same partition).\n- **Large messages** \u2014 Kafka is optimized for small-to-medium messages. Large blobs should be stored externally (S3) with Kafka carrying the reference.\n- **Not monitoring consumer lag** \u2014 if consumers fall behind, lag grows. Alert on consumer group lag > threshold.\n",
+  "guide": "# Apache Kafka\n\n## What Is Kafka? The Problem It Solves\n\nImagine an e-commerce platform. When a user places an order, ten things need to happen:\nsend confirmation email, update inventory, notify the warehouse, charge the card,\nupdate loyalty points, trigger analytics, start fraud check, update the user dashboard,\nnotify the shipping service, and update the recommendation engine.\n\n**Option A — Direct calls (synchronous):**\n```\nOrder Service calls all 10 services one by one.\nProblems:\n  - Slow: must wait for each to finish (sequential or complex parallel code)\n  - Brittle: if Email Service is down, the ENTIRE ORDER FAILS\n  - Tight coupling: Order Service must know about all 10 services\n  - Scaling: each service must scale with Order Service traffic\n```\n\n**Option B — Kafka (event streaming):**\n```\nOrder Service publishes ONE event: OrderPlaced -> Kafka topic\nDone. Returns to user instantly.\n\nAll 10 services independently subscribe to the topic.\nEach reads at its own pace. Email Service is down? It catches up when it recovers.\nNew 11th service (analytics v2)? Just subscribe — no changes to Order Service.\n```\n\nKafka is a **distributed event streaming platform**. Think of it as a\nmassively scalable, durable, replayable message log that services can publish\nto and consume from independently.\n\n---\n\n## Core Concepts\n\n```\nTOPIC:\n  A named category/feed of events.\n  \"orders\", \"user-signups\", \"payments\", \"page-views\"\n  Events are published TO topics.\n  Consumers subscribe to topics.\n\nPARTITION:\n  Topics are split into partitions for parallelism.\n  Topic \"orders\" might have 12 partitions.\n  Events in one partition are ORDERED (older events first).\n  Across partitions: no ordering guarantee.\n\n  Topic: orders\n  ┌─────────────────────────────────────┐\n  │ Partition 0: [e1] [e5] [e9]  [e13] │ ← events appended, never deleted early\n  │ Partition 1: [e2] [e6] [e10] [e14] │\n  │ Partition 2: [e3] [e7] [e11] [e15] │\n  │ Partition 3: [e4] [e8] [e12] [e16] │\n  └─────────────────────────────────────┘\n\nOFFSET:\n  A sequential integer ID for each event within a partition.\n  Partition 0: offset 0 = first event, offset 1 = second, etc.\n  Consumers track their offset: \"I've processed up to offset 47 in partition 0\".\n  This enables: replay (go back to offset 0), pause/resume, exactly-once delivery.\n\nBROKER:\n  A Kafka server that stores partitions and serves producers/consumers.\n  A Kafka cluster has 3-9+ brokers for HA and throughput.\n\nPRODUCER:\n  Client that publishes events to a topic.\n  Decides which partition to write to: round-robin, by key hash, or custom.\n\nCONSUMER:\n  Client that reads events from a topic.\n\nCONSUMER GROUP:\n  Multiple consumers coordinated to read a topic together.\n  Each partition is assigned to exactly one consumer in the group.\n  Adding consumers = parallel processing (up to one per partition).\n```\n\n---\n\n## The Key Insight: Consumer Groups Enable Fan-Out\n\n```\nMultiple consumer groups can independently read the SAME topic.\nEach group gets ALL messages, independently of other groups.\n\nTopic: orders (4 partitions, 1000 msg/sec)\n                    │\n          ┌─────────┼─────────┐\n          ▼         ▼         ▼\nConsumer Group A  Group B   Group C\n(Email Service)  (Analytics) (Inventory)\n  [C1][C2]         [C1]       [C1][C2][C3]\n    Reads all       Reads all    Reads all\n    messages        messages     messages\n  Offset: 500     Offset: 800  Offset: 300\n  (email is fast) (analytics  (inventory\n                   is fast)    needs catch-up)\n\nEach group tracks its own offset.\nSlow group (Inventory at offset 300) doesn't affect other groups.\nIf Inventory crashes: it restarts at offset 300 and resumes.\n```\n\nThis is what makes Kafka fundamentally different from SQS:\n- SQS: message consumed = deleted forever, one consumer group\n- Kafka: message retained (configurable days/weeks), multiple groups read independently\n\n---\n\n## Kafka vs SQS vs RabbitMQ\n\n```\n+------------------+-------------------+------------------+--------------------+\n| Feature          | Kafka             | SQS              | RabbitMQ           |\n+------------------+-------------------+------------------+--------------------+\n| Model            | Event log (stream)| Work queue       | Message broker     |\n| Message retention| Days/weeks/forever| Max 14 days      | Until consumed     |\n| Replay           | Yes (any offset)  | No               | No                 |\n| Consumer groups  | Multiple independent| One group       | Multiple queues   |\n| Throughput       | Millions msg/sec  | Unlimited API    | ~50K msg/sec       |\n| Ordering         | Per partition     | FIFO only in $.fifo| Per queue       |\n| Ops complexity   | High (cluster)    | Zero (managed)   | Medium             |\n| Use case         | Event streaming   | Task queues      | Complex routing    |\n+------------------+-------------------+------------------+--------------------+\n\nUSE KAFKA WHEN:\n  Multiple services need to react to the same events (fan-out)\n  You need event replay (audit, reprocessing, new service catch-up)\n  High-throughput streaming (millions of events/second)\n  Event sourcing architecture\n  Real-time analytics pipelines (Kafka -> Spark/Flink -> dashboard)\n\nUSE SQS WHEN:\n  Simple task queue (send email, process payment)\n  Don't need replay\n  Don't want to manage infrastructure (SQS is fully managed)\n\nUSE RABBITMQ WHEN:\n  Complex message routing (exchanges with patterns)\n  Traditional message broker patterns (request-reply, pub-sub)\n  Existing AMQP ecosystem\n```\n\n---\n\n## Kafka Retention — Events Stay Around\n\n```\nKafka KEEPS events by default. They are not deleted when consumed.\n\nRetention policy options:\n  Time-based:  delete events older than 7 days (default)\n  Size-based:  delete oldest events when topic exceeds 50GB\n  Compacted:   keep only the LATEST event per key (for state tables)\n\nExample: user-profiles topic with compaction\n  Event 1: key=user123  value={name: Alice, email: a@b.com}\n  Event 2: key=user456  value={name: Bob, ...}\n  Event 3: key=user123  value={name: Alice, email: newemail@b.com}  <- update\n  After compaction: only event 3 for user123 (latest) is kept.\n  Event 1 is deleted (superseded by event 3).\n\nThis is why Kafka can serve as a source of truth for state:\n  New service joins -> reads compacted topic -> gets current state of all users.\n  Full database snapshot via Kafka!\n\nREPLAY USE CASE:\n  Analytics service crashes, restores from backup at offset 0.\n  Replays all events from day 1.\n  Gets back to current state without any data loss.\n```\n\n---\n\n## Kafka Architecture — Cluster and Replication\n\n```\nCLUSTER SETUP (3 brokers minimum for HA):\n\n  Broker 1          Broker 2          Broker 3\n  ┌──────────┐      ┌──────────┐      ┌──────────┐\n  │ P0 Leader│      │ P1 Leader│      │ P2 Leader│\n  │ P1 Replica      │ P2 Replica      │ P0 Replica\n  │ P2 Replica      │ P0 Replica      │ P1 Replica\n  └──────────┘      └──────────┘      └──────────┘\n\nEach partition has ONE leader and N replicas.\nAll reads/writes go to the leader.\nReplicas stay in sync (In-Sync Replicas = ISR).\n\nREPLICATION FACTOR:\n  replication.factor=3: partition copied to 3 brokers.\n  Broker 1 dies: Broker 2 or 3 has a complete replica. Automatic leader election.\n  No data loss. Consumers/producers reconnect to new leader automatically.\n\nZOOKEEPER (OLD) vs KRaft (NEW):\n  Old: Kafka required ZooKeeper for cluster coordination (separate process).\n  New (Kafka 3.x+): KRaft mode — Kafka manages its own metadata.\n  KRaft simplifies operations significantly. New clusters: use KRaft.\n```\n\n---\n\n## Producer Configuration — Delivery Guarantees\n\n```\nacks SETTING (how many brokers must acknowledge before \"success\"):\n\n  acks=0:  Fire and forget. No confirmation. Fastest. May lose messages.\n  acks=1:  Leader must confirm. Default. Leader crash before replica sync = message lost.\n  acks=all: All in-sync replicas must confirm. Slowest. No data loss.\n           Combine with min.insync.replicas=2 for true durability.\n\nIDEMPOTENT PRODUCER:\n  enable.idempotence=true\n  If network error causes retry, Kafka deduplicates on the broker side.\n  Prevents duplicate messages from producer retries.\n  Required for exactly-once semantics.\n\nEXACTLY-ONCE SEMANTICS (EOS):\n  Combine: idempotent producer + Kafka transactions.\n  atomically: produce to topic A AND commit consumer offset together.\n  Use for: financial events where duplicates cause business problems.\n\nCOMPRESSION:\n  lz4 or snappy compression on producer reduces network I/O 3-5x.\n  Critical for high-volume topics. Near-zero CPU overhead.\n```\n\n---\n\n## Consumer Configuration\n\n```\nAUTO OFFSET COMMIT (dangerous default):\n  enable.auto.commit=true  <- commits offset every 5 seconds automatically\n  Problem: commit happens BEFORE processing completes.\n  If consumer crashes after commit but before processing: event is LOST.\n\n  SAFE PATTERN: disable auto-commit, manually commit AFTER processing:\n    consumer.poll() -> process records -> consumer.commitSync()\n\nCONSUMER LAG:\n  consumer lag = latest_offset - consumer_current_offset\n  If lag is growing: consumers are falling behind production rate.\n  Alert on lag > threshold (depend on your SLA).\n  Fix: add more consumers (up to partition count), or increase throughput.\n\nREBALANCING:\n  When consumer joins or leaves a group, Kafka reassigns partitions.\n  During rebalance: ALL consumers stop processing (\"stop the world\").\n  Minimize rebalances: tune session.timeout.ms and heartbeat.interval.ms.\n  Kafka 3.x: cooperative incremental rebalancing (less disruptive).\n```\n\n---\n\n## Real-World Kafka Patterns\n\n```\nEVENT SOURCING:\n  Every change is an event. Events stored in Kafka forever.\n  State = replay of all events from beginning.\n  Database becomes a cache/view of the event log.\n\nCQRS + KAFKA:\n  Command side: write events to Kafka.\n  Query side: service consumes events, builds optimised read model.\n  Read and write models independently scalable.\n\nKAFKA STREAMS / KSQLDB:\n  Stream processing ON Kafka without external system.\n  count orders per minute, join streams, aggregate.\n  Example: real-time fraud detection on transaction stream.\n\nCHANGE DATA CAPTURE (CDC):\n  Debezium connector reads MySQL/PostgreSQL WAL.\n  Every database INSERT/UPDATE/DELETE -> Kafka event.\n  Other services react to DB changes without polling.\n  \"Database as source of truth, Kafka as event bus\" pattern.\n```\n\n---\n\n## Mind Map\n\n```\nKAFKA\n|\n+-- CORE CONCEPTS\n|   +-- Topic (named event channel)\n|   +-- Partition (ordered log, parallelism unit)\n|   +-- Offset (position in partition, enables replay)\n|   +-- Consumer Group (parallel consumption)\n|   +-- Broker (server, stores partitions)\n|\n+-- KEY FEATURE: RETENTION + REPLAY\n|   +-- Events stay on disk (days/weeks)\n|   +-- Multiple groups read same topic independently\n|   +-- New service: replay from offset 0\n|\n+-- DELIVERY GUARANTEES\n|   +-- acks=0 (fire-forget), acks=1 (leader), acks=all (durable)\n|   +-- Idempotent producer (dedup retries)\n|   +-- Exactly-once (transactions)\n|\n+-- OPERATIONS\n|   +-- Consumer lag monitoring\n|   +-- Replication factor (3 recommended)\n|   +-- Compaction (keep latest per key)\n|\n+-- PATTERNS\n    +-- Fan-out (multiple consumer groups)\n    +-- Event sourcing\n    +-- CDC (Debezium)\n    +-- CQRS\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Apache Kafka in 6 Minutes** by ByteByteGo:\n  https://www.youtube.com/watch?v=Ch5VhJzaoaI\n  - Fast, visual Kafka concepts overview.\n- **Kafka Tutorial for Beginners** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=SqVfCyfCJqw\n  - 1 hour. Complete Kafka walkthrough with Docker demo.\n\n### Free Books and Articles\n- **Kafka official documentation**: https://kafka.apache.org/documentation/\n- **Kafka: The Definitive Guide** (free PDF from Confluent): https://www.confluent.io/resources/kafka-the-definitive-guide/\n\n### Practice\n- **Confluent Cloud free tier**: https://confluent.io — managed Kafka, free tier\n- **Kafka with Docker Compose**: many tutorials showing full local cluster setup\n",
   "questions": [
     {
       "id": "kfk-q1",
@@ -15,7 +15,7 @@
       "prompt": "How does Kafka handle multiple consumer groups reading the same topic?",
       "choices": [
         "Only one group can read at a time",
-        "Each consumer group has its own offset pointer \u2014 they read independently. Adding a new consumer group doesn't affect existing groups' positions. All groups see all events",
+        "Each consumer group has its own offset pointer — they read independently. Adding a new consumer group doesn't affect existing groups' positions. All groups see all events",
         "Second group gets remaining messages",
         "Groups share an offset"
       ],
@@ -32,12 +32,12 @@
       "prompt": "Why should events for the same user always use the same Kafka partition key?",
       "choices": [
         "For encryption",
-        "Kafka only guarantees ordering WITHIN a partition. Assigning the same key (e.g., userId) to all of a user's events ensures they land in the same partition \u2014 maintaining order for that user",
+        "Kafka only guarantees ordering WITHIN a partition. Assigning the same key (e.g., userId) to all of a user's events ensures they land in the same partition — maintaining order for that user",
         "Keys are for auth",
         "Random distribution is better"
       ],
       "answerIndex": 1,
-      "explanation": "Key-based partitioning: hash(key) % numPartitions determines the partition. Same key = same partition = guaranteed ordering. Different users (different keys) may go to different partitions \u2014 parallelism without sacrificing per-user order.",
+      "explanation": "Key-based partitioning: hash(key) % numPartitions determines the partition. Same key = same partition = guaranteed ordering. Different users (different keys) may go to different partitions — parallelism without sacrificing per-user order.",
       "tags": [
         "kafka",
         "partitioning",
@@ -50,7 +50,7 @@
       "prompt": "Kafka advantage over RabbitMQ for event replay?",
       "choices": [
         "Kafka is faster",
-        "Kafka retains messages for configurable duration (days/weeks) regardless of consumption. A new service can read historical events from the beginning of the topic. RabbitMQ deletes messages after consumption \u2014 no replay possible",
+        "Kafka retains messages for configurable duration (days/weeks) regardless of consumption. A new service can read historical events from the beginning of the topic. RabbitMQ deletes messages after consumption — no replay possible",
         "Replay is a disadvantage",
         "RabbitMQ also supports replay"
       ],
@@ -60,13 +60,318 @@
         "kafka",
         "event-replay"
       ]
+    },
+    {
+      "id": "kafka-q4",
+      "type": "mcq",
+      "prompt": "What does a Kafka partition provide?",
+      "choices": [
+        "Encryption of messages",
+        "Ordered, append-only event log enabling parallelism — a topic's messages are split across partitions, each processed by one consumer in a group",
+        "Authentication for consumers",
+        "Compression of messages"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partitions are the unit of parallelism. Events within a partition are strictly ordered by offset. A topic with 12 partitions can be consumed by up to 12 parallel consumers. More partitions = higher throughput (but more overhead).",
+      "tags": [
+        "kafka",
+        "partitions"
+      ]
+    },
+    {
+      "id": "kafka-q5",
+      "type": "mcq",
+      "prompt": "What is a Kafka offset?",
+      "choices": [
+        "The delay before a message is delivered",
+        "A sequential integer ID for each message within a partition — consumers track their current offset to know what they've processed and to enable replay",
+        "The number of partitions",
+        "Message priority level"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kafka offset = position in a partition log. Consumer group tracks offset per partition: 'I've read up to offset 500 in partition 2'. To replay: reset offset to 0. To skip old data: seek to latest. Offsets enable exactly-once, at-least-once, at-most-once delivery semantics.",
+      "tags": [
+        "kafka",
+        "offset",
+        "replay"
+      ]
+    },
+    {
+      "id": "kafka-q6",
+      "type": "mcq",
+      "prompt": "How does Kafka differ from SQS in terms of message consumption?",
+      "choices": [
+        "Kafka is slower",
+        "SQS: message consumed = deleted. Kafka: message retained for days/weeks, multiple independent consumer groups ALL read the same messages",
+        "They are identical",
+        "Kafka deletes faster"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQS message deleted = gone (one consumer group 'wins' it). Kafka: message stays. Consumer Group A (email) and Group B (analytics) BOTH read the same OrderPlaced event independently. Each tracks its own offset. Fan-out built in.",
+      "tags": [
+        "kafka",
+        "sqs",
+        "comparison"
+      ]
+    },
+    {
+      "id": "kafka-q7",
+      "type": "mcq",
+      "prompt": "What happens when consumer lag grows on a Kafka consumer group?",
+      "choices": [
+        "Messages are deleted faster",
+        "The consumer group is falling behind production rate — add more consumers (up to partition count) or optimize processing speed",
+        "Kafka automatically slows producers",
+        "Offsets are reset"
+      ],
+      "answerIndex": 1,
+      "explanation": "Consumer lag = latest_offset - consumer_offset. Growing lag = consumers can't keep up. Fix: add consumers (max = partition count), reduce processing time per message, or increase partitions (allows more consumers). Alert on lag > SLA threshold.",
+      "tags": [
+        "kafka",
+        "consumer-lag",
+        "operations"
+      ]
+    },
+    {
+      "id": "kafka-q8",
+      "type": "mcq",
+      "prompt": "What does Kafka's `acks=all` producer setting guarantee?",
+      "choices": [
+        "Message delivered to consumer",
+        "All in-sync replicas (ISR) have acknowledged the message — no data loss even if the leader broker crashes immediately after",
+        "Consumer has processed the message",
+        "Message is compressed"
+      ],
+      "answerIndex": 1,
+      "explanation": "acks=all (or acks=-1): message written to leader AND all in-sync replicas before producer considers it sent. Combine with min.insync.replicas=2: even if leader dies, at least one replica has the message. Required for financial/critical data streams.",
+      "tags": [
+        "kafka",
+        "acks",
+        "durability"
+      ]
+    },
+    {
+      "id": "kafka-q9",
+      "type": "mcq",
+      "prompt": "What is log compaction in Kafka?",
+      "choices": [
+        "Gzip compression of the log",
+        "Kafka retains only the most recent message per key — older messages with the same key are deleted, creating a current-state snapshot from the event log",
+        "Deleting all old messages",
+        "Merging multiple partitions"
+      ],
+      "answerIndex": 1,
+      "explanation": "Compacted topic: user123 event appears 5 times (profile updates). After compaction: only latest event for user123 exists. Use for: state tables, lookup data, change streams. New consumer reads compacted topic = gets current state of all keys. Like a DB table as a Kafka topic.",
+      "tags": [
+        "kafka",
+        "compaction",
+        "state"
+      ]
+    },
+    {
+      "id": "kafka-q10",
+      "type": "mcq",
+      "prompt": "Why is `enable.auto.commit=true` dangerous in Kafka consumers?",
+      "choices": [
+        "It is always safe",
+        "Auto-commit fires every 5 seconds regardless of processing state — if consumer commits offset BEFORE finishing processing, a crash causes that message to be skipped permanently",
+        "It commits too slowly",
+        "It prevents consumer groups"
+      ],
+      "answerIndex": 1,
+      "explanation": "Auto-commit: Kafka commits your offset at intervals. If commit fires, then consumer crashes mid-processing: message was 'committed' but not processed. Restart: starts from AFTER that offset. Message lost. Safe pattern: disable auto-commit, manually commitSync() AFTER successful processing.",
+      "tags": [
+        "kafka",
+        "consumer",
+        "offset-commit"
+      ]
+    },
+    {
+      "id": "kafka-q11",
+      "type": "mcq",
+      "prompt": "What is Change Data Capture (CDC) with Kafka and Debezium?",
+      "choices": [
+        "A Kafka security feature",
+        "Debezium reads the database WAL (write-ahead log), converts every INSERT/UPDATE/DELETE into a Kafka event — services react to DB changes without polling",
+        "A Kafka backup mechanism",
+        "Kafka database storage"
+      ],
+      "answerIndex": 1,
+      "explanation": "CDC: Debezium connector tails the DB WAL (PostgreSQL, MySQL). Every change -> Kafka event. Downstream services subscribe and react. Example: orders table update -> Kafka event -> inventory service, analytics, search index all update. No polling, no DB load from consumers.",
+      "tags": [
+        "kafka",
+        "cdc",
+        "debezium"
+      ]
+    },
+    {
+      "id": "kafka-q12",
+      "type": "mcq",
+      "prompt": "In Kafka, what determines which partition a message goes to?",
+      "choices": [
+        "Kafka always uses round-robin",
+        "If message has a key: hash(key) % partitions (same key always same partition = ordered). If no key: round-robin across partitions",
+        "Consumer chooses partition",
+        "Partition with most space"
+      ],
+      "answerIndex": 1,
+      "explanation": "Key-based routing: all events for userId=123 always go to partition 3 (hash deterministic). Guarantees ordering per user. No key: distributed round-robin (max throughput, no ordering). Choose key when ordering matters for a specific entity (user, order ID).",
+      "tags": [
+        "kafka",
+        "partitions",
+        "routing"
+      ]
+    },
+    {
+      "id": "kafka-q13",
+      "type": "mcq",
+      "prompt": "What is the maximum number of consumers that can read a Kafka topic in parallel within one consumer group?",
+      "choices": [
+        "Unlimited",
+        "Equal to the number of partitions — each partition assigned to exactly one consumer; consumers > partitions means idle consumers",
+        "Always 1",
+        "10 consumers maximum"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partitions = max parallelism. Topic with 12 partitions: 12 consumers in a group each get 1 partition. 13th consumer is idle (no partition). Want more parallel consumers? Add partitions. Design topics with enough partitions for peak consumer count.",
+      "tags": [
+        "kafka",
+        "consumer-groups",
+        "parallelism"
+      ]
+    },
+    {
+      "id": "kafka-q14",
+      "type": "mcq",
+      "prompt": "What is Event Sourcing with Kafka?",
+      "choices": [
+        "Using Kafka as a cache",
+        "Every state change is stored as an immutable event in Kafka. Current state = replay of all events. Kafka becomes the source of truth.",
+        "Kafka used for monitoring",
+        "Kafka replacing databases entirely"
+      ],
+      "answerIndex": 1,
+      "explanation": "Event sourcing: UserCreated, EmailUpdated, PhoneVerified events stored in Kafka forever. User profile = reducing all user events. New service: replay from offset 0 to build its view. Audit trail built-in. Enables time-travel debugging. Complex to implement but powerful.",
+      "tags": [
+        "kafka",
+        "event-sourcing",
+        "pattern"
+      ]
+    },
+    {
+      "id": "kafka-q15",
+      "type": "mcq",
+      "prompt": "What is Kafka's replication factor and why use 3?",
+      "choices": [
+        "Number of topics",
+        "Number of copies of each partition across brokers — factor=3 means partition on 3 brokers, can lose 2 brokers and not lose data",
+        "Number of consumer groups",
+        "Consumer thread count"
+      ],
+      "answerIndex": 1,
+      "explanation": "Replication factor 3: partition on broker 1 (leader) + broker 2 (replica) + broker 3 (replica). Broker 1 dies: broker 2 elected leader, no data loss. Broker 2 also dies: broker 3 takes over. Only all 3 failing simultaneously causes data loss. Production minimum: factor=3.",
+      "tags": [
+        "kafka",
+        "replication",
+        "ha"
+      ]
+    },
+    {
+      "id": "kafka-q16",
+      "type": "mcq",
+      "prompt": "What is Kafka Streams?",
+      "choices": [
+        "Kafka's network protocol",
+        "A client library for stream processing directly on Kafka — stateful transformations, aggregations, joins of Kafka topics without external systems",
+        "A UI for Kafka",
+        "Kafka's consumer group balancer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kafka Streams: process events inside your application using a DSL. Count events per minute, join OrderPlaced + PaymentCompleted streams. All state stored in Kafka (or RocksDB locally). No separate Spark/Flink cluster needed for moderate complexity. For complex analytics: Flink or Spark Structured Streaming.",
+      "tags": [
+        "kafka",
+        "kafka-streams",
+        "stream-processing"
+      ]
+    },
+    {
+      "id": "kafka-q17",
+      "type": "mcq",
+      "prompt": "What is CQRS (Command Query Responsibility Segregation) with Kafka?",
+      "choices": [
+        "A Kafka CLI command",
+        "Separate write model (commands -> Kafka events) from read model (consumer builds optimised query view) — each side independently scalable",
+        "A Kafka security pattern",
+        "A partitioning strategy"
+      ],
+      "answerIndex": 1,
+      "explanation": "CQRS+Kafka: OrderService writes OrderPlaced event. OrderReadService consumes and builds a denormalised orders table optimised for queries. Write side: optimised for append. Read side: optimised for queries. Scale independently. Trade-off: eventual consistency between write and read models.",
+      "tags": [
+        "kafka",
+        "cqrs",
+        "pattern"
+      ]
+    },
+    {
+      "id": "kafka-q18",
+      "type": "mcq",
+      "prompt": "What does the idempotent producer setting `enable.idempotence=true` do?",
+      "choices": [
+        "Compresses messages",
+        "Makes the producer assign unique sequence numbers — Kafka broker deduplicates retried messages, preventing duplicates from network errors",
+        "Enables consumer group coordination",
+        "Increases throughput"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without idempotence: network error + retry = duplicate message on broker. With idempotence: producer assigns (PID, sequence). Broker rejects duplicate sequence. You get exactly-once writes from producer perspective. Required for exactly-once end-to-end (combine with transactions for consumer offset commit).",
+      "tags": [
+        "kafka",
+        "idempotence",
+        "exactly-once"
+      ]
+    },
+    {
+      "id": "kafka-q19",
+      "type": "mcq",
+      "prompt": "What is a Kafka consumer group rebalance and why should you minimize them?",
+      "choices": [
+        "A rolling upgrade of brokers",
+        "When consumers join/leave a group, Kafka reassigns partitions — during rebalance ALL consumers pause processing ('stop the world')",
+        "A log compaction operation",
+        "A configuration change"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rebalance = all partitions reassigned. During classic rebalance: every consumer in the group stops processing. High-volume topic: seconds of pause = thousands of unprocessed messages. Minimize: tune session.timeout.ms, use static membership (group.instance.id), upgrade to Kafka 3.x cooperative rebalancing.",
+      "tags": [
+        "kafka",
+        "rebalance",
+        "operations"
+      ]
+    },
+    {
+      "id": "kafka-q20",
+      "type": "mcq",
+      "prompt": "What is the purpose of Kafka Connect?",
+      "choices": [
+        "A Kafka CLI tool",
+        "A framework for streaming data between Kafka and external systems (databases, S3, Elasticsearch) using ready-made connector plugins without writing code",
+        "Kafka's load balancer",
+        "Consumer group management"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kafka Connect: run connector plugins that import/export data. Source connectors: DB WAL -> Kafka (Debezium), S3 -> Kafka. Sink connectors: Kafka -> Elasticsearch (for search), Kafka -> S3 (for archival), Kafka -> JDBC (write to any DB). No code needed for common integrations.",
+      "tags": [
+        "kafka",
+        "kafka-connect",
+        "integration"
+      ]
     }
   ],
   "flashcards": [
     {
       "id": "kfk-fc1",
       "front": "Kafka topic partitions",
-      "back": "Each partition is an ordered append-only log. Ordering guaranteed within partition only. Same key \u2192 same partition (ensures ordering per entity). More partitions = more parallelism.",
+      "back": "Each partition is an ordered append-only log. Ordering guaranteed within partition only. Same key → same partition (ensures ordering per entity). More partitions = more parallelism.",
       "tags": [
         "kafka"
       ]
@@ -86,6 +391,56 @@
       "tags": [
         "kafka",
         "comparison"
+      ]
+    },
+    {
+      "id": "kafka-fc4",
+      "front": "Kafka vs SQS fundamental difference",
+      "back": "SQS: consumed = deleted, one consumer group. Kafka: events retained (days/weeks), multiple independent consumer groups all read same events. Kafka is an event LOG not a queue. Replay is native. Fan-out is native.",
+      "tags": [
+        "kafka",
+        "sqs",
+        "comparison"
+      ]
+    },
+    {
+      "id": "kafka-fc5",
+      "front": "Consumer group parallelism rule",
+      "back": "Max parallel consumers = number of partitions. 12 partitions = max 12 consumers in one group (each gets 1 partition). 13th consumer = idle. Design: create topics with 3-6x expected peak consumer count. Can add consumers up to partition limit.",
+      "tags": [
+        "kafka",
+        "consumer-groups",
+        "parallelism"
+      ]
+    },
+    {
+      "id": "kafka-fc6",
+      "front": "Safe consumer offset commit",
+      "back": "enable.auto.commit=false. Process records. Then commitSync(). Auto-commit (default): may commit before processing = events lost on crash. Manual commit after processing = at-least-once (re-process on crash, must be idempotent consumer).",
+      "tags": [
+        "kafka",
+        "consumer",
+        "at-least-once"
+      ]
+    },
+    {
+      "id": "kafka-fc7",
+      "front": "Producer acks durability tradeoffs",
+      "back": "acks=0: fastest, any loss possible. acks=1: leader ack, leader crash = loss. acks=all: all ISR ack, max durability, slowest. Production critical data: acks=all + min.insync.replicas=2 + enable.idempotence=true.",
+      "tags": [
+        "kafka",
+        "producer",
+        "acks"
+      ]
+    },
+    {
+      "id": "kafka-fc8",
+      "front": "Log compaction use case",
+      "back": "Compacted topic: retains ONLY latest value per key. Use for: user profiles, product catalog, feature flags (current state matters, history doesn't). New service joining gets current state by reading compacted topic from start. Like materialised view in Kafka.",
+      "tags": [
+        "kafka",
+        "compaction",
+        "state"
       ]
     }
   ],

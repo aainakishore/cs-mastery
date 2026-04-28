@@ -1,0 +1,464 @@
+{
+  "id": "embedded-databases",
+  "unit": 1,
+  "order": 6,
+  "title": "Embedded Databases",
+  "summary": "SQLite, RocksDB, H2, DuckDB — when to use in-process databases vs client-server, with internals (B-tree vs LSM).",
+  "prereqs": [
+    "relational-databases-sql"
+  ],
+  "guide": "# Embedded Databases — SQLite, RocksDB, LevelDB\n\n## What Is an Embedded Database?\n\nAn embedded database **runs INSIDE your application process**, not as a separate server.\nYour app links the DB as a library and reads/writes data via in-process function calls.\nNo network. No socket. No daemon. No DBA.\n\n```\nTRADITIONAL CLIENT-SERVER DATABASE:\n                                                              \n  +─────────────+    network/socket   +──────────────+        \n  │  Your App   │ ─────────────────►  │  Postgres    │        \n  │ (process A) │ ◄─────────────────  │  (process B) │        \n  +─────────────+                     +──────────────+        \n                                       runs separately,        \n                                       can be on another       \n                                       machine                 \n\nEMBEDDED DATABASE:\n                                                              \n  +────────────────────────────────────+                     \n  │  Your App                          │                     \n  │  ┌──────────────────────────────┐  │                     \n  │  │  SQLite library (linked)     │  │                     \n  │  │  reads/writes local file     │  │                     \n  │  └──────────┬───────────────────┘  │                     \n  │             │ direct file I/O       │                     \n  └─────────────┼───────────────────────+                     \n                ▼                                              \n         data.db (single file on disk)                         \n```\n\n**Why use embedded?**\n- No separate server process to manage\n- Zero-config: just a file\n- Faster than network DB for small/single-user apps (no IPC overhead)\n- Perfect for: mobile apps, desktop apps, IoT, CLI tools, browser apps, tests\n\n**Real-world examples (you've used these without knowing!):**\n- iOS/Android apps: SQLite stores your contacts, photos, app settings\n- Firefox/Chrome: SQLite stores history, cookies, bookmarks\n- Skype, WhatsApp: SQLite for message storage\n- Adobe Lightroom: SQLite catalog\n- Cassandra, RocksDB-based stores: RocksDB as storage engine\n\n---\n\n## SQLite — The Embedded SQL Database\n\nSQLite is a C library that implements a **full SQL database in a single file**.\nIt's the most-deployed database in the world (in every smartphone, every Mac, every browser).\n\n```\nFEATURES:\n  Full SQL support (SELECT, JOIN, transactions, indexes)\n  ACID-compliant transactions\n  Cross-platform (any OS that has files)\n  Single file = your entire database\n  Tiny (~600KB compiled)\n  Public domain (no license)\n\nUSAGE PATTERN:\n  1. Link SQLite library into your app\n  2. Open a file as your DB: sqlite3.open('data.db')\n  3. Run SQL queries through the API\n  4. SQLite reads/writes the file as needed\n\nJAVA EXAMPLE (using sqlite-jdbc):\n  Class.forName(\"org.sqlite.JDBC\");\n  Connection conn = DriverManager.getConnection(\"jdbc:sqlite:data.db\");\n  Statement stmt = conn.createStatement();\n  stmt.execute(\"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)\");\n  stmt.execute(\"INSERT INTO users (name) VALUES ('Alice')\");\n  ResultSet rs = stmt.executeQuery(\"SELECT * FROM users\");\n  while (rs.next()) {\n      System.out.println(rs.getInt(\"id\") + \" \" + rs.getString(\"name\"));\n  }\n  conn.close();\n\nPYTHON EXAMPLE (built into stdlib):\n  import sqlite3\n  conn = sqlite3.connect('data.db')\n  c = conn.cursor()\n  c.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER, name TEXT)')\n  c.execute('INSERT INTO users VALUES (1, ?)', ('Alice',))\n  conn.commit()\n  for row in c.execute('SELECT * FROM users'):\n      print(row)\n  conn.close()\n```\n\n**Limitations of SQLite:**\n\n```\nConcurrency: Only ONE writer at a time (database-level lock).\n             Many readers OK in WAL mode.\nNetwork:     No client-server. Multiple processes via filesystem only — risky.\nScale:       Designed for ~hundreds of GB max, single-user/single-app.\nFeatures:    Lacks some advanced SQL (no native UUID, limited JSON ops, no\n             full-text-search by default, weak type system — TEXT can hold int).\n\nRULE: SQLite is excellent for embedded local data. Not a server-grade DB.\n```\n\n---\n\n## RocksDB — The Embedded Key-Value Store\n\nRocksDB is a high-performance **embedded key-value store** by Facebook (now Meta).\nOriginally a fork of Google's LevelDB, optimised for SSDs and large datasets.\n\n```\nWHAT IT IS:\n  Library, not a server.\n  Stores key-value pairs (both bytes).\n  No SQL, no schema, no joins — JUST get/put/delete by key.\n  Optimised for write-heavy workloads.\n\nARCHITECTURE — LSM TREE (Log-Structured Merge Tree):\n\n  Writes go to:                                           \n    1. MemTable (in-memory sorted table) — fast            \n    2. WAL (Write-Ahead Log) — durability                  \n                                                            \n  When MemTable fills:                                      \n    Flushed to disk as immutable SSTable (Sorted String Table)\n                                                            \n  Background compaction merges SSTables to reduce overlap.\n  Read path: check MemTable, then SSTables newest-first until found.\n\n  +───────────────────+\n  │   MemTable (RAM)  │  ← writes here\n  +─────────┬─────────+\n            │ flush\n            ▼\n  +───────────────────+\n  │   SSTable L0      │\n  +───────────────────+\n  │   SSTable L0      │\n  +───────────────────+\n       compact\n  +───────────────────+\n  │   SSTable L1      │  ← merged, sorted, larger\n  +───────────────────+\n  │   SSTable L2      │  ← yet larger, less recent\n  +───────────────────+\n\nBENEFITS:\n  Very fast writes (sequential, append-only)\n  Compresses well (sorted runs)\n  Scales to TBs on a single node\n\nTRADE-OFFS vs B-tree (SQLite):\n  Write amplification (compaction rewrites data)\n  Reads can hit multiple files\n  More complex internally\n\nUSE CASES:\n  Storage engine for many DBs: Cassandra, CockroachDB, Yugabyte, MyRocks\n  Time-series (lots of writes, mostly recent reads)\n  Embedded caches needing persistence\n  Apache Kafka uses RocksDB for state stores in Kafka Streams\n\nJAVA EXAMPLE (using rocksdbjni):\n  Options options = new Options().setCreateIfMissing(true);\n  RocksDB db = RocksDB.open(options, \"/path/to/db\");\n  db.put(\"key1\".getBytes(), \"value1\".getBytes());\n  byte[] value = db.get(\"key1\".getBytes());\n  db.delete(\"key1\".getBytes());\n  db.close();\n```\n\n---\n\n## SQLite vs RocksDB — When to Use Which\n\n```\n+──────────────────────+──────────────────────+──────────────────────+\n│ Feature              │ SQLite               │ RocksDB              │\n+──────────────────────+──────────────────────+──────────────────────+\n│ Data model           │ Relational (SQL)     │ Key-Value            │\n│ Schema               │ Yes (tables)         │ No (just bytes)      │\n│ Query language       │ SQL                  │ get/put/delete/scan  │\n│ ACID                 │ Yes                  │ Yes (per-batch)      │\n│ Joins                │ Yes                  │ No (do in app)       │\n│ Indexes              │ Auto + manual        │ Sort order = primary │\n│ Storage engine       │ B-tree               │ LSM tree             │\n│ Best for             │ Mixed read/write SQL │ Heavy writes, KV     │\n│ Size cap             │ ~140 TB (hard), few GB practical │ TBs scale│\n│ Concurrent writers   │ One                  │ One (per-CF)         │\n│ Single file          │ Yes                  │ Directory of files   │\n│ Typical use          │ App local DB, mobile │ DB storage engine,   │\n│                      │ apps, browser, tests │ analytics, streaming │\n+──────────────────────+──────────────────────+──────────────────────+\n\nRULE OF THUMB:\n  Need SQL/relational? → SQLite\n  Need raw KV speed at scale? → RocksDB\n  Need both? → Use SQLite for app data, embed RocksDB for caches/streams\n```\n\n---\n\n## Other Embedded Databases\n\n```\nLEVELDB (Google):\n  Predecessor of RocksDB. Simpler, smaller, less optimised.\n  Used by Bitcoin Core, Chromium IndexedDB.\n\nBERKELEY DB (Oracle):\n  Old-school embedded KV. Ubiquitous in legacy Unix software.\n  Multiple flavours: BTree, Hash, Queue, Recno.\n\nDUCKDB:\n  Modern embedded analytical DB ('SQLite for analytics').\n  Column-store, designed for OLAP — fast on analytical queries over millions of rows.\n  Pandas users love it: directly query Parquet files via SQL.\n\nH2 (Java):\n  Pure-Java embedded SQL database. Used heavily in Java integration tests.\n  Can run in-memory (no file at all) for blazing-fast unit tests.\n\nBADGER (Go):\n  LSM-based KV store written in pure Go. Used by Dgraph.\n\nBOLTDB (Go):\n  B-tree based KV store, ACID. Used by etcd until v3 (now bbolt fork).\n\nEMBEDDED VECTOR DATABASES (newer, AI-related):\n  ChromaDB, FAISS — for embedding/vector storage in RAG systems.\n```\n\n---\n\n## When to Use Embedded vs Client-Server DB\n\n```\nUSE EMBEDDED WHEN:\n  ✓ Single-user app (mobile, desktop)\n  ✓ App needs to work fully offline\n  ✓ Don't want server ops burden\n  ✓ Data doesn't need to be shared between processes/machines\n  ✓ Tests (in-memory SQLite/H2 for fast unit tests)\n  ✓ CLI tools, IDEs, build tools (caching local state)\n\nUSE CLIENT-SERVER WHEN:\n  ✓ Multiple apps/services need same data\n  ✓ Concurrent writes from many clients\n  ✓ Multi-machine deployment (cloud)\n  ✓ Need DBA tools, replication, backup automation\n  ✓ Data exceeds single-machine capacity\n  ✓ Production web app at scale\n\nHYBRID PATTERNS:\n  Mobile app: SQLite locally + sync to PostgreSQL backend\n  Web app: PostgreSQL primary + SQLite for ephemeral session/cache state\n  Distributed DB: each node uses RocksDB internally; nodes coordinate via network\n```\n\n---\n\n## Mind Map\n\n```\nEMBEDDED DATABASES\n|\n+-- DEFINITION\n|   +-- Library inside your process\n|   +-- No separate server\n|   +-- Direct file I/O\n|\n+-- SQLITE\n|   +-- Full SQL + ACID\n|   +-- Single file\n|   +-- B-tree storage\n|   +-- Mobile, browser, tests\n|   +-- One writer at a time\n|\n+-- ROCKSDB\n|   +-- Key-Value only\n|   +-- LSM tree storage\n|   +-- Write-optimised\n|   +-- Storage engine for distributed DBs\n|   +-- TB-scale single node\n|\n+-- LEVELDB / BADGER / BOLTDB\n|   +-- Other KV stores\n|   +-- Different language ecosystems\n|\n+-- DUCKDB\n|   +-- Embedded analytical\n|   +-- Column-store\n|   +-- 'SQLite for OLAP'\n|\n+-- USE CASES\n|   +-- Mobile apps (SQLite)\n|   +-- Browser storage\n|   +-- Test suites (in-memory)\n|   +-- Local caches\n|   +-- DB storage engines\n|\n+-- CONTRAST CLIENT-SERVER\n    +-- SQLite ≠ PostgreSQL replacement\n    +-- Multi-process writes need server\n    +-- Single-user/single-process = embedded\n```\n\n---\n\n## How Embedded DBs Connect to Other Topics\n\n- **SQL fundamentals**: SQLite gives you SQL learning with zero setup\n- **Java testing**: H2 in-memory DB for fast unit/integration tests\n- **Distributed databases**: Cassandra, CockroachDB, Yugabyte all use RocksDB internally\n- **Mobile development**: SQLite is THE local persistence on iOS/Android\n- **Browser**: IndexedDB and origin-private SQLite (OPFS) for offline web apps\n- **Kafka Streams**: state stores backed by RocksDB\n\n---\n\n## Common Beginner Mistakes\n\n1. **Treating SQLite like Postgres** — it's not for multi-process writes; concurrent writers will block\n2. **No backups** — single file is easy to copy; not doing it = data loss\n3. **Storing huge BLOBs in SQLite** — works but degrades performance; consider files + SQLite metadata\n4. **Ignoring WAL mode** — default rollback-journal mode has worse concurrency; PRAGMA journal_mode=WAL\n5. **Using SQLite over network filesystem** — corruption risk; only on local disks\n6. **Choosing RocksDB when SQLite would do** — SQL is easier when you need queries; KV is overkill\n7. **Forgetting embedded DB needs migration scripts** — schema changes still apply\n\n---\n\n## References\n\n### Videos\n- **SQLite Explained** by Hussein Nasser: https://www.youtube.com/watch?v=Jib2AmRb_rk\n- **RocksDB and LSM Trees** by Facebook Engineering: https://www.youtube.com/watch?v=jGCv4r8CJEI\n\n### Articles\n- **SQLite Documentation**: https://www.sqlite.org/docs.html\n- **SQLite: When to use** (official): https://www.sqlite.org/whentouse.html\n- **RocksDB Wiki**: https://github.com/facebook/rocksdb/wiki\n- **DuckDB intro**: https://duckdb.org/why_duckdb",
+  "questions": [
+    {
+      "id": "emb-q1",
+      "type": "mcq",
+      "prompt": "What defines an 'embedded' database?",
+      "choices": [
+        "A database with mobile support",
+        "Runs INSIDE the application process as a library — not a separate server. Direct file I/O, no network or socket.",
+        "Encrypted DB",
+        "Cloud-only DB"
+      ],
+      "answerIndex": 1,
+      "explanation": "Embedded DB is a library you link into your app. SQLite, RocksDB, H2, LevelDB. Same process, in-process function calls instead of network round trips. Examples: every iOS/Android app uses SQLite. Browser uses SQLite for history. Vs Postgres which runs as separate server.",
+      "tags": [
+        "embedded",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "emb-q2",
+      "type": "mcq",
+      "prompt": "What is SQLite?",
+      "choices": [
+        "A NoSQL database",
+        "A C library implementing a full SQL database in a SINGLE FILE — most-deployed DB in the world (every phone, every browser)",
+        "A cloud service",
+        "A backup format"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite is the most widely-deployed DB ever. ~600KB library, public domain. Full SQL + ACID. Single file = entire database. Used by: iOS, Android, Mac, Windows, Firefox, Chrome, Skype, every Adobe product, etc. Perfect for: app local data, tests, single-user systems.",
+      "tags": [
+        "sqlite"
+      ]
+    },
+    {
+      "id": "emb-q3",
+      "type": "mcq",
+      "prompt": "What is the main concurrency limitation of SQLite?",
+      "choices": [
+        "No concurrency",
+        "Single writer at a time (database-level lock); many readers OK in WAL mode. Multiple processes writing concurrently will queue/block.",
+        "Only 5 connections",
+        "Read-only"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite serialises writes via file lock. Default rollback-journal: writers block readers too. WAL mode (PRAGMA journal_mode=WAL): readers don't block writers, but still only 1 writer. For many concurrent writers, use a server DB (Postgres, MySQL).",
+      "tags": [
+        "sqlite",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "emb-q4",
+      "type": "mcq",
+      "prompt": "What is RocksDB?",
+      "choices": [
+        "A SQL DB",
+        "An embedded high-performance KEY-VALUE store. LSM-tree storage. Optimised for write-heavy workloads on SSDs. Storage engine for many distributed DBs.",
+        "Cloud DB",
+        "Browser API"
+      ],
+      "answerIndex": 1,
+      "explanation": "RocksDB is Meta's embedded KV store, fork of Google's LevelDB. No SQL, no schema, just byte-key-byte-value. LSM tree internals make writes very fast. Used as storage engine in: Cassandra, CockroachDB, Yugabyte, MyRocks, Kafka Streams state stores.",
+      "tags": [
+        "rocksdb"
+      ]
+    },
+    {
+      "id": "emb-q5",
+      "type": "mcq",
+      "prompt": "What is an LSM tree?",
+      "choices": [
+        "A B-tree",
+        "Log-Structured Merge tree: writes go to in-memory MemTable + WAL, then flush to immutable sorted SSTables on disk; background compaction merges them. Optimised for fast sequential writes.",
+        "Linked list",
+        "Tree of indexes"
+      ],
+      "answerIndex": 1,
+      "explanation": "LSM tree: writes are sequential (fast on SSD/HDD). MemTable in RAM, WAL for durability, periodic flush to immutable SSTable files. Background compaction merges/dedupes. Reads: check MemTable then SSTables newest-first. Trade-off: write amplification but very fast sustained writes. Powers RocksDB, Cassandra, ScyllaDB.",
+      "tags": [
+        "lsm",
+        "storage"
+      ]
+    },
+    {
+      "id": "emb-q6",
+      "type": "mcq",
+      "prompt": "When should you choose SQLite over PostgreSQL?",
+      "choices": [
+        "Never",
+        "Single-user/single-process apps (mobile, desktop, CLI tools), unit tests (in-memory), embedded scenarios where you want zero server ops. NOT for multi-user web apps at scale.",
+        "Always",
+        "Only for SQL queries"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite excels: mobile apps, desktop apps, CLI tools, browser storage, fast unit tests. Postgres excels: multi-client web apps, concurrent writers, multi-machine, big production. Wrong tool: putting SQLite behind a high-traffic web service — concurrent writes block each other.",
+      "tags": [
+        "sqlite",
+        "when-to-use"
+      ]
+    },
+    {
+      "id": "emb-q7",
+      "type": "mcq",
+      "prompt": "What are SSTables in RocksDB/LSM trees?",
+      "choices": [
+        "Schema tables",
+        "Sorted String Tables: immutable on-disk files, sorted by key. Once written, never modified. Compaction merges multiple SSTables into new ones, deleting old.",
+        "Stack tables",
+        "Cache layer"
+      ],
+      "answerIndex": 1,
+      "explanation": "SSTable: immutable file holding sorted key-value pairs. Memtable flushes become Level-0 SSTables. Background compaction merges them into Level-1, etc. Immutability means: easy to compress, no in-place writes, simpler concurrency. Reads may need to check multiple SSTables (Bloom filters help skip).",
+      "tags": [
+        "rocksdb",
+        "sstable"
+      ]
+    },
+    {
+      "id": "emb-q8",
+      "type": "mcq",
+      "prompt": "What is H2 database commonly used for in Java projects?",
+      "choices": [
+        "Production",
+        "Pure-Java embedded SQL DB; widely used for fast unit/integration tests in IN-MEMORY mode (jdbc:h2:mem:testdb) — starts in milliseconds, no file IO.",
+        "Java applet support",
+        "Object storage"
+      ],
+      "answerIndex": 1,
+      "explanation": "H2: Java implementation of SQL DB. Embedded mode (file or in-memory). Spring Boot's default test DB. In-memory: 'jdbc:h2:mem:testdb' starts fresh each test run, blazing fast. Caveat: SQL dialect differs slightly from production (Postgres, MySQL) — use Testcontainers for production parity.",
+      "tags": [
+        "h2",
+        "testing"
+      ]
+    },
+    {
+      "id": "emb-q9",
+      "type": "mcq",
+      "prompt": "What is DuckDB?",
+      "choices": [
+        "Same as SQLite",
+        "Embedded ANALYTICAL DB ('SQLite for OLAP'): columnar storage, vectorised execution, optimised for aggregating millions of rows. Can directly query Parquet/CSV files via SQL.",
+        "NoSQL",
+        "Game engine"
+      ],
+      "answerIndex": 1,
+      "explanation": "DuckDB is the analytical sibling of SQLite. Column-store (vs SQLite's row-store) makes scanning + aggregating columns very fast. Pandas/Python users: pd.read_sql('SELECT * FROM read_parquet(\"big.parquet\")', duckdb_conn). Modern ETL/analysis tool replacing many uses of Spark for medium-scale analytics.",
+      "tags": [
+        "duckdb",
+        "analytics"
+      ]
+    },
+    {
+      "id": "emb-q10",
+      "type": "mcq",
+      "prompt": "Why is SQLite NOT recommended over network file systems (NFS, SMB)?",
+      "choices": [
+        "Slow",
+        "File locking semantics differ between local FS and network FS — can cause database corruption or lost writes. SQLite docs explicitly warn against it.",
+        "Too modern",
+        "No reason"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite uses fcntl/POSIX file locks. Many network filesystems implement these incorrectly or partially. Two clients on NFS think they have exclusive lock simultaneously → concurrent writes → corruption. Always use SQLite on LOCAL disk only. For shared data, use a real DB server.",
+      "tags": [
+        "sqlite",
+        "networking"
+      ]
+    },
+    {
+      "id": "emb-q11",
+      "type": "mcq",
+      "prompt": "What is the WAL (Write-Ahead Log) in SQLite?",
+      "choices": [
+        "A backup",
+        "A separate file where new changes are appended; reads use the original DB file + WAL. Allows readers and writer to proceed without blocking each other.",
+        "File watcher",
+        "Web service"
+      ],
+      "answerIndex": 1,
+      "explanation": "PRAGMA journal_mode=WAL. Writes go to WAL file. Periodically, WAL is checkpointed (merged into main DB file). Readers use a snapshot view of (main + WAL up to a point). Writer doesn't block readers. Better concurrency than default rollback-journal mode. Standard for production SQLite use.",
+      "tags": [
+        "sqlite",
+        "wal",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "emb-q12",
+      "type": "mcq",
+      "prompt": "What's the typical use of RocksDB in a distributed database like Cassandra?",
+      "choices": [
+        "Network protocol",
+        "STORAGE ENGINE on each node — Cassandra coordinates network/replication, but each node uses RocksDB-like LSM internally to store/read its shard of data.",
+        "Backup tool",
+        "Query language"
+      ],
+      "answerIndex": 1,
+      "explanation": "Distributed DBs separate concerns: networking/replication (Cassandra logic) and local storage (RocksDB or similar LSM). Each node uses embedded engine for its data files. Cassandra historically used its own LSM (similar to RocksDB), CockroachDB and Yugabyte literally use RocksDB. Embedded engine + distribution layer is a common pattern.",
+      "tags": [
+        "rocksdb",
+        "distributed"
+      ]
+    },
+    {
+      "id": "emb-q13",
+      "type": "mcq",
+      "prompt": "What's a major TRADE-OFF of LSM trees vs B-trees?",
+      "choices": [
+        "LSM is always better",
+        "WRITE AMPLIFICATION: compaction periodically rewrites data, so total bytes written to disk > bytes the user wrote. Trade for sequential writes + better compression vs B-tree's in-place updates.",
+        "B-tree is faster always",
+        "No difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "LSM: write user-data once to MemTable+WAL, then again on flush, then again on each compaction level. Total writes 5-10× user data = write amplification. Trade-off worth it on SSDs (sequential writes are very fast). B-tree: writes in place, lower amplification, but random I/O. Choose based on workload pattern.",
+      "tags": [
+        "lsm",
+        "tradeoffs"
+      ]
+    },
+    {
+      "id": "emb-q14",
+      "type": "mcq",
+      "prompt": "What is the role of the WAL in RocksDB?",
+      "choices": [
+        "For backups",
+        "Durability: every write is appended to WAL on disk before MemTable update. On crash, WAL is replayed to recover MemTable contents not yet flushed.",
+        "Backup",
+        "Network logging"
+      ],
+      "answerIndex": 1,
+      "explanation": "Write order: 1) append to WAL, 2) update MemTable. On crash before flush: WAL replay rebuilds MemTable. Once MemTable is flushed to SSTable, the WAL portion can be discarded. WAL is similar concept across LSM systems and even traditional DBs (Postgres WAL, MySQL InnoDB redo log).",
+      "tags": [
+        "wal",
+        "durability"
+      ]
+    },
+    {
+      "id": "emb-q15",
+      "type": "multi",
+      "prompt": "Which scenarios fit an embedded DB? (Select all)",
+      "choices": [
+        "Mobile app needing offline storage",
+        "Unit test suite needing fast DB setup",
+        "Multi-user web app with 1000 concurrent writers",
+        "CLI tool caching local state"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Mobile: single-user, offline → SQLite perfect. Tests: in-memory H2/SQLite are blazing fast. CLI tool: local persistent cache → SQLite. Multi-user web app at scale: NEEDS server DB (Postgres) — concurrent writes overwhelm SQLite's single-writer model.",
+      "tags": [
+        "embedded",
+        "when-to-use"
+      ]
+    },
+    {
+      "id": "emb-q16",
+      "type": "mcq",
+      "prompt": "What is BadgerDB?",
+      "choices": [
+        "A SQL DB",
+        "Pure-Go LSM-based key-value store, used by graph DB Dgraph. Comparable to RocksDB but Go-native (no JNI).",
+        "Java DB",
+        "Browser DB"
+      ],
+      "answerIndex": 1,
+      "explanation": "Badger: pure-Go KV store. Same LSM-tree concept as RocksDB. Advantage in Go ecosystems: no CGO/JNI dependency, easier cross-compilation. Used by Dgraph (graph DB) for storage. Pattern: every language ecosystem tends to have its native LSM KV (RocksDB for C++, Badger for Go, sled for Rust, RocksDB-jni for Java).",
+      "tags": [
+        "badgerdb",
+        "go"
+      ]
+    },
+    {
+      "id": "emb-q17",
+      "type": "mcq",
+      "prompt": "In SQLite, why might you want to enable WAL mode in production?",
+      "choices": [
+        "Faster reads",
+        "Better concurrency: readers and writer don't block each other, plus better crash safety (WAL is appended; main file unchanged until checkpoint). Standard for production SQLite usage.",
+        "Required",
+        "More features"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default journal mode (rollback): writer holds lock, blocks readers + other writers. WAL mode: writer appends to WAL file; readers see consistent snapshot of (main file + WAL prefix). They don't block each other. Crash recovery via WAL replay. Trade: reads need to consult both files, but throughput is much higher.",
+      "tags": [
+        "sqlite",
+        "wal"
+      ]
+    },
+    {
+      "id": "emb-q18",
+      "type": "mcq",
+      "prompt": "Why are SQLite tests so much faster than Postgres tests?",
+      "choices": [
+        "SQLite is faster always",
+        "Embedded = no IPC: in-memory mode (':memory:' or H2 mem:) means table CREATE/DROP for each test takes microseconds vs milliseconds. No network, no separate process, no file flush.",
+        "Postgres is broken",
+        "SQL difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "Test loop creating/dropping tables hundreds of times. Postgres: each test = network round trip × N + disk flush per transaction. SQLite in-memory: function calls + RAM only. Suite: SQLite tests run in seconds, equivalent Postgres tests can take minutes. Trade-off: SQL dialect drift → use Testcontainers for production parity on critical paths.",
+      "tags": [
+        "embedded",
+        "testing",
+        "performance"
+      ]
+    },
+    {
+      "id": "emb-q19",
+      "type": "mcq",
+      "prompt": "What's a serious risk if you don't enable foreign keys in SQLite?",
+      "choices": [
+        "No risk",
+        "DEFAULT is OFF for backward compatibility — referenced rows can be deleted without errors, leaving orphan child rows. Always: PRAGMA foreign_keys = ON;",
+        "Performance",
+        "SQL syntax"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite added FK support but defaults OFF for backward compat. With FK off: DELETE FROM users where ID has orders → deletes user, leaves orphan orders. Run 'PRAGMA foreign_keys = ON;' on every connection. JDBC drivers usually do this automatically; verify in your tooling.",
+      "tags": [
+        "sqlite",
+        "integrity"
+      ]
+    },
+    {
+      "id": "emb-q20",
+      "type": "mcq",
+      "prompt": "Why does compaction need to run in LSM-tree systems?",
+      "choices": [
+        "Compress",
+        "Merge multiple SSTables into fewer/larger ones — removes deleted/superseded entries, reduces read amplification (fewer files to check per read), reclaims space.",
+        "For backups",
+        "Random optimisation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without compaction: dozens of SSTables accumulate. Read latency: check ALL of them per query (Bloom filters help but still expensive). Deleted keys still stored. Compaction: merge sorted files, drop obsolete entries, write new file. Trade-off (write amplification) for reduced read amplification + space reclaim. Tunable in RocksDB.",
+      "tags": [
+        "lsm",
+        "compaction"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "emb-fc1",
+      "front": "Embedded vs client-server DB",
+      "back": "Embedded (SQLite, RocksDB, H2): library inside your process, direct file I/O, no server. Client-server (Postgres, MySQL): separate process, network protocol, multi-client. Choose based on: single-user vs multi-user, offline-capability needed, ops complexity tolerance.",
+      "tags": [
+        "embedded",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "emb-fc2",
+      "front": "SQLite quick facts",
+      "back": "Most-deployed DB in the world. ~600KB library. Full SQL + ACID. Single file = entire DB. Single writer at a time. Public domain. Use for: mobile apps, browsers, CLI tools, fast tests. Don't use for: high-concurrency web servers, network filesystems.",
+      "tags": [
+        "sqlite"
+      ]
+    },
+    {
+      "id": "emb-fc3",
+      "front": "RocksDB at a glance",
+      "back": "Embedded KV store from Meta (forked LevelDB). LSM tree storage. Write-optimised. Used as storage engine in: Cassandra, CockroachDB, Yugabyte, Kafka Streams. No SQL — just put/get/delete/scan by byte keys. TB-scale on single node.",
+      "tags": [
+        "rocksdb"
+      ]
+    },
+    {
+      "id": "emb-fc4",
+      "front": "LSM tree workflow",
+      "back": "Write: append to WAL + insert into MemTable. When MemTable fills: flush to immutable Level-0 SSTable. Background compaction merges SSTables into higher levels (less recent). Read: check MemTable → SSTables newest first. Bloom filter helps skip. Trade-off: write amplification vs sequential writes on SSD.",
+      "tags": [
+        "lsm",
+        "storage"
+      ]
+    },
+    {
+      "id": "emb-fc5",
+      "front": "SQLite WAL mode",
+      "back": "PRAGMA journal_mode=WAL. Writes go to WAL file (append-only). Readers see consistent (main + WAL) snapshot — don't block writer. Periodic checkpoint merges WAL into main. Production-grade SQLite always uses WAL. Better concurrency, better crash safety.",
+      "tags": [
+        "sqlite",
+        "wal"
+      ]
+    },
+    {
+      "id": "emb-fc6",
+      "front": "H2 in-memory tests",
+      "back": "jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1. Spring Boot's test default. Fresh DB each run, microsecond startup. Caveat: SQL dialect drift from Postgres/MySQL — use Testcontainers (real Postgres in Docker) for production parity on integration tests.",
+      "tags": [
+        "h2",
+        "testing"
+      ]
+    },
+    {
+      "id": "emb-fc7",
+      "front": "DuckDB use case",
+      "back": "Embedded analytical DB. Column-store, vectorised. 'SQLite for OLAP'. Query Parquet/CSV directly: SELECT * FROM read_parquet('file.parquet'). Replaces many uses of Spark for medium-scale analytics. Pandas integration: query DataFrames with SQL.",
+      "tags": [
+        "duckdb",
+        "analytics"
+      ]
+    },
+    {
+      "id": "emb-fc8",
+      "front": "When NOT to use embedded",
+      "back": "Multi-process writes (use Postgres). Multi-machine deployment (use distributed DB). Need DBA tools, replication, backup automation (use server). Network-shared filesystems (corruption risk). Datasets > single-machine capacity. Embedded ≠ all problems.",
+      "tags": [
+        "embedded",
+        "when-not-to"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You're building a desktop note-taking app (like Obsidian). It needs to work fully offline, store thousands of notes with tags, support full-text search, and sync to cloud later. Choose your storage architecture: which embedded DB(s), what schema, how full-text search works, and how cloud sync would integrate.",
+    "checklist": [
+      {
+        "id": "e1",
+        "text": "Primary store: SQLite for relational data (notes table, tags table, note_tags join). PRAGMA journal_mode=WAL and PRAGMA foreign_keys=ON. Single file in user data dir.",
+        "weight": 20
+      },
+      {
+        "id": "e2",
+        "text": "Schema: notes(id, title, body, created_at, updated_at, sync_state); tags(id, name UNIQUE); note_tags(note_id, tag_id) composite PK + FKs. Index on notes.updated_at for sort.",
+        "weight": 20
+      },
+      {
+        "id": "e3",
+        "text": "Full-text search: SQLite FTS5 virtual table linked to notes (CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, content=notes)). Triggers keep FTS in sync. Search: SELECT * FROM notes_fts WHERE notes_fts MATCH 'query'.",
+        "weight": 20
+      },
+      {
+        "id": "e4",
+        "text": "Sync state column tracks: 'local-only', 'synced', 'modified-since-sync'. Sync layer reads modified rows since last sync timestamp, pushes to cloud, updates state on success.",
+        "weight": 20
+      },
+      {
+        "id": "e5",
+        "text": "Backup: file copy of the .db file (with WAL checkpoint first). Document recovery: just restore the file. No server needed. User can copy DB to USB stick to move between machines.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "FTS5 virtual table sits ALONGSIDE notes table; sync triggers (INSERT/UPDATE/DELETE) keep it consistent. Query syntax supports phrase, prefix, near, and column filters.",
+      "For very large note bodies (10MB+ each), consider storing body in a separate file referenced by path. SQLite is OK with BLOBs but > 1GB DBs slow down significantly.",
+      "Sync conflict resolution: each row has updated_at + (optionally) version vector. Last-writer-wins with conflict marker for user. Or 3-way merge if you can detect base version. Hard problem — start simple."
+    ]
+  }
+}

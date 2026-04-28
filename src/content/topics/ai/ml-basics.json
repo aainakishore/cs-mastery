@@ -4,8 +4,10 @@
   "order": 5,
   "title": "ML Basics",
   "summary": "Understand supervised vs unsupervised learning, bias-variance tradeoff, overfitting, and how models are trained and evaluated — the mental model behind all AI.",
-  "prereqs": ["embedded-databases"],
-  "guide": "# Machine Learning Basics\n\n## Why ML?\nML is how computers learn from data instead of following explicit rules. It powers recommendations (Netflix), fraud detection (Stripe), language translation, and every AI model you'll use. Understanding the fundamentals makes you a better engineer when integrating, debugging, and building on top of ML systems.\n\n---\n\n## The Core Idea\nInstead of writing rules like `if amount > $10,000 then flag_fraud`, ML learns the rules from examples:\n1. Show the model thousands of transactions (labeled: `fraud` or `not_fraud`)\n2. The model finds patterns (large amount + new country + unusual time → likely fraud)\n3. Apply those patterns to new, unseen transactions\n\n**Analogy:** Teaching a child to recognize a dog. You don't give them a rulebook (has 4 legs, fur, barks...). You show them 1,000 pictures labeled 'dog' or 'not dog' and they learn the pattern.\n\n---\n\n## Supervised vs Unsupervised Learning\n\n### Supervised Learning\nYou have labeled data (input + correct output). The model learns to map inputs → outputs.\n\n**Classification:** Predict a category\n- Spam / not-spam\n- Digit recognition (0–9)\n- Disease diagnosis (cancer / benign)\n\n**Regression:** Predict a number\n- House price prediction\n- Stock price forecasting\n- Predict API response time in ms\n\n### Unsupervised Learning\nYou have unlabeled data. The model finds structure on its own.\n\n**Clustering (k-means):** Group similar items\n- Customer segmentation (high-value, occasional, churned)\n- Document grouping\n\n**Dimensionality Reduction (PCA, t-SNE):** Compress data while preserving structure\n- Visualize high-dimensional data\n- Feature compression before supervised learning\n\n---\n\n## Key Algorithms (Mental Models)\n\n### Linear Regression\nFits a line (or hyperplane) to predict a continuous value.\n```\ny = w1*x1 + w2*x2 + ... + b\n```\nLearns weights (w) by minimizing prediction error (MSE).\n\n### Logistic Regression\nDespite the name, it's a *classifier*. Outputs a probability (0–1) using sigmoid function. Decision boundary: probability > 0.5 → class 1.\n\n### Decision Trees\n```\nIs amount > $500?\n├── Yes: Is country different? → Yes: 80% fraud\n└── No: 5% fraud\n```\nEasy to understand, tends to overfit. Fixed by Random Forests (ensemble of trees).\n\n### K-Means Clustering\n1. Pick k cluster centers randomly\n2. Assign each point to nearest center\n3. Move centers to mean of assigned points\n4. Repeat until stable\n\n---\n\n## The ML Pipeline\n```\nRaw Data\n  → Data Cleaning (handle nulls, outliers)\n  → Feature Engineering (create useful inputs)\n  → Train/Validation/Test Split\n  → Model Training (fit on training data)\n  → Hyperparameter Tuning (using validation set)\n  → Final Evaluation (test set — touch once!)\n  → Deployment\n```\n\n**Never touch the test set until final evaluation.** Using it for tuning is data leakage — you'll think your model is better than it is.\n\n---\n\n## Train / Validation / Test Split\n```\nDataset (100%)\n├── Train set (70–80%) — model learns from this\n├── Validation set (10–15%) — tune hyperparameters, pick model\n└── Test set (10–15%) — final, unbiased evaluation (touch ONCE)\n```\n\n**Real-world scenario:** You're building a loan approval model. You train on 2019–2022 data, validate to tune parameters, then test on 2023 data you've held out. This simulates real deployment: the model has never seen 2023 data.\n\n---\n\n## Overfitting & Underfitting — The Bias-Variance Tradeoff\n\n```\n                  Complexity →\nLow ←  Error  → High\n\nHigh Bias (Underfitting):  Model too simple, misses patterns\nLow Bias / Low Variance:   Sweet spot — generalizes well\nHigh Variance (Overfitting): Memorizes training data, fails on new data\n```\n\n**Overfitting signs:**\n- Training accuracy: 99%, Validation accuracy: 65%\n- Model learned noise, not signal\n\n**Fixes for overfitting:**\n- More training data\n- Regularization (L1/L2 — penalizes large weights)\n- Dropout (randomly disable neurons during training)\n- Simpler model\n- Cross-validation\n\n**Underfitting signs:**\n- Both training and validation accuracy are low\n- Model is too simple (e.g. linear model for nonlinear data)\n\n**Fix:** More complex model, more features, train longer.\n\n---\n\n## Evaluation Metrics\n\n### Classification\n```\n              Predicted Positive  Predicted Negative\nActual Positive    TP (True Pos)      FN (False Neg)\nActual Negative    FP (False Pos)     TN (True Neg)\n\nAccuracy  = (TP+TN) / total   — misleading if classes are imbalanced\nPrecision = TP / (TP+FP)     — of predicted positives, how many correct?\nRecall    = TP / (TP+FN)     — of all actual positives, how many caught?\nF1 Score  = 2 * (P*R)/(P+R)  — harmonic mean of precision and recall\nAUC-ROC   — Overall discrimination performance (0.5=random, 1=perfect)\n```\n\n**When to use which:**\n- Fraud detection: maximize **Recall** (don't miss fraud, false positives are OK)\n- Spam filter: maximize **Precision** (don't mark real email as spam)\n- General: **F1** balances both\n\n### Regression\n- **MAE** (Mean Absolute Error): average absolute difference\n- **MSE** (Mean Squared Error): penalizes large errors more\n- **RMSE**: √MSE — interpretable in original units\n- **R²**: % of variance explained by model (1 = perfect, 0 = no better than mean)\n\n---\n\n## Real-World Scenario: Spam Classifier\n1. Collect emails labeled `spam`/`ham`\n2. Features: word counts, sender reputation, link count, ALL CAPS ratio\n3. Split 80/10/10 train/val/test\n4. Try Logistic Regression → F1: 0.87\n5. Try Random Forest → F1: 0.93 (better, but slower)\n6. Tune max_depth on validation set\n7. Final test set F1: 0.92 → ship it\n\n---\n\n## Mind Map\n```\nML Basics\n├── Learning types\n│   ├── Supervised (labeled) → classification, regression\n│   └── Unsupervised (unlabeled) → clustering, dimensionality reduction\n├── Data pipeline\n│   ├── Train / Val / Test split\n│   └── Feature engineering\n├── Model behavior\n│   ├── Overfitting (high variance)\n│   └── Underfitting (high bias)\n└── Evaluation\n    ├── Classification: accuracy, precision, recall, F1, AUC\n    └── Regression: MAE, RMSE, R²\n```\n\n## How This Connects\n- **Neural Nets** (next topic) are the foundation of Transformers and LLMs — same bias/variance concepts apply.\n- **RAG** (Unit 6) uses similarity search to retrieve relevant text — you need ML intuition to understand embedding distance.\n- **Databases** store training data and model predictions — ML pipelines are data engineering pipelines.\n",
+  "prereqs": [
+    "embedded-databases"
+  ],
+  "guide": "# Machine Learning Basics\n\n## Why ML?\nML is how computers learn from data instead of following explicit rules. It powers recommendations (Netflix), fraud detection (Stripe), language translation, and every AI model you'll use. Understanding the fundamentals makes you a better engineer when integrating, debugging, and building on top of ML systems.\n\n---\n\n## The Core Idea\nInstead of writing rules like `if amount > $10,000 then flag_fraud`, ML learns the rules from examples:\n1. Show the model thousands of transactions (labeled: `fraud` or `not_fraud`)\n2. The model finds patterns (large amount + new country + unusual time → likely fraud)\n3. Apply those patterns to new, unseen transactions\n\n**Analogy:** Teaching a child to recognize a dog. You don't give them a rulebook (has 4 legs, fur, barks...). You show them 1,000 pictures labeled 'dog' or 'not dog' and they learn the pattern.\n\n---\n\n## Supervised vs Unsupervised Learning\n\n### Supervised Learning\nYou have labeled data (input + correct output). The model learns to map inputs → outputs.\n\n**Classification:** Predict a category\n- Spam / not-spam\n- Digit recognition (0–9)\n- Disease diagnosis (cancer / benign)\n\n**Regression:** Predict a number\n- House price prediction\n- Stock price forecasting\n- Predict API response time in ms\n\n### Unsupervised Learning\nYou have unlabeled data. The model finds structure on its own.\n\n**Clustering (k-means):** Group similar items\n- Customer segmentation (high-value, occasional, churned)\n- Document grouping\n\n**Dimensionality Reduction (PCA, t-SNE):** Compress data while preserving structure\n- Visualize high-dimensional data\n- Feature compression before supervised learning\n\n---\n\n## Key Algorithms (Mental Models)\n\n### Linear Regression\nFits a line (or hyperplane) to predict a continuous value.\n```\ny = w1*x1 + w2*x2 + ... + b\n```\nLearns weights (w) by minimizing prediction error (MSE).\n\n### Logistic Regression\nDespite the name, it's a *classifier*. Outputs a probability (0–1) using sigmoid function. Decision boundary: probability > 0.5 → class 1.\n\n### Decision Trees\n```\nIs amount > $500?\n├── Yes: Is country different? → Yes: 80% fraud\n└── No: 5% fraud\n```\nEasy to understand, tends to overfit. Fixed by Random Forests (ensemble of trees).\n\n### K-Means Clustering\n1. Pick k cluster centers randomly\n2. Assign each point to nearest center\n3. Move centers to mean of assigned points\n4. Repeat until stable\n\n---\n\n## The ML Pipeline\n```\nRaw Data\n  → Data Cleaning (handle nulls, outliers)\n  → Feature Engineering (create useful inputs)\n  → Train/Validation/Test Split\n  → Model Training (fit on training data)\n  → Hyperparameter Tuning (using validation set)\n  → Final Evaluation (test set — touch once!)\n  → Deployment\n```\n\n**Never touch the test set until final evaluation.** Using it for tuning is data leakage — you'll think your model is better than it is.\n\n---\n\n## Train / Validation / Test Split\n```\nDataset (100%)\n├── Train set (70–80%) — model learns from this\n├── Validation set (10–15%) — tune hyperparameters, pick model\n└── Test set (10–15%) — final, unbiased evaluation (touch ONCE)\n```\n\n**Real-world scenario:** You're building a loan approval model. You train on 2019–2022 data, validate to tune parameters, then test on 2023 data you've held out. This simulates real deployment: the model has never seen 2023 data.\n\n---\n\n## Overfitting & Underfitting — The Bias-Variance Tradeoff\n\n```\n                  Complexity →\nLow ←  Error  → High\n\nHigh Bias (Underfitting):  Model too simple, misses patterns\nLow Bias / Low Variance:   Sweet spot — generalizes well\nHigh Variance (Overfitting): Memorizes training data, fails on new data\n```\n\n**Overfitting signs:**\n- Training accuracy: 99%, Validation accuracy: 65%\n- Model learned noise, not signal\n\n**Fixes for overfitting:**\n- More training data\n- Regularization (L1/L2 — penalizes large weights)\n- Dropout (randomly disable neurons during training)\n- Simpler model\n- Cross-validation\n\n**Underfitting signs:**\n- Both training and validation accuracy are low\n- Model is too simple (e.g. linear model for nonlinear data)\n\n**Fix:** More complex model, more features, train longer.\n\n---\n\n## Evaluation Metrics\n\n### Classification\n```\n              Predicted Positive  Predicted Negative\nActual Positive    TP (True Pos)      FN (False Neg)\nActual Negative    FP (False Pos)     TN (True Neg)\n\nAccuracy  = (TP+TN) / total   — misleading if classes are imbalanced\nPrecision = TP / (TP+FP)     — of predicted positives, how many correct?\nRecall    = TP / (TP+FN)     — of all actual positives, how many caught?\nF1 Score  = 2 * (P*R)/(P+R)  — harmonic mean of precision and recall\nAUC-ROC   — Overall discrimination performance (0.5=random, 1=perfect)\n```\n\n**When to use which:**\n- Fraud detection: maximize **Recall** (don't miss fraud, false positives are OK)\n- Spam filter: maximize **Precision** (don't mark real email as spam)\n- General: **F1** balances both\n\n### Regression\n- **MAE** (Mean Absolute Error): average absolute difference\n- **MSE** (Mean Squared Error): penalizes large errors more\n- **RMSE**: √MSE — interpretable in original units\n- **R²**: % of variance explained by model (1 = perfect, 0 = no better than mean)\n\n---\n\n## Real-World Scenario: Spam Classifier\n1. Collect emails labeled `spam`/`ham`\n2. Features: word counts, sender reputation, link count, ALL CAPS ratio\n3. Split 80/10/10 train/val/test\n4. Try Logistic Regression → F1: 0.87\n5. Try Random Forest → F1: 0.93 (better, but slower)\n6. Tune max_depth on validation set\n7. Final test set F1: 0.92 → ship it\n\n---\n\n## Mind Map\n```\nML Basics\n├── Learning types\n│   ├── Supervised (labeled) → classification, regression\n│   └── Unsupervised (unlabeled) → clustering, dimensionality reduction\n├── Data pipeline\n│   ├── Train / Val / Test split\n│   └── Feature engineering\n├── Model behavior\n│   ├── Overfitting (high variance)\n│   └── Underfitting (high bias)\n└── Evaluation\n    ├── Classification: accuracy, precision, recall, F1, AUC\n    └── Regression: MAE, RMSE, R²\n```\n\n## How This Connects\n- **Neural Nets** (next topic) are the foundation of Transformers and LLMs — same bias/variance concepts apply.\n- **RAG** (Unit 6) uses similarity search to retrieve relevant text — you need ML intuition to understand embedding distance.\n- **Databases** store training data and model predictions — ML pipelines are data engineering pipelines.\n\n\n---\n\n## What Machine Learning Actually Is (Layman First)\n\nTraditional programming: you write the rules.\n  IF email contains \"Nigerian prince\" THEN mark as spam.\n  (You write thousands of manually crafted rules.)\n\nMachine learning: you show examples, the algorithm LEARNS the rules itself.\n  Show: 10,000 spam emails + 10,000 normal emails.\n  Algorithm: figures out the patterns (repeated words, suspicious links, sender domains).\n  Never wrote a single spam rule — it learned them.\n\n```\nTRADITIONAL:\n  Rules + Data -> Program -> Output\n\nMACHINE LEARNING:\n  Data + Output -> Program (training) -> Rules (model)\n  Then: New Data + Rules (model) -> Predictions\n```\n\n---\n\n## The Three Paradigms — Explained Simply\n\n```\nSUPERVISED LEARNING:\n  You provide labelled examples: input -> correct answer.\n  Model learns the mapping.\n\n  Example: House price prediction\n    Training data:\n      [2 bed, 100m², city center] -> $400,000\n      [3 bed, 150m², suburbs]     -> $300,000\n      [1 bed, 50m², city center]  -> $200,000\n    After training: model predicts price for any new house description.\n\n  Example: Email spam detection\n    [email content] -> spam/not-spam (label)\n\n  Use when: you have labelled examples of inputs and desired outputs.\n\nUNSUPERVISED LEARNING:\n  No labels. Find hidden structure in data.\n\n  Example: Customer segmentation\n    10 million customers with: age, purchase history, location, browsing behavior\n    No labels given.\n    K-Means clustering finds: \n      Cluster 1: \"young urban professionals\" (20-30, tech purchases, city)\n      Cluster 2: \"budget-conscious families\" (30-45, discount focus, suburbs)\n      Cluster 3: \"retired high-spenders\" (60+, luxury, variety)\n    You didn't define these segments — algorithm found them.\n\n  Use when: exploring data, finding patterns, dimensionality reduction.\n\nREINFORCEMENT LEARNING:\n  Agent learns by trial and error — trying actions, getting rewards or penalties.\n\n  Example: Teaching a robot to walk\n    Robot tries random movements -> falls over: penalty.\n    Gradually: walks -> reward. Runs: bigger reward.\n    After millions of trials: robot walks efficiently.\n\n  Example: AlphaGo (beats world Go champion)\n    Played 5 million games against itself.\n    Win: +1 reward. Lose: -1 reward.\n    Learned to play better than any human.\n\n  Use when: sequential decisions, games, robotics, trading bots.\n```\n\n---\n\n## How Models Actually Learn — Gradient Descent\n\n```\nImagine you're blindfolded on a hilly mountain and want to reach the lowest valley.\nStrategy: feel the ground slope under your feet. Step in the downhill direction.\nRepeat. Eventually reach the bottom (minimum).\n\nGradient Descent:\n  1. Start with random model parameters (weights)\n  2. Make predictions with current params\n  3. Measure how wrong predictions are: Loss = error(predictions, true_labels)\n  4. Calculate gradient: which direction does loss increase?\n  5. Step in OPPOSITE direction (downhill): \n     weight = weight - learning_rate * gradient\n  6. Repeat for thousands/millions of iterations.\n  7. Parameters converge to values that minimize loss.\n\nLEARNING RATE:\n  Too high: overshoot the valley, bounce back and forth, never converge.\n  Too low: take tiny steps, training takes forever.\n  Just right: steadily converge to minimum.\n\n  learning_rate = 0.0001 - 0.01 typical range.\n\nMINI-BATCH GRADIENT DESCENT:\n  Full batch: use ALL training data per step (slow, accurate gradient).\n  Stochastic: use 1 example per step (fast, noisy gradient).\n  Mini-batch: use 32-256 examples per step (compromise — standard practice).\n```\n\n---\n\n## Training vs Validation vs Test Split\n\n```\nNEVER evaluate your model on data it was trained on — it knows the answers!\nLike a student who memorizes exam answers without understanding.\n\nDATA SPLITS:\n  Training set (70-80%): model learns from this.\n  Validation set (10-15%): tune hyperparameters, catch overfitting during training.\n  Test set (10-15%): final evaluation ONCE. Never touched during training.\n\nCRUCIAL: Test set is only evaluated ONCE at the very end.\nUsing test set multiple times = data leakage (cheating).\n\nCROSS-VALIDATION:\n  Split data into K folds (e.g., K=5).\n  Train on 4 folds, validate on 1. Rotate 5 times.\n  Report average performance across all 5.\n  Better estimate of true performance, especially with small datasets.\n```\n\n---\n\n## Overfitting and Underfitting — The Core Challenge\n\n```\nEvery ML model must balance:\n  Fitting training data well vs generalizing to new data.\n\nUNDERFITTING:\n  Model too simple. Doesn't capture patterns in training data.\n  Training accuracy: low. Test accuracy: low.\n  Example: Fit a line to data that's clearly a curve.\n  Fix: Use a more complex model, more features, train longer.\n\nOVERFITTING:\n  Model memorizes training data, fails on new data.\n  Training accuracy: very high. Test accuracy: low.\n  Example: Model memorizes every training example including noise.\n  Fix: More training data, regularization (L1/L2), dropout, early stopping.\n\nIDEAL:\n  Training accuracy ≈ Test accuracy. Both good.\n  Model has learned the underlying pattern, not just the training examples.\n\nVISUAL:\n              Training     Test\n  Underfit:    60%          59%   <- both bad (model too simple)\n  Overfit:     99%          72%   <- huge gap (memorized training)\n  Just right:  94%          91%   <- small gap, both good\n```\n\n---\n\n## Common ML Algorithms (Mental Models)\n\n```\nLINEAR REGRESSION:\n  Predict a number. Fit a line/plane through data points.\n  house_price = w1 * bedrooms + w2 * area + w3 * location + bias\n  Trade-off: simple, interpretable. Fails for non-linear relationships.\n\nLOGISTIC REGRESSION:\n  Classify (despite the name). Predict probability of a class.\n  P(spam) = sigmoid(w1*word1 + w2*word2 + ...) -> 0.0 to 1.0\n  Above 0.5: spam. Below: not spam.\n\nDECISION TREE:\n  A flowchart of if-else questions.\n  Is salary > 50K? -> Yes: Is age > 30? -> No: predict \"buy\".\n  Interpretable. But single tree: unstable (overfit).\n\nRANDOM FOREST:\n  100 or more decision trees, each trained on random subset of data/features.\n  Majority vote of all trees = prediction.\n  Much more stable and accurate than single tree.\n  Feature importance: which features were most useful?\n\nGRADIENT BOOSTING (XGBoost, LightGBM):\n  Build trees sequentially. Each tree corrects errors of previous trees.\n  Very accurate. Winner of many Kaggle competitions.\n  Slower to train than Random Forest.\n\nK-NEAREST NEIGHBORS (KNN):\n  To classify a new point: find K most similar training examples.\n  Majority class of K neighbors = prediction.\n  Simple but: slow at prediction time (must compare with all training data).\n\nSUPPORT VECTOR MACHINE (SVM):\n  Find the hyperplane that best separates classes with maximum margin.\n  Works well for high-dimensional data (text classification).\n  Less common now; neural networks usually outperform.\n\nNEURAL NETWORK:\n  Layers of connected \"neurons\". Learns complex non-linear patterns.\n  Deep learning: many layers. The basis of modern AI.\n  See: Neural Networks and Transformers topics.\n```\n\n---\n\n## Feature Engineering — The Art of Good ML\n\n```\nRaw data is rarely ready for ML. FEATURES are what you feed the model.\n\nFEATURE ENGINEERING:\n  Transform raw data into meaningful inputs.\n\nEXAMPLE: Predicting taxi ride duration\n  Raw: pickup_time = \"2026-03-15 14:32:00\"\n  Engineered features:\n    is_rush_hour = 1 (14:32 = peak)\n    day_of_week = 6 (Saturday)\n    hour = 14\n    is_weekend = 1\n  Model learns: weekday rush hour = longer ride.\n\nCATEGORICAL TO NUMERIC:\n  Model can't compute with text.\n  Color: [\"red\", \"blue\", \"green\"]\n  One-hot encoding: [1,0,0], [0,1,0], [0,0,1]\n\nNORMALIZATION:\n  Age: 0-100. Income: 0-1,000,000. Model favors large numbers.\n  Scale to same range: (value - min) / (max - min) or z-score.\n\nMISSING VALUES:\n  Fill with: mean, median, mode, or predict from other features.\n  Or: create \"is_missing\" binary feature.\n\nGood feature engineering often matters more than algorithm choice.\nDomain expertise = better features = better model.\n```\n\n---\n\n## Evaluation Metrics — What Does \"Accuracy\" Really Mean?\n\n```\nFOR CLASSIFICATION:\n  ACCURACY = correct / total\n  PROBLEM: Unbalanced classes.\n    99% of emails are ham, 1% spam.\n    Model that ALWAYS predicts ham: 99% accuracy! Useless.\n\n  BETTER METRICS:\n    Precision = TP / (TP + FP)\n      \"Of all emails called spam, what % actually are spam?\"\n      High precision: few false alarms.\n\n    Recall = TP / (TP + FN)\n      \"Of all actual spam emails, what % did we catch?\"\n      High recall: miss fewer spam emails.\n\n    F1 = 2 * (Precision * Recall) / (Precision + Recall)\n      Harmonic mean. Balance between precision and recall.\n\n    Confusion matrix:\n              Predicted Spam  Predicted Ham\n    Actual Spam:     TP=90        FN=10      <- 100 spam total\n    Actual Ham:      FP=5         TN=9895    <- 9900 ham total\n\nFOR REGRESSION:\n  MAE (Mean Absolute Error): average |prediction - actual|\n  RMSE (Root Mean Squared Error): punishes large errors more than MAE\n  R² (R-squared): % of variance explained by model (1.0 = perfect)\n```\n\n---\n\n## References and Further Learning\n\n### Videos\n- **Machine Learning for Everyone** by 3Blue1Brown (Neural Networks series):\n  https://www.youtube.com/watch?v=aircAruvnKk\n  - Best visual introduction to how ML and neural networks work.\n- **StatQuest Machine Learning Playlist** by Josh Starmer:\n  https://www.youtube.com/c/joshstarmer\n  - Every ML concept explained clearly with visuals, no math fear.\n\n### Free Courses\n- **fast.ai Practical Deep Learning**: https://course.fast.ai/ - code-first approach\n- **Google Machine Learning Crash Course**: https://developers.google.com/machine-learning/crash-course\n- **Andrew Ng — Machine Learning Specialization** (Coursera, audit free):\n  https://www.coursera.org/specializations/machine-learning-introduction\n\n### Books\n- **Hands-On Machine Learning with Scikit-Learn, Keras & TensorFlow** (Aurélien Géron) — definitive practical book\n- **The Hundred-Page Machine Learning Book** — concise reference\n\n### Practice\n- **Kaggle**: https://kaggle.com — competitions, datasets, notebooks. Start with Titanic tutorial.\n- **Google Colab**: https://colab.research.google.com — free GPU, runs Jupyter notebooks.\n",
   "questions": [
     {
       "id": "ml-q1",
@@ -19,25 +21,46 @@
       ],
       "answerIndex": 1,
       "explanation": "Supervised learning needs input-output pairs (labels). The model learns to map inputs to known outputs. Unsupervised has no labels — it discovers structure (clusters, patterns) in the data itself.",
-      "tags": ["supervised", "unsupervised", "learning-types"]
+      "tags": [
+        "supervised",
+        "unsupervised",
+        "learning-types"
+      ]
     },
     {
       "id": "ml-q2",
       "type": "mcq",
       "prompt": "Your model achieves 99% training accuracy but only 65% validation accuracy. What is this called?",
-      "choices": ["Underfitting", "Overfitting", "Bias-variance balance", "Data leakage"],
+      "choices": [
+        "Underfitting",
+        "Overfitting",
+        "Bias-variance balance",
+        "Data leakage"
+      ],
       "answerIndex": 1,
       "explanation": "Overfitting: the model memorized training data (noise + signal) instead of generalizing. The gap between training and validation performance is the key signal.",
-      "tags": ["overfitting", "bias-variance"]
+      "tags": [
+        "overfitting",
+        "bias-variance"
+      ]
     },
     {
       "id": "ml-q3",
       "type": "mcq",
       "prompt": "For a fraud detection model, which metric is MOST important to maximize?",
-      "choices": ["Accuracy", "Precision", "Recall", "R²"],
+      "choices": [
+        "Accuracy",
+        "Precision",
+        "Recall",
+        "R²"
+      ],
       "answerIndex": 2,
       "explanation": "Recall = TP/(TP+FN) — how many actual frauds did we catch? Missing fraud (false negative) is catastrophic. R² is for regression. High accuracy can mislead if fraud is rare (99% non-fraud → 99% accuracy by always predicting no-fraud).",
-      "tags": ["evaluation-metrics", "recall", "classification"]
+      "tags": [
+        "evaluation-metrics",
+        "recall",
+        "classification"
+      ]
     },
     {
       "id": "ml-q4",
@@ -51,30 +74,66 @@
       ],
       "answerIndex": 1,
       "explanation": "Data leakage means information from the future (test set) leaks into training/validation. The model appears to perform well but fails in production because it 'saw' test data. Never use the test set for tuning.",
-      "tags": ["data-leakage", "train-test-split"]
+      "tags": [
+        "data-leakage",
+        "train-test-split"
+      ]
     },
     {
       "id": "ml-q5",
       "type": "match",
       "prompt": "Match each metric to its best use case:",
-      "left": ["Recall", "Precision", "F1 Score", "R²"],
+      "left": [
+        "Recall",
+        "Precision",
+        "F1 Score",
+        "R²"
+      ],
       "right": [
         "Critical when false negatives are costly (fraud, cancer)",
         "Critical when false positives are costly (spam filter, legal alerts)",
         "Balanced metric when both precision and recall matter",
         "Regression — measures proportion of variance explained"
       ],
-      "pairs": [[0,0],[1,1],[2,2],[3,3]],
+      "pairs": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          3
+        ]
+      ],
       "explanation": "Recall maximizes true positive detection. Precision minimizes false positives. F1 balances both. R² is for regression quality.",
-      "tags": ["evaluation-metrics", "precision", "recall"]
+      "tags": [
+        "evaluation-metrics",
+        "precision",
+        "recall"
+      ]
     },
     {
       "id": "ml-q6",
       "type": "fillBlank",
       "prompt": "Logistic regression is primarily used for ___ problems, not regression, despite its name.",
-      "accepted": ["classification", "binary classification", "classify"],
+      "accepted": [
+        "classification",
+        "binary classification",
+        "classify"
+      ],
       "explanation": "Despite the name, logistic regression outputs a probability (via sigmoid) and makes binary classification decisions. It's not used for predicting continuous values.",
-      "tags": ["classification", "logistic-regression"]
+      "tags": [
+        "classification",
+        "logistic-regression"
+      ]
     },
     {
       "id": "ml-q7",
@@ -87,9 +146,18 @@
         "Evaluate on test set",
         "Train and tune on train/validation sets"
       ],
-      "correctOrder": [2, 1, 4, 3, 0],
+      "correctOrder": [
+        2,
+        1,
+        4,
+        3,
+        0
+      ],
       "explanation": "Collect → Clean/Engineer → Train+Tune → Evaluate on test (once) → Deploy. The test set is touched only at the end.",
-      "tags": ["ml-pipeline", "workflow"]
+      "tags": [
+        "ml-pipeline",
+        "workflow"
+      ]
     },
     {
       "id": "ml-q8",
@@ -102,9 +170,16 @@
         "Use dropout during training",
         "Reduce training epochs to minimum"
       ],
-      "answerIndexes": [0, 2, 3],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
       "explanation": "More data, regularization, and dropout all fight overfitting. A more complex model makes overfitting worse. Reducing epochs may underfit instead of properly regularizing.",
-      "tags": ["overfitting", "regularization"]
+      "tags": [
+        "overfitting",
+        "regularization"
+      ]
     },
     {
       "id": "ml-q9",
@@ -118,17 +193,28 @@
       ],
       "answerIndex": 2,
       "explanation": "Decision trees partition data into increasingly specific rules, easily memorizing training data. Random Forests fix this by averaging many trees trained on random subsets.",
-      "tags": ["decision-tree", "overfitting"]
+      "tags": [
+        "decision-tree",
+        "overfitting"
+      ]
     },
     {
       "id": "ml-q10",
       "type": "codeOutput",
       "prompt": "A model predicts 100 emails. 60 are spam (actual). The model flags 50 as spam: 45 correct, 5 wrong. What is the precision?",
       "code": "# TP=45 (correctly flagged spam)\n# FP=5 (ham flagged as spam)\n# FN=15 (spam missed)\n# Precision = TP / (TP + FP)",
-      "choices": ["45%", "75%", "90%", "60%"],
+      "choices": [
+        "45%",
+        "75%",
+        "90%",
+        "60%"
+      ],
       "answerIndex": 2,
       "explanation": "Precision = TP/(TP+FP) = 45/(45+5) = 45/50 = 0.90 = 90%. Of the 50 emails flagged as spam, 90% were actually spam.",
-      "tags": ["evaluation-metrics", "precision"]
+      "tags": [
+        "evaluation-metrics",
+        "precision"
+      ]
     },
     {
       "id": "ml-q11",
@@ -142,7 +228,11 @@
       ],
       "answerIndex": 1,
       "explanation": "k in k-means is the number of clusters you want to find. You must specify it in advance. Choosing k is itself a challenge — elbow method helps.",
-      "tags": ["clustering", "k-means", "unsupervised"]
+      "tags": [
+        "clustering",
+        "k-means",
+        "unsupervised"
+      ]
     },
     {
       "id": "ml-q12",
@@ -156,7 +246,10 @@
       ],
       "answerIndex": 2,
       "explanation": "Validation set: tune hyperparameters, compare models, iterate freely. Test set: final evaluation, touch once. Mixing them causes data leakage — the model 'knows' the test examples.",
-      "tags": ["train-test-split", "validation"]
+      "tags": [
+        "train-test-split",
+        "validation"
+      ]
     },
     {
       "id": "ml-q13",
@@ -169,17 +262,32 @@
         "Model is too complex",
         "Model is too simple for the data"
       ],
-      "answerIndexes": [0, 1, 4],
+      "answerIndexes": [
+        0,
+        1,
+        4
+      ],
       "explanation": "Underfitting (high bias) shows low accuracy on BOTH training and validation — the model is too simple to capture patterns. Overfitting shows high training + low validation accuracy.",
-      "tags": ["underfitting", "bias-variance"]
+      "tags": [
+        "underfitting",
+        "bias-variance"
+      ]
     },
     {
       "id": "ml-q14",
       "type": "fillBlank",
       "prompt": "The harmonic mean of precision and recall is called the ___ score.",
-      "accepted": ["f1", "f1 score", "f-1", "f measure"],
+      "accepted": [
+        "f1",
+        "f1 score",
+        "f-1",
+        "f measure"
+      ],
       "explanation": "F1 = 2*(Precision*Recall)/(Precision+Recall). It balances both metrics. Useful when classes are imbalanced and both false positives and false negatives matter.",
-      "tags": ["evaluation-metrics", "f1"]
+      "tags": [
+        "evaluation-metrics",
+        "f1"
+      ]
     },
     {
       "id": "ml-q15",
@@ -193,7 +301,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Weights (w1, w2...) scale how much each feature influences the output. During training, the model adjusts these weights to minimize prediction error.",
-      "tags": ["linear-regression", "weights"]
+      "tags": [
+        "linear-regression",
+        "weights"
+      ]
     },
     {
       "id": "ml-q16",
@@ -207,7 +318,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Class imbalance: if 999/1000 transactions are legitimate, a trivial model always predicting 'not fraud' achieves 99.9% accuracy but catches 0 fraud. Use precision/recall/F1 for imbalanced classes.",
-      "tags": ["evaluation-metrics", "class-imbalance"]
+      "tags": [
+        "evaluation-metrics",
+        "class-imbalance"
+      ]
     },
     {
       "id": "ml-q17",
@@ -219,9 +333,17 @@
         "Check if centroids moved — if not, stop",
         "Move each centroid to the mean of its assigned points"
       ],
-      "correctOrder": [1, 0, 3, 2],
+      "correctOrder": [
+        1,
+        0,
+        3,
+        2
+      ],
       "explanation": "K-means: initialize → assign → update centroids → check convergence → repeat.",
-      "tags": ["clustering", "k-means"]
+      "tags": [
+        "clustering",
+        "k-means"
+      ]
     },
     {
       "id": "ml-q18",
@@ -235,7 +357,10 @@
       ],
       "answerIndex": 1,
       "explanation": "L2 adds λ*Σ(w²) to the loss, discouraging large weights. This reduces overfitting by keeping the model simpler. L1 (Lasso) can zero out weights (feature selection). L2 shrinks but rarely zeros.",
-      "tags": ["regularization", "overfitting"]
+      "tags": [
+        "regularization",
+        "overfitting"
+      ]
     },
     {
       "id": "ml-q19",
@@ -248,9 +373,16 @@
         "Random Forest",
         "DBSCAN"
       ],
-      "answerIndexes": [0, 2, 4],
+      "answerIndexes": [
+        0,
+        2,
+        4
+      ],
       "explanation": "K-Means, PCA, and DBSCAN are unsupervised — they work on unlabeled data. Logistic Regression and Random Forest are supervised — they need labeled training data.",
-      "tags": ["unsupervised", "algorithms"]
+      "tags": [
+        "unsupervised",
+        "algorithms"
+      ]
     },
     {
       "id": "ml-q20",
@@ -264,7 +396,10 @@
       ],
       "answerIndex": 1,
       "explanation": "R² measures how much of the target variance the model explains. R²=1 is perfect. R²=0 means the model is as good as just predicting the average every time. Negative R² means worse than that baseline.",
-      "tags": ["evaluation-metrics", "regression"]
+      "tags": [
+        "evaluation-metrics",
+        "regression"
+      ]
     }
   ],
   "flashcards": [
@@ -272,60 +407,109 @@
       "id": "ml-fc1",
       "front": "Supervised vs Unsupervised — key difference?",
       "back": "Supervised: labeled data (input + known output). Model learns input→output mapping. Unsupervised: no labels, model discovers structure (clusters, patterns).",
-      "tags": ["supervised", "unsupervised"]
+      "tags": [
+        "supervised",
+        "unsupervised"
+      ]
     },
     {
       "id": "ml-fc2",
       "front": "Overfitting vs Underfitting?",
       "back": "Overfitting (high variance): great training accuracy, poor validation — memorized noise. Underfitting (high bias): poor training AND validation — model too simple.",
-      "tags": ["bias-variance", "overfitting"]
+      "tags": [
+        "bias-variance",
+        "overfitting"
+      ]
     },
     {
       "id": "ml-fc3",
       "front": "Precision vs Recall — when to use each?",
       "back": "Precision = TP/(TP+FP): use when false positives are costly (spam filter). Recall = TP/(TP+FN): use when false negatives are costly (fraud/cancer detection).",
-      "tags": ["precision", "recall", "evaluation-metrics"]
+      "tags": [
+        "precision",
+        "recall",
+        "evaluation-metrics"
+      ]
     },
     {
       "id": "ml-fc4",
       "front": "What is the golden rule of the test set?",
       "back": "Touch it ONCE — for final evaluation only. Use validation set for all tuning. Using test set for tuning = data leakage.",
-      "tags": ["train-test-split", "data-leakage"]
+      "tags": [
+        "train-test-split",
+        "data-leakage"
+      ]
     },
     {
       "id": "ml-fc5",
       "front": "What does k-means do with k=3?",
       "back": "Groups all data points into 3 clusters by iteratively: 1) assign each point to nearest centroid, 2) move centroids to cluster means, until stable.",
-      "tags": ["k-means", "clustering"]
+      "tags": [
+        "k-means",
+        "clustering"
+      ]
     },
     {
       "id": "ml-fc6",
       "front": "What is L2 regularization (Ridge)?",
       "back": "Adds λ*Σ(w²) to loss function. Penalizes large weights → simpler model → less overfitting. Shrinks weights toward zero but rarely to exactly zero.",
-      "tags": ["regularization", "overfitting"]
+      "tags": [
+        "regularization",
+        "overfitting"
+      ]
     },
     {
       "id": "ml-fc7",
       "front": "Why is accuracy misleading for imbalanced classes?",
       "back": "If 99% of samples are class A, a model always predicting A gets 99% accuracy while being useless. Use F1, precision, recall, or AUC instead.",
-      "tags": ["class-imbalance", "evaluation-metrics"]
+      "tags": [
+        "class-imbalance",
+        "evaluation-metrics"
+      ]
     },
     {
       "id": "ml-fc8",
       "front": "F1 Score formula and purpose?",
       "back": "F1 = 2*(Precision*Recall)/(Precision+Recall). Harmonic mean — balances precision and recall. Use when both false positives and false negatives matter.",
-      "tags": ["f1", "evaluation-metrics"]
+      "tags": [
+        "f1",
+        "evaluation-metrics"
+      ]
     }
   ],
   "project": {
     "brief": "## Project: Design an ML Pipeline for Spam Classification\n\nYou're building a spam classifier for an email service with 10M users. Emails are labeled 'spam' or 'ham' (legit). You have 5 years of historical labeled data.\n\n**Your task:** Design the full ML pipeline. Address:\n1. Feature engineering — what features would you extract from emails?\n2. Algorithm choice — which algorithm would you start with and why?\n3. Train/val/test split strategy\n4. Which metric(s) would you optimize and why?\n5. How would you detect if the model is overfitting?\n6. How would you handle class imbalance if only 2% of emails are spam?\n\nThis is a design exercise — no code needed. Focus on reasoning.",
     "checklist": [
-      { "id": "proj-ml-1", "text": "Identified meaningful email features (word patterns, sender info, structure, metadata)", "weight": 15 },
-      { "id": "proj-ml-2", "text": "Chose a starting algorithm and justified why (simplicity, interpretability, baseline first)", "weight": 15 },
-      { "id": "proj-ml-3", "text": "Described train/val/test split and noted the test set is touched only once", "weight": 15 },
-      { "id": "proj-ml-4", "text": "Chose precision or recall (or F1) based on business cost analysis (missing spam vs. misclassifying ham)", "weight": 20 },
-      { "id": "proj-ml-5", "text": "Described how to detect overfitting (train vs val gap, learning curves)", "weight": 15 },
-      { "id": "proj-ml-6", "text": "Addressed class imbalance (e.g. oversampling, undersampling, class weights, anomaly detection framing)", "weight": 20 }
+      {
+        "id": "proj-ml-1",
+        "text": "Identified meaningful email features (word patterns, sender info, structure, metadata)",
+        "weight": 15
+      },
+      {
+        "id": "proj-ml-2",
+        "text": "Chose a starting algorithm and justified why (simplicity, interpretability, baseline first)",
+        "weight": 15
+      },
+      {
+        "id": "proj-ml-3",
+        "text": "Described train/val/test split and noted the test set is touched only once",
+        "weight": 15
+      },
+      {
+        "id": "proj-ml-4",
+        "text": "Chose precision or recall (or F1) based on business cost analysis (missing spam vs. misclassifying ham)",
+        "weight": 20
+      },
+      {
+        "id": "proj-ml-5",
+        "text": "Described how to detect overfitting (train vs val gap, learning curves)",
+        "weight": 15
+      },
+      {
+        "id": "proj-ml-6",
+        "text": "Addressed class imbalance (e.g. oversampling, undersampling, class weights, anomaly detection framing)",
+        "weight": 20
+      }
     ],
     "hints": [
       "Start simple: a logistic regression baseline is often surprisingly strong for text classification. Establish a baseline before reaching for complex models.",
@@ -334,4 +518,3 @@
     ]
   }
 }
-

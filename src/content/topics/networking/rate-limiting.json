@@ -7,12 +7,12 @@
   "prereqs": [
     "long-polling"
   ],
-  "guide": "# Rate Limiting\n\nRate limiting **caps the number of requests** a client can make to an API or service within a time window. It protects against abuse, DDoS, and runaway clients.\n\n## Common Algorithms\n\n```\nToken Bucket:\n  Tokens fill at a fixed rate (e.g., 10/sec).\n  Each request consumes 1 token.\n  Burst allowed up to bucket capacity.\n  Tokens= min(capacity, lastTokens + rate*(now-lastTime))\n\nLeaky Bucket:\n  Queue with fixed outflow rate.\n  All variability smoothed to constant output.\n  Excess requests dropped or queued.\n\nFixed Window:\n  Counter resets every minute/hour.\n  Weakness: burst at window boundary\n  (100 reqs in last second of window + 100 in first second = 200 instant)\n\nSliding Window Log:\n  Keep timestamps of requests in a rolling window.\n  Exact (no boundary burst) but memory-intensive.\n\nSliding Window Counter:\n  Approximation: current_window_count + prev_window_count * (1 - elapsed/window)\n  Low memory, no boundary burst, slightly approximate.\n```\n\n## HTTP Response Headers\n\n```\nX-RateLimit-Limit: 1000\nX-RateLimit-Remaining: 942\nX-RateLimit-Reset: 1714521600   (Unix timestamp when counter resets)\nRetry-After: 3600               (seconds to wait \u2014 on 429 response)\n\nHTTP 429 Too Many Requests\n```\n\n## Implementation Layers\n\n```\nWhere to rate limit:\n  1. API Gateway (Kong, NGINX, AWS API GW) \u2014 best for cross-service limits\n  2. Application-level middleware          \u2014 per-route granularity\n  3. Load balancer                        \u2014 gross traffic control\n\nWhat to rate-limit by:\n  - IP address (easy to bypass via proxies)\n  - User ID / API key (more accurate)\n  - Endpoint (protect expensive ones more strictly)\n  - Global (service-wide quota)\n```\n\n## Distributed Rate Limiting\n\nSingle server: simple in-memory counter.\nMultiple servers: share state via Redis.\n\n```javascript\n// Redis sliding window counter\nasync function isAllowed(userId, limit, windowSec) {\n  const key = `ratelimit:${userId}`;\n  const now = Date.now();\n  const window = now - windowSec * 1000;\n\n  const multi = redis.multi();\n  multi.zremrangebyscore(key, 0, window);            // remove old entries\n  multi.zcard(key);                                   // count in window\n  multi.zadd(key, now, now.toString());              // add current request\n  multi.expire(key, windowSec);\n\n  const results = await multi.exec();\n  const count = results[1];\n  return count < limit;\n}\n```\n\n## Common Pitfalls\n- **Fixed window boundary bursts** \u2014 double the intended rate is possible at window boundaries. Use sliding window.\n- **Per-IP limiting bypassed by proxies** \u2014 use API key / user ID for important limits.\n- **Not communicating limits** \u2014 always return X-RateLimit-* headers so clients can self-throttle.\n- **Cascading failures** \u2014 if downstream service rate-limits you, implement exponential backoff + jitter in the caller.\n",
+  "guide": "# Rate Limiting\n\n## What Is Rate Limiting and Why Does It Matter?\n\nImagine a coffee shop with one barista. If 1000 customers rush in at once,\nthe barista can't serve everyone — they'd be overwhelmed and serve nobody well.\nSo the shop has a rule: take orders from at most 100 customers per hour.\n\n**Rate limiting** enforces a maximum rate of requests a client can make to a service.\n\n```\nWITHOUT rate limiting:\n  One bad actor sends 1,000,000 requests -> server overloaded -> all users suffer\n  Scrapers download your entire data catalogue for free\n  Brute force attack: try 10 billion passwords until one works\n  DDoS: millions of bots overwhelm your API\n\nWITH rate limiting:\n  Each IP/API key limited to 1000 requests/minute\n  Bad actor hits limit -> 429 Too Many Requests\n  Normal users: unaffected\n  Server: protected from volumetric abuse\n```\n\nRate limiting protects for: security (brute force, DDoS), fair use (prevent one user\nhogging resources), cost control (API that charges per request).\n\n---\n\n## Algorithm 1: Fixed Window Counter\n\n```\nSimplest approach. Divide time into fixed windows (e.g., each minute).\nCount requests in the current window. Reject if over limit.\n\nTime: 14:00:00 - 14:00:59 = window 1\n      14:01:00 - 14:01:59 = window 2\n\nRule: max 10 requests per minute per IP.\n\nWindow 1:\n  14:00:01 IP=1.2.3.4 -> count=1 -> ALLOW\n  14:00:10 IP=1.2.3.4 -> count=2 -> ALLOW\n  ...\n  14:00:55 IP=1.2.3.4 -> count=10 -> ALLOW\n  14:00:59 IP=1.2.3.4 -> count=11 -> DENY (429)\n\nWindow 2:\n  14:01:00 IP=1.2.3.4 -> count=1 -> ALLOW (new window, counter reset!)\n\nTHE BURST PROBLEM:\n  Client sends 10 requests at 14:00:59 (end of window 1)\n  Counter resets at 14:01:00\n  Client sends 10 more requests at 14:01:00 (start of window 2)\n  In 2 seconds: 20 requests! (2x the intended limit)\n  Window boundary = burst allowed.\n\n  14:00:59 ──[10 req]── | ──[10 req]── 14:01:00\n                      window reset\n                      20 requests in 2 seconds!\n```\n\n---\n\n## Algorithm 2: Sliding Window Log\n\n```\nTrack exact timestamp of each request in a log.\nOn each request: remove entries older than window, count remaining.\n\nRule: 10 requests per minute.\n1.2.3.4 log: [14:00:01, 14:00:05, 14:00:10, ..., 14:00:55]\n\nRequest at 14:01:05:\n  Remove entries before 14:00:05 (1 minute ago)\n  Count remaining entries: 9\n  9 < 10 -> ALLOW. Add 14:01:05 to log.\n\nMore accurate than fixed window (no burst at boundary).\nCon: stores every request timestamp. High memory for high-volume APIs.\nBetter: sliding window COUNTER (hybrid approach, approximates sliding window).\n```\n\n---\n\n## Algorithm 3: Token Bucket\n\n```\nImagine a bucket that holds tokens.\nTokens are added to the bucket at a fixed rate (e.g., 10 tokens/sec).\nEach request consumes 1 token.\nIf bucket is empty: request denied (429).\nIf tokens available: allow request.\n\nVISUAL:\n  ┌──────────────┐\n  │ ● ● ● ● ●   │  bucket (max 10 tokens)\n  │ ● ● ● ● ●   │\n  └──────────────┘\n       │\n       │ refill rate: +10 tokens/sec (max 10)\n       │\n\n  Request comes in -> remove 1 token -> ALLOW\n  Bucket empty -> DENY until tokens refill\n\n  token_count = min(max_tokens, current_tokens + elapsed_time * refill_rate)\n\nBURSTING ALLOWED:\n  Bucket is FULL at start -> 10 requests can burst immediately.\n  Then limited to refill rate.\n  This is intentional: token bucket allows SHORT bursts above steady-state rate.\n\nUSAGE:\n  AWS API Gateway uses token bucket.\n  Most practical rate limiting starts with token bucket.\n\nPARAMETERS:\n  bucket_size: max burst size\n  refill_rate: sustained request rate\n  Set bucket_size = 2x refill_rate for typical burst tolerance.\n```\n\n---\n\n## Algorithm 4: Leaky Bucket\n\n```\nRequests go INTO a bucket (queue).\nBucket LEAKS at a fixed rate (processes one request per N ms).\nIf bucket is full: new requests are dropped.\n\nVISUAL:\n  Requests ──► ┌──────────┐\n               │ queued   │\n               │ requests │ ──► processed at fixed rate (leak)\n               └──────────┘\n\n  If queue full: request DROPPED immediately.\n\nKEY DIFFERENCE FROM TOKEN BUCKET:\n  Token bucket: request processed immediately if token available, bursts OK.\n  Leaky bucket: request added to queue, processed at CONSTANT rate. No bursts.\n  Leaky = smoothed output. Token = burst-allowed output.\n\nUSE: network traffic shaping where smooth output rate is required.\n     Less common in API rate limiting (token bucket preferred).\n```\n\n---\n\n## Implementation: Redis-Based Sliding Window\n\n```python\nimport redis\nimport time\n\nr = redis.Redis()\n\ndef is_rate_limited(user_id: str, limit: int, window_seconds: int) -> bool:\n    key = f\"rate_limit:{user_id}\"\n    now = time.time()\n    window_start = now - window_seconds\n\n    pipe = r.pipeline()\n    # Remove requests outside the window\n    pipe.zremrangebyscore(key, 0, window_start)\n    # Count requests in current window\n    pipe.zcard(key)\n    # Add current request\n    pipe.zadd(key, {str(now): now})\n    # Set key expiry\n    pipe.expire(key, window_seconds * 2)\n    results = pipe.execute()\n\n    count = results[1]\n    return count >= limit  # True = rate limited, return 429\n\n# Usage:\nif is_rate_limited(user_id=\"user:123\", limit=100, window_seconds=60):\n    return HTTP_429_TOO_MANY_REQUESTS\n```\n\n---\n\n## Rate Limit Response — What to Return\n\n```\nHTTP 429 Too Many Requests\n\nHeaders:\n  X-RateLimit-Limit:     100    # max requests per window\n  X-RateLimit-Remaining:  0     # how many requests left\n  X-RateLimit-Reset:  1714320000  # Unix timestamp when limit resets\n  Retry-After:           30     # seconds until client can retry\n\nBody:\n  {\n    \"error\": \"rate_limit_exceeded\",\n    \"message\": \"You have exceeded 100 requests per minute\",\n    \"retry_after\": 30\n  }\n\nClient responsibility:\n  On 429: wait Retry-After seconds before retrying.\n  Implement exponential backoff with jitter if many retries needed.\n  Cache responses where possible to reduce request rate.\n```\n\n---\n\n## Rate Limiting Granularity — What to Limit By\n\n```\nBY IP ADDRESS:\n  Simplest. But: shared IPs (office, university) unfair. VPNs bypass.\n  Good for: anonymous endpoints (login, signup).\n\nBY USER ID / API KEY:\n  More accurate. Authenticated users identified.\n  Good for: authenticated APIs.\n  Risk: one user signs up many accounts (\"account stuffing\").\n\nBY ENDPOINT:\n  Different limits per endpoint.\n  /api/send-email: 10/hour (expensive, abuse risk)\n  /api/products: 10000/minute (cheap, read-only)\n  Fine-grained but complex to configure.\n\nBY TIER/PLAN:\n  Free tier: 100 requests/day\n  Pro tier:  10,000 requests/day\n  Enterprise: unlimited\n  Stripe, SendGrid, GitHub all do this.\n\nBEST PRACTICE: combine multiple:\n  IP rate limit: 1000/min (blocks bots, DDoS)\n  User rate limit: 100/min (fair use)\n  Endpoint rate limit: expensive actions limited more\n```\n\n---\n\n## Where to Implement Rate Limiting\n\n```\nLAYER OPTIONS:\n  1. API Gateway (Kong, AWS API Gateway, nginx):\n     Single place, all APIs protected. Easy to configure, no code change.\n     Recommended for most cases.\n\n  2. Application code:\n     More fine-grained (per-user, per-plan, per-action).\n     Redis for distributed rate limit store.\n     Can make business logic decisions.\n\n  3. CDN / Edge (Cloudflare, AWS WAF):\n     Closest to attacker. Blocks before hitting your infrastructure.\n     IP-based limiting. Good for DDoS first line of defense.\n\n  4. Database:\n     Token bucket in DB. Simple but DB becomes bottleneck.\n     Don't do this for high-volume APIs.\n\nRECOMMENDED STACK:\n  Cloudflare/WAF: block known bad IPs, volumetric DDoS\n  API Gateway (nginx/Kong): IP rate limit, API key quota\n  Application (Redis): fine-grained user/plan limits\n  Three layers = defense in depth\n```\n\n---\n\n## Mind Map\n\n```\nRATE LIMITING\n|\n+-- ALGORITHMS\n|   +-- Fixed Window (simple, burst at boundary)\n|   +-- Sliding Window Log (accurate, high memory)\n|   +-- Token Bucket (burst allowed, practical)\n|   +-- Leaky Bucket (smooth output, no burst)\n|\n+-- GRANULARITY\n|   +-- By IP (anonymous endpoints)\n|   +-- By user/API key (authenticated)\n|   +-- By endpoint (different limits per action)\n|   +-- By tier/plan (free/pro/enterprise)\n|\n+-- RESPONSE\n|   +-- HTTP 429 Too Many Requests\n|   +-- Retry-After header\n|   +-- X-RateLimit-* headers\n|\n+-- IMPLEMENTATION\n    +-- API Gateway (recommended)\n    +-- Redis Sorted Set (sliding window)\n    +-- CDN/WAF (first line of defense)\n```\n\n---\n\n## References\n\n### Videos\n- **Rate Limiting System Design** by ByteByteGo:\n  https://www.youtube.com/watch?v=FU4WlwfS3G0\n  - All 4 algorithms visualised with system design context.\n- **Designing a Rate Limiter** by System Design Interview channel:\n  https://www.youtube.com/watch?v=mhUQe4BKZXs\n  - Full system design walkthrough.\n\n### Articles\n- **Redis rate limiting patterns**: https://redis.io/docs/manual/patterns/rate-limiting/\n- **Stripe rate limiting blog**: https://stripe.com/blog/rate-limiters\n",
   "questions": [
     {
       "id": "rl-q1",
       "type": "mcq",
-      "prompt": "Token bucket vs fixed window \u2014 main advantage of token bucket?",
+      "prompt": "Token bucket vs fixed window — main advantage of token bucket?",
       "choices": [
         "Token bucket is simpler",
         "Token bucket allows controlled bursting up to bucket capacity while maintaining a long-term average rate. Fixed window creates boundary bursts where 2x the limit can flow at window boundaries",
@@ -49,7 +49,7 @@
       "prompt": "Why use Redis for rate limiting in a distributed system?",
       "choices": [
         "Redis is faster",
-        "Multiple application servers share the rate limit counter \u2014 without Redis, each server has its own counter and the limit effectively multiplies by server count",
+        "Multiple application servers share the rate limit counter — without Redis, each server has its own counter and the limit effectively multiplies by server count",
         "Redis is the only option",
         "In-memory is insufficient"
       ],
@@ -58,6 +58,309 @@
       "tags": [
         "rate-limiting",
         "distributed"
+      ]
+    },
+    {
+      "id": "rl-q4",
+      "type": "mcq",
+      "prompt": "What HTTP status code does rate limiting return?",
+      "choices": [
+        "400 Bad Request",
+        "403 Forbidden",
+        "429 Too Many Requests — with Retry-After header indicating when to retry",
+        "503 Service Unavailable"
+      ],
+      "answerIndex": 2,
+      "explanation": "HTTP 429 = rate limited. Include: Retry-After: 30 (seconds until ok to retry), X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset. Client must respect Retry-After and back off. Don't use 403 (that's authorization) or 503 (server overloaded).",
+      "tags": [
+        "rate-limiting",
+        "http",
+        "429"
+      ]
+    },
+    {
+      "id": "rl-q5",
+      "type": "mcq",
+      "prompt": "What is the burst problem with the fixed window rate limiting algorithm?",
+      "choices": [
+        "Fixed windows cause CPU spikes",
+        "Client can double the limit by sending requests at the end of one window and start of the next — both windows' counts reset to 0 at boundary",
+        "Fixed windows are inaccurate for reads",
+        "Windows cause clock skew"
+      ],
+      "answerIndex": 1,
+      "explanation": "Limit: 10 req/min. Send 10 at 14:00:59 + 10 at 14:01:00 = 20 requests in 2 seconds. Both windows allow 10 each. The boundary burst is a design flaw. Sliding window and token bucket don't have this flaw.",
+      "tags": [
+        "rate-limiting",
+        "fixed-window",
+        "burst"
+      ]
+    },
+    {
+      "id": "rl-q6",
+      "type": "mcq",
+      "prompt": "How does a token bucket rate limiter work?",
+      "choices": [
+        "Requests queued and leaked at fixed rate",
+        "Tokens added to bucket at fixed rate. Each request consumes one token. If empty: deny. If available: allow. Bucket size controls max burst.",
+        "Counts requests in a sliding time window",
+        "Tracks exact timestamps of requests"
+      ],
+      "answerIndex": 1,
+      "explanation": "Token bucket: bucket holds max N tokens. Replenish R tokens/sec. Request: take 1 token if available. Bucket full when idle -> burst allowed up to N requests immediately. Then limited to R per second. AWS API Gateway, most practical implementations use token bucket.",
+      "tags": [
+        "rate-limiting",
+        "token-bucket"
+      ]
+    },
+    {
+      "id": "rl-q7",
+      "type": "mcq",
+      "prompt": "What is the difference between token bucket and leaky bucket?",
+      "choices": [
+        "They are identical",
+        "Token bucket: requests processed immediately if token available, bursts allowed. Leaky bucket: requests queued, processed at constant rate, no bursting.",
+        "Leaky bucket allows more requests",
+        "Token bucket is for UDP only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Token bucket: full bucket = burst of N requests immediately (then steady-state R/sec). Output rate varies. Leaky bucket: constant output regardless of input rate. No bursting. Input queue absorbs spikes. Use token for APIs (bursts OK), leaky for network shaping (smooth output needed).",
+      "tags": [
+        "rate-limiting",
+        "token-bucket",
+        "leaky-bucket"
+      ]
+    },
+    {
+      "id": "rl-q8",
+      "type": "mcq",
+      "prompt": "Where is the best place to implement primary rate limiting?",
+      "choices": [
+        "Inside each microservice",
+        "In the database",
+        "At the API Gateway or load balancer level — single choke point, all traffic passes through, no code changes in services",
+        "Only at the CDN"
+      ],
+      "answerIndex": 2,
+      "explanation": "API Gateway (nginx, Kong, AWS API Gateway): single point to configure limits. All services protected automatically. No per-service code. Centralized monitoring. Then add Redis-based application-level limiting for fine-grained per-user/plan limits. CDN as first line for IP-based DDoS.",
+      "tags": [
+        "rate-limiting",
+        "architecture",
+        "api-gateway"
+      ]
+    },
+    {
+      "id": "rl-q9",
+      "type": "mcq",
+      "prompt": "How should rate limiting track state across multiple API server instances?",
+      "choices": [
+        "Each server tracks independently (in memory)",
+        "Use a shared distributed store like Redis — all API servers read/write the same counter, ensuring limit is enforced globally not per-server",
+        "Use a database for every check",
+        "DNS-based rate limiting"
+      ],
+      "answerIndex": 1,
+      "explanation": "In-memory rate limiting: 3 servers, each allows 100 req/min. Client splits requests across servers: 300 req/min! Redis sorted set: all servers share one counter per user. Any request to any server increments the same key. Rate limit is globally enforced.",
+      "tags": [
+        "rate-limiting",
+        "redis",
+        "distributed"
+      ]
+    },
+    {
+      "id": "rl-q10",
+      "type": "mcq",
+      "prompt": "What is rate limiting by API key/tier vs by IP?",
+      "choices": [
+        "They are the same",
+        "IP: simple, good for anonymous endpoints, but shared IPs cause false positives. API key: authenticated users, per-plan limits (free: 100/day, pro: 10K/day), more accurate and business-aligned.",
+        "IP rate limiting is more secure",
+        "API keys bypass rate limits"
+      ],
+      "answerIndex": 1,
+      "explanation": "IP limits: one university IP = 10,000 students. Single IP limit blocks all. API key: each developer/user has own key and quota. Per-plan limits: monetize access (Stripe, SendGrid model). Use both: IP limit for DDoS/brute-force, API key for business quota management.",
+      "tags": [
+        "rate-limiting",
+        "api-key",
+        "granularity"
+      ]
+    },
+    {
+      "id": "rl-q11",
+      "type": "mcq",
+      "prompt": "What is a sliding window counter (approximate sliding window)?",
+      "choices": [
+        "A window that slides across time zones",
+        "Combines fixed window counters: weight previous window count by how much of it overlaps with current window. Approximates true sliding window with O(1) space per key.",
+        "A Redis data structure",
+        "A hardware counter"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sliding window counter: currentWindowCount + previousWindowCount * (fraction of previous window still in scope). If window=60s, 45s into current window: weight previous by (60-45)/60=0.25. Approximate but close enough. Used by Redis rate limit implementations. More memory-efficient than storing every timestamp.",
+      "tags": [
+        "rate-limiting",
+        "sliding-window"
+      ]
+    },
+    {
+      "id": "rl-q12",
+      "type": "mcq",
+      "prompt": "What should a well-behaved API client do when it receives a 429 response?",
+      "choices": [
+        "Retry immediately",
+        "Stop sending requests, wait Retry-After seconds, then retry with exponential backoff if 429 persists. Cache responses to reduce future request rate.",
+        "Switch to a different endpoint",
+        "Send requests faster to complete before limit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Retry-After: 30 -> wait 30 seconds. If 429 again: wait 60s, 120s (exponential backoff). Add jitter to avoid synchronized retry storms. Implement response caching to reduce hits. A well-behaved client respects rate limits and uses them to schedule requests.",
+      "tags": [
+        "rate-limiting",
+        "client",
+        "retry"
+      ]
+    },
+    {
+      "id": "rl-q13",
+      "type": "mcq",
+      "prompt": "What is the difference between rate limiting and throttling?",
+      "choices": [
+        "They are identical",
+        "Rate limiting: hard block (429) when limit exceeded. Throttling: slow down responses (add delay) when approaching limit, giving client time to back off gracefully.",
+        "Throttling is for databases only",
+        "Rate limiting is for TCP only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rate limiting: hit limit -> 429, client must wait. Throttling: approaching limit -> responses delayed 500ms, 1s, 2s. Softer degradation. Some systems do both: throttle near limit, hard deny at limit. AWS API Gateway uses both: throttle to steady-state, burst limit for temporary spikes.",
+      "tags": [
+        "rate-limiting",
+        "throttling"
+      ]
+    },
+    {
+      "id": "rl-q14",
+      "type": "mcq",
+      "prompt": "How does Redis Sorted Set implement sliding window rate limiting?",
+      "choices": [
+        "Using Redis KEYS command",
+        "ZADD: add request timestamps as scores. ZREMRANGEBYSCORE: remove old timestamps outside window. ZCARD: count remaining. Atomic pipeline for consistency.",
+        "Using Redis Pub/Sub",
+        "Redis INCR with TTL"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis ZADD key score member (score=timestamp, member=unique event ID). ZREMRANGEBYSCORE key -inf (now - window): remove old. ZCARD key: count in window. If count >= limit: 429. EXPIRE key on window_size to clean up. Use PIPELINE for atomicity.",
+      "tags": [
+        "rate-limiting",
+        "redis",
+        "sorted-set"
+      ]
+    },
+    {
+      "id": "rl-q15",
+      "type": "mcq",
+      "prompt": "Why is rate limiting important for login endpoints specifically?",
+      "choices": [
+        "Login is slow",
+        "Prevents brute-force attacks — without rate limiting, attacker can try millions of password combinations. With limit of 5 attempts/minute, brute-forcing a 8-char password takes centuries.",
+        "Login uses more bandwidth",
+        "Login requires more CPU"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without rate limiting on /login: try every password in 'rockyou.txt' (10 billion common passwords). With rate limit 5/min per IP: 10B attempts / 5 per min = 38 centuries. Add account lockout after 10 failed attempts. Add CAPTCHA. Never expose whether email exists (timing attack).",
+      "tags": [
+        "rate-limiting",
+        "brute-force",
+        "security"
+      ]
+    },
+    {
+      "id": "rl-q16",
+      "type": "mcq",
+      "prompt": "What is a token bucket's `refill_rate` vs `bucket_size` parameter?",
+      "choices": [
+        "They are the same",
+        "Refill rate = sustained request rate (tokens added per second). Bucket size = max burst capacity (max tokens accumulated when idle). Bucket full from idle = burst of bucket_size requests allowed immediately.",
+        "Bucket size limits total requests",
+        "Refill rate is the maximum allowed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Refill rate 10/sec, bucket_size 100: user can be idle 10 seconds -> accumulate 100 tokens -> burst 100 requests instantly -> then limited to 10/sec. Browser pre-loading scenario: valid burst. API key with high refill but small bucket: limits burst while allowing high sustained rate.",
+      "tags": [
+        "rate-limiting",
+        "token-bucket",
+        "parameters"
+      ]
+    },
+    {
+      "id": "rl-q17",
+      "type": "mcq",
+      "prompt": "What is distributed rate limiting and when is it needed?",
+      "choices": [
+        "Rate limiting across geographic regions only",
+        "When multiple server instances or replicas exist, rate limit state must be shared (Redis/Memcached) to enforce global limits regardless of which server a request hits",
+        "Single-server rate limiting",
+        "Kubernetes-only rate limiting"
+      ],
+      "answerIndex": 1,
+      "explanation": "3 servers, each with in-memory limit 100/min: user hits all 3 servers = 300/min effective. Distributed rate limiting: all servers share Redis key per user. Request to any server increments same counter. True 100/min limit enforced globally. Required in any horizontally-scaled deployment.",
+      "tags": [
+        "rate-limiting",
+        "distributed",
+        "redis"
+      ]
+    },
+    {
+      "id": "rl-q18",
+      "type": "mcq",
+      "prompt": "What are the X-RateLimit-* headers and what values should they contain?",
+      "choices": [
+        "Internal headers not exposed to clients",
+        "X-RateLimit-Limit (max per window), X-RateLimit-Remaining (calls left in current window), X-RateLimit-Reset (Unix timestamp when window resets). Clients use these to self-throttle.",
+        "Required by HTTP standard",
+        "Performance metrics headers"
+      ],
+      "answerIndex": 1,
+      "explanation": "X-RateLimit-Limit: 100. X-RateLimit-Remaining: 37. X-RateLimit-Reset: 1714320060. Client: if Remaining approaches 0, slow down proactively. Don't wait for 429. Proactive clients are more efficient and avoid disruption. GitHub, Stripe all return these.",
+      "tags": [
+        "rate-limiting",
+        "headers",
+        "http"
+      ]
+    },
+    {
+      "id": "rl-q19",
+      "type": "mcq",
+      "prompt": "Should you rate limit by user ID or by API key for a commercial API?",
+      "choices": [
+        "Always by IP",
+        "API key is better — it maps directly to a customer's plan/quota, is revocable, traceable, and allows per-customer monetization (free tier: 1000/day, pro: 100K/day)",
+        "User ID and API key are the same",
+        "Neither — just use IP"
+      ],
+      "answerIndex": 1,
+      "explanation": "API key: unique per developer/app. Compromised: revoke that key. Exceeded quota: upgrade plan. Usage analytics per customer. Maps to billing. IP-based: rotation possible, shared IPs problematic, no billing tie-in. Commercial APIs (Stripe, Twilio, OpenAI, GitHub): all use API keys.",
+      "tags": [
+        "rate-limiting",
+        "api-key",
+        "commercial"
+      ]
+    },
+    {
+      "id": "rl-q20",
+      "type": "mcq",
+      "prompt": "What is 'cell-rate' or 'token bucket per cell' pattern?",
+      "choices": [
+        "A hardware networking term",
+        "Different token buckets per action/endpoint — /api/email: 10/hour, /api/search: 1000/min, /api/export: 5/day. Each action has independent bucket matching its cost/risk.",
+        "A Kubernetes limit",
+        "Redis cluster partitioning"
+      ],
+      "answerIndex": 1,
+      "explanation": "Per-endpoint limits: search (cheap) gets 1000/min. Email send (expensive, abuse risk) gets 10/hour. Export (heavy server operation) gets 5/day. Matches limit to action cost and abuse potential. Much better than one global limit. AWS API Gateway, Kong, nginx rate limiting all support per-route limits.",
+      "tags": [
+        "rate-limiting",
+        "per-endpoint",
+        "granularity"
       ]
     }
   ],
@@ -86,6 +389,54 @@
       "tags": [
         "rate-limiting",
         "redis"
+      ]
+    },
+    {
+      "id": "rl-fc4",
+      "front": "4 rate limiting algorithms",
+      "back": "Fixed Window: simple, burst at boundary. Sliding Window Log: accurate, high memory. Token Bucket: burst allowed (bucket_size tokens), steady state (refill_rate/sec), practical. Leaky Bucket: constant output rate, no burst, smooth traffic shaping.",
+      "tags": [
+        "rate-limiting",
+        "algorithms"
+      ]
+    },
+    {
+      "id": "rl-fc5",
+      "front": "Token bucket parameters",
+      "back": "bucket_size = max burst capacity. refill_rate = sustained rate (tokens/sec). Idle for T seconds -> accumulate min(T*refill_rate, bucket_size) tokens. Full bucket = burst allowed. Then steady-state refill_rate limit. AWS API Gateway default model.",
+      "tags": [
+        "rate-limiting",
+        "token-bucket"
+      ]
+    },
+    {
+      "id": "rl-fc6",
+      "front": "Redis sliding window implementation",
+      "back": "ZADD key timestamp event_id. ZREMRANGEBYSCORE key -inf (now-window). ZCARD key -> current count. EXPIRE key. Wrap in PIPELINE for atomicity. All API servers share same Redis key = globally distributed rate limit. O(log N) per request.",
+      "tags": [
+        "rate-limiting",
+        "redis",
+        "implementation"
+      ]
+    },
+    {
+      "id": "rl-fc7",
+      "front": "Rate limiting response headers",
+      "back": "Status 429. Retry-After: 30 (seconds). X-RateLimit-Limit: 100. X-RateLimit-Remaining: 0. X-RateLimit-Reset: Unix timestamp. Client: wait Retry-After, then exponential backoff with jitter if still 429. Cache responses to reduce rate.",
+      "tags": [
+        "rate-limiting",
+        "http",
+        "429"
+      ]
+    },
+    {
+      "id": "rl-fc8",
+      "front": "Defense in depth: three layers",
+      "back": "1. CDN/WAF (Cloudflare): IP-based, volumetric DDoS, geo-block. 2. API Gateway (nginx/Kong): API key quotas, IP limits. 3. Application (Redis): per-user plan limits, per-action limits. Each layer handles what it does best.",
+      "tags": [
+        "rate-limiting",
+        "architecture",
+        "defense-in-depth"
       ]
     }
   ],

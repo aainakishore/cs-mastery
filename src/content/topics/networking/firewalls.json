@@ -7,15 +7,15 @@
   "prereqs": [
     "prompting-fundamentals"
   ],
-  "guide": "# Firewalls\n\nA firewall is a **network security device** (hardware or software) that monitors and controls incoming/outgoing network traffic based on rules. It's the primary boundary between trusted internal networks and untrusted external networks.\n\n## Types of Firewalls\n\n```\nPacket Filter (L3/L4):\n  Inspects IP headers + TCP/UDP ports only\n  Fast, stateless, no session context\n  Rule: ALLOW TCP src any dst 10.0.0.1 port 443\n\nStateful Firewall (L3/L4):\n  Tracks TCP connection state (SYN, ESTABLISHED, FIN)\n  Allows ESTABLISHED traffic back automatically\n  Blocks packets that don't match known sessions\n\nApplication Layer (WAF/L7):\n  Inspects HTTP payload, headers, body\n  Detects SQL injection, XSS, DDoS patterns\n  More CPU-intensive\n\nNext-Gen Firewall (NGFW):\n  Combines stateful + application + IDS/IPS\n  Deep packet inspection, user identity awareness\n```\n\n## Firewall Rules \u2014 Direction Matters\n\n```\nIngress (inbound) rules:  control what enters the network\nEgress  (outbound) rules: control what leaves the network\n\nTypical DMZ rule set:\n  ALLOW inbound TCP to :80, :443    (web server)\n  ALLOW inbound TCP to :25          (mail server in DMZ)\n  DENY  inbound ALL others\n  ALLOW outbound ESTABLISHED (return traffic)\n  DENY  outbound from DMZ to internal network\n\nSecurity principle: DENY ALL by default, then ALLOW specific exceptions.\n```\n\n## Cloud Security Groups vs Firewalls\n\n```\nAWS Security Groups:\n  Stateful \u2014 return traffic automatically allowed\n  Rules are per-resource (EC2 instance)\n  No explicit DENY \u2014 only ALLOW rules (implicit deny)\n\nAWS NACLs (Network ACLs):\n  Stateless \u2014 must explicitly allow return traffic\n  Applied at subnet level\n  Numbered rules, evaluated in order\n  Support explicit DENY\n```\n\n## Common Pitfalls\n- **Too permissive rules** \u2014 `ALLOW ALL` is the enemy of security. Restrict to minimum required ports.\n- **Forgetting egress rules** \u2014 malware and data exfiltration go outbound. Control outbound traffic too.\n- **Rule ordering** \u2014 packet filter rules are evaluated top-to-bottom; first match wins. Put specific rules before broad ones.\n- **Forgetting ephemeral ports** \u2014 PASV FTP, response traffic, and load balancers need high port ranges (1024-65535) for return traffic in stateless firewalls.\n",
+  "guide": "# Firewalls\n\n## What Is a Firewall? Start From Zero\n\nImagine your home has a front door with a doorman. The doorman has a list of rules:\n\"Let in family members, let in the pizza delivery person on Friday nights,\nbut don't let in strangers wearing masks.\" A firewall does the same thing for\nnetwork traffic — it decides which packets (network messages) are allowed\nthrough and which are blocked.\n\nA **firewall** is a network security system that monitors and controls incoming\nand outgoing network traffic based on predetermined security rules.\n\n```\nINTERNET (untrusted)         FIREWALL            PRIVATE NETWORK (trusted)\n   │                            │                        │\n   │  TCP SYN to port 443  ──►  │  Allow: port 443?      │\n   │  ← ── ── ── ── ── ──       │  ALLOW -> forward ──►  │  Your web server\n   │                            │                        │\n   │  TCP SYN to port 22   ──►  │  Allow: port 22?       │\n   │  ← blocked ──              │  DENY -> drop packet   │\n   │  (no response)             │                        │\n```\n\nWithout a firewall: your servers are directly reachable on every port from every IP\non the internet. Any exposed service (database! admin panel! SSH!) is an attack surface.\n\n---\n\n## Packet Filtering — The Foundation\n\nAll firewalls fundamentally inspect packet headers and decide ALLOW or DENY.\n\n```\nA network packet has headers the firewall can inspect:\n  Source IP:       1.2.3.4\n  Destination IP:  10.0.0.1\n  Source Port:     54321 (ephemeral port from client)\n  Destination Port: 443 (HTTPS)\n  Protocol:        TCP / UDP / ICMP\n  TCP Flags:       SYN, ACK, FIN, RST\n\nFIREWALL RULE EXAMPLE:\n  Source IP   | Dest IP    | Protocol | Dest Port | Action\n  0.0.0.0/0   | 10.0.0.1   | TCP      | 443       | ALLOW\n  0.0.0.0/0   | 10.0.0.1   | TCP      | 80        | ALLOW\n  0.0.0.0/0   | 10.0.0.1   | TCP      | 22        | DENY\n  10.0.0.0/8  | 10.0.0.1   | TCP      | 22        | ALLOW (only internal network)\n  0.0.0.0/0   | 0.0.0.0/0  | *        | *         | DENY  (default deny all)\n\nRULE: apply rules in order, first match wins.\n```\n\n---\n\n## Stateless vs Stateful Firewalls\n\n```\nSTATELESS FIREWALL:\n  Inspects each packet INDEPENDENTLY.\n  No memory of previous packets.\n  Rule: \"Allow TCP port 443 inbound\" -> allows every individual TCP packet\n  on that port.\n\n  Problem: TCP handshake has SYN, SYN-ACK, ACK.\n  Stateless firewall allows all of them independently.\n  But what about the RETURN traffic?\n  If rule says \"allow inbound port 443\" but blocks \"outbound ephemeral ports\",\n  the client response packet is blocked -> connection fails.\n  Must manually add rules for both directions.\n\n  USE: Simple switches, routers with basic ACLs. Very fast, low memory.\n\nSTATEFUL FIREWALL:\n  Tracks the STATE of network connections.\n  Maintains a connection table (state table).\n\n  TCP connection attempt:\n    Outbound SYN (port 443) -> firewall records: {src:192.168.1.5,dst:8.8.8.8,\n                                                    sport:54321,dport:443,state:SYN_SENT}\n    Return SYN-ACK arrives  -> firewall checks table: IS this a response to an\n                               existing outbound connection? YES -> ALLOW automatically\n    ACK sent -> state: ESTABLISHED\n    FIN -> state: CLOSE_WAIT -> CLOSED -> entry removed from table\n\n  Benefits:\n    Only allow RETURN traffic for established connections (no need for inbound rules)\n    Can detect port scanning (SYN flood without ACK = suspicious)\n    TCP session hijacking detection\n    Drops packets that aren't part of a valid connection\n  \n  USE: Modern production firewalls, cloud security groups (AWS SGs are stateful).\n\nCOMPARISON:\n  Stateless:  fast, no memory, simple rules, must allow both directions explicitly\n  Stateful:   connection-aware, automatic return traffic, complex but safer\n```\n\n---\n\n## Application Layer Firewall (Layer 7)\n\n```\nTraditional firewalls: operate at OSI Layer 3-4 (IP/TCP).\nThey see IP addresses and port numbers. They don't see inside the payload.\n\nApplication Layer Firewall (Layer 7 / WAF - Web Application Firewall):\n  Inspects the actual application content.\n\n  WHAT IT CAN SEE AND BLOCK:\n    HTTP request: \"GET /admin' OR '1'='1 HTTP/1.1\"  <- SQL injection in URL!\n    HTTP body: <script>document.cookie</script>     <- XSS attack in form!\n    HTTP headers: Host: internal-service.corp        <- SSRF attempt\n    Rate: 10,000 identical requests from same IP     <- DDoS / scraping\n\n  AWS WAF (Web Application Firewall) example rules:\n    Block: requests matching SQL injection patterns\n    Block: requests matching XSS patterns\n    Block: requests from known malicious IPs (threat intel feed)\n    Rate limit: > 2000 requests per IP per 5 minutes -> block for 1 hour\n    Allow: only specific country codes (geo-restriction)\n\nLAYER COMPARISON:\n  L3/L4 firewall: allows TCP port 443 -> sees encrypted HTTPS, can't inspect payload\n  L7 WAF:         TLS terminates at WAF, can inspect decrypted HTTP, block attacks\n```\n\n---\n\n## Cloud Security Groups vs NACLs (AWS Context)\n\n```\nAWS SECURITY GROUPS (stateful, instance-level):\n  Attached to EC2 instances, RDS, Lambda, ECS tasks.\n  Rules apply per instance.\n  Stateful: outbound response to allowed inbound is automatically allowed.\n\n  Example SG for an app server:\n    Inbound rules:\n      TCP 443 from 0.0.0.0/0  (HTTPS from internet)\n      TCP 22  from 10.0.0.0/8 (SSH from internal only)\n    Outbound rules:\n      TCP 5432 to sg-database-sg  (PostgreSQL to DB security group)\n      TCP 443  to 0.0.0.0/0       (HTTPS outbound for API calls)\n      All traffic to 0.0.0.0/0    (or lock down specifically)\n\nAWS NETWORK ACLs (stateless, subnet-level):\n  Applied at subnet boundary (before reaching instances).\n  Rules applied to all instances in the subnet.\n  Stateless: must explicitly allow both inbound AND return traffic.\n  Numbered rules: evaluated in order (100, 200, 300...) first match wins.\n  Have DENY rules (security groups only have ALLOW).\n\n  Use NACLs for:\n    Blocking specific IPs/ranges at subnet level (DDoS mitigation)\n    Compliance (broad-stroke deny rules)\n    Subnet-wide policies\n\n  Two-layer defense:\n    NACL (subnet level) + Security Group (instance level)\n    Attacker must bypass both.\n```\n\n---\n\n## Demilitarized Zone (DMZ)\n\n```\nA DMZ is a subnet that sits between the public internet and your internal\nprivate network. It contains services that MUST be publicly accessible\nbut should not directly touch internal systems.\n\n  INTERNET\n      │\n   [Firewall 1]   <- blocks everything except 80, 443\n      │\n   [DMZ subnet]\n   [Web Server]   <- public-facing, handles HTTP requests\n   [Load Balancer]\n      │\n   [Firewall 2]  <- blocks direct internet access to internal network\n      │\n   [Internal Network]\n   [App Servers] [Databases]  <- private, no direct internet access\n\nIf the web server is compromised: attacker is in DMZ, not internal network.\nFirewall 2 prevents lateral movement to databases and app servers.\n\nModern cloud equivalent: public subnet (DMZ) + private subnet + NAT Gateway.\n```\n\n---\n\n## Common Firewall Attacks and Defenses\n\n```\nPORT SCANNING:\n  Attacker sends SYN to all 65535 ports to discover open services.\n  Defense: stateful firewall drops SYNs without follow-up ACK.\n           Rate-limit new connection attempts per IP.\n           Use intrusion detection system (IDS).\n\nSYN FLOOD (DDoS):\n  Attacker sends millions of SYN packets, never completes handshake.\n  Server's half-open connection table fills up. Legitimate connections rejected.\n  Defense: SYN cookies (server generates cookie, doesn't store state until ACK).\n           Rate limit SYN packets per source IP.\n           AWS Shield / Cloudflare absorb volumetric attacks.\n\nIP SPOOFING:\n  Attacker forges source IP to bypass IP-based allow rules.\n  Defense: Ingress/egress filtering. Verify that packets from your network\n           actually have your network's source IPs.\n\nFIREWALL BYPASS VIA ALLOWED PORT:\n  Firewall allows port 443 (HTTPS). Attacker tunnels C2 (command and control)\n  traffic over HTTPS to bypass firewall.\n  Defense: Layer 7 inspection, behavior analysis, SSL inspection.\n```\n\n---\n\n## Mind Map\n\n```\nFIREWALLS\n|\n+-- PACKET FILTERING\n|   +-- Source/dest IP, port, protocol\n|   +-- First match wins\n|   +-- Default deny all (explicit allow)\n|\n+-- STATELESS vs STATEFUL\n|   +-- Stateless: each packet independent, must allow both directions\n|   +-- Stateful: connection state table, auto-allow return traffic\n|   +-- AWS Security Groups = stateful\n|\n+-- LAYERS\n|   +-- L3/L4: IP + TCP (ports, IPs)\n|   +-- L7 WAF: HTTP payload (SQLi, XSS, rate limiting)\n|\n+-- AWS CONSTRUCTS\n|   +-- Security Groups (stateful, instance-level, allow only)\n|   +-- NACLs (stateless, subnet-level, allow + deny)\n|\n+-- NETWORK ZONES\n    +-- DMZ (public-facing services isolated from internal)\n    +-- Public subnet + private subnet + NAT\n```\n\n---\n\n## References\n\n### Videos\n- **Firewalls and Network Security** by PowerCert Animated Videos:\n  https://www.youtube.com/watch?v=kDEX1HXybrU\n  - 10 minutes. Animated firewall concepts from scratch.\n- **AWS Security Groups vs NACLs** by StephaneMaarek:\n  https://www.youtube.com/watch?v=ttc0b2NZTV0\n  - AWS-specific comparison with diagrams.\n\n### Articles\n- **AWS Security Groups docs**: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html\n- **OWASP WAF guide**: https://owasp.org/www-community/Web_Application_Firewall\n",
   "questions": [
     {
       "id": "fw-q1",
       "type": "mcq",
-      "prompt": "Stateful vs stateless firewall \u2014 key difference?",
+      "prompt": "Stateful vs stateless firewall — key difference?",
       "choices": [
         "Stateful is faster",
-        "Stateful tracks TCP session state \u2014 it knows which connections are established so return traffic is automatically allowed without explicit rules. Stateless inspects each packet in isolation",
+        "Stateful tracks TCP session state — it knows which connections are established so return traffic is automatically allowed without explicit rules. Stateless inspects each packet in isolation",
         "Stateless is more secure",
         "They are equivalent"
       ],
@@ -29,7 +29,7 @@
     {
       "id": "fw-q2",
       "type": "mcq",
-      "prompt": "AWS Security Groups vs Network ACLs \u2014 key difference?",
+      "prompt": "AWS Security Groups vs Network ACLs — key difference?",
       "choices": [
         "Security Groups are per-region; NACLs per-VPC",
         "Security Groups are stateful (return traffic automatic), applied per-resource. NACLs are stateless, applied per-subnet, support explicit DENY, numbered rules evaluated in order",
@@ -50,7 +50,7 @@
       "prompt": "Security principle for firewall default policy?",
       "choices": [
         "ALLOW ALL by default, DENY exceptions",
-        "DENY ALL by default, ALLOW specific exceptions \u2014 least-privilege principle",
+        "DENY ALL by default, ALLOW specific exceptions — least-privilege principle",
         "Block only known bad IPs",
         "Use AI to decide"
       ],
@@ -59,6 +59,310 @@
       "tags": [
         "firewalls",
         "security"
+      ]
+    },
+    {
+      "id": "fw-q4",
+      "type": "mcq",
+      "prompt": "What is a stateful firewall?",
+      "choices": [
+        "A firewall with a database",
+        "A firewall that tracks the state of active connections — allows return traffic automatically for established connections, detects port scans",
+        "A cloud firewall only",
+        "A firewall with logging"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stateful firewall maintains a connection table. Outbound TCP to port 443: table entry created. Return SYN-ACK: firewall checks table, sees valid return, auto-allows. Stateless must have explicit rules for both directions. AWS Security Groups are stateful.",
+      "tags": [
+        "firewalls",
+        "stateful"
+      ]
+    },
+    {
+      "id": "fw-q5",
+      "type": "mcq",
+      "prompt": "What is the difference between AWS Security Groups and Network ACLs?",
+      "choices": [
+        "They are identical",
+        "Security Groups: stateful, instance-level, ALLOW rules only. NACLs: stateless, subnet-level, ALLOW + DENY rules, evaluated in numbered order.",
+        "NACLs are per-instance",
+        "Security Groups are stateless"
+      ],
+      "answerIndex": 1,
+      "explanation": "SG: attached to instances, stateful (return traffic auto-allowed), only allow rules, last-match semantics actually all rules evaluate. NACL: applied to entire subnet, stateless (must explicitly allow return), allow AND deny rules, numbered order (first match).",
+      "tags": [
+        "firewalls",
+        "aws",
+        "security-groups",
+        "nacl"
+      ]
+    },
+    {
+      "id": "fw-q6",
+      "type": "mcq",
+      "prompt": "What is a WAF (Web Application Firewall)?",
+      "choices": [
+        "A wireless access firewall",
+        "Layer 7 firewall that inspects HTTP content — blocks SQL injection, XSS, rate abuse, known attack patterns",
+        "A network switch",
+        "A VPN endpoint"
+      ],
+      "answerIndex": 1,
+      "explanation": "WAF decrypts HTTPS, inspects HTTP request/response. Rules: block requests matching SQL injection patterns, XSS payloads, known malicious user agents. Rate limit IPs. Geo-block countries. AWS WAF, Cloudflare WAF, ModSecurity are common. Layer 3/4 firewalls cannot see inside encrypted HTTPS.",
+      "tags": [
+        "firewalls",
+        "waf",
+        "layer7"
+      ]
+    },
+    {
+      "id": "fw-q7",
+      "type": "mcq",
+      "prompt": "What is a DMZ (Demilitarized Zone) in network security?",
+      "choices": [
+        "A zone with no firewall",
+        "A subnet between the internet and internal network — contains public-facing servers (web, load balancer). Separate firewall protects internal network from DMZ.",
+        "A database isolation zone",
+        "A VPN tunnel"
+      ],
+      "answerIndex": 1,
+      "explanation": "DMZ: public web servers live here (must face internet). Internal app servers and databases live in private network behind second firewall. If web server is compromised: attacker is in DMZ, not internal network. Two firewalls = two layers of protection.",
+      "tags": [
+        "firewalls",
+        "dmz",
+        "network-zones"
+      ]
+    },
+    {
+      "id": "fw-q8",
+      "type": "mcq",
+      "prompt": "What is a SYN flood attack and how do firewalls defend against it?",
+      "choices": [
+        "Flooding with legitimate traffic",
+        "Attacker sends millions of SYN packets without completing TCP handshake — fills server's half-open connection table. Defense: SYN cookies, rate limiting SYN packets per source IP.",
+        "DNS amplification attack",
+        "ICMP flood"
+      ],
+      "answerIndex": 1,
+      "explanation": "SYN flood: server allocates state for each SYN waiting for ACK. 1M SYNs from spoofed IPs: table exhausted, real users get connection refused. SYN cookies: server encodes state in the SYN-ACK sequence number instead of storing it. No table entry until ACK arrives with valid cookie.",
+      "tags": [
+        "firewalls",
+        "syn-flood",
+        "ddos"
+      ]
+    },
+    {
+      "id": "fw-q9",
+      "type": "mcq",
+      "prompt": "What is default-deny in firewall rules?",
+      "choices": [
+        "Block traffic by default during maintenance",
+        "Final rule that blocks ALL traffic not explicitly allowed — forces security by explicit permission rather than explicit blocking",
+        "Deny all internal traffic",
+        "Cloud provider blocks all by default"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default-deny: last rule = DENY ALL. Every service you need must be explicitly opened. Principle of least privilege at network level. Alternative (default-allow) is dangerous: must explicitly block every bad IP/port, impossible to enumerate all threats. AWS Security Groups: default deny (no inbound allowed unless explicitly added).",
+      "tags": [
+        "firewalls",
+        "default-deny",
+        "security"
+      ]
+    },
+    {
+      "id": "fw-q10",
+      "type": "mcq",
+      "prompt": "Why are AWS Security Groups preferred over NACLs for most use cases?",
+      "choices": [
+        "NACLs are deprecated",
+        "Security Groups are stateful (return traffic auto-allowed), attached per-instance (granular), and use only ALLOW rules (simpler). NACLs are stateless (must manage return traffic), subnet-wide (less granular), but can DENY.",
+        "Security Groups are faster",
+        "NACLs cost more"
+      ],
+      "answerIndex": 1,
+      "explanation": "SG: create inbound rule TCP 5432 from app-sg -> return traffic automatic. NACL: need inbound rule TCP 5432 from app-subnet AND outbound rule TCP 1024-65535 to app-subnet (ephemeral port range). SGs are simpler. Use NACLs for: subnet-level IP blocking (DDoS mitigation) or compliance DENY rules.",
+      "tags": [
+        "firewalls",
+        "aws",
+        "security-groups"
+      ]
+    },
+    {
+      "id": "fw-q11",
+      "type": "mcq",
+      "prompt": "What OSI layer do traditional packet-filtering firewalls operate at?",
+      "choices": [
+        "Layer 7 (Application)",
+        "Layer 5 (Session)",
+        "Layer 3-4 (Network/Transport) — can inspect IP addresses, TCP ports, protocols but not application payload inside encrypted connections",
+        "Layer 1 (Physical)"
+      ],
+      "answerIndex": 2,
+      "explanation": "L3 (IP): filter by source/dest IP. L4 (TCP/UDP): filter by port, TCP flags. Cannot see what's inside TCP payload (especially when encrypted with TLS). WAF (L7): TLS terminated, full visibility into HTTP request. Choose based on what inspection depth is needed.",
+      "tags": [
+        "firewalls",
+        "osi",
+        "layers"
+      ]
+    },
+    {
+      "id": "fw-q12",
+      "type": "mcq",
+      "prompt": "What is egress filtering in firewall rules?",
+      "choices": [
+        "Filtering incoming traffic only",
+        "Controlling OUTBOUND traffic from your network — prevents compromised servers from phoning home to attacker C2, limits data exfiltration",
+        "Encryption of outbound data",
+        "A VPN technology"
+      ],
+      "answerIndex": 1,
+      "explanation": "Most orgs focus on inbound (block attackers). Egress filtering = control what goes OUT. Compromised server tries to connect to attacker's C2 server: egress firewall blocks (only allow known outbound: 443 to known CDNs/APIs). Limits blast radius of compromise.",
+      "tags": [
+        "firewalls",
+        "egress"
+      ]
+    },
+    {
+      "id": "fw-q13",
+      "type": "mcq",
+      "prompt": "What is IP whitelisting vs blacklisting in firewall rules?",
+      "choices": [
+        "They are identical security approaches",
+        "Whitelist: allow ONLY specific IPs (default deny all others). Blacklist: deny SPECIFIC IPs (allow everything else). Whitelist is more secure but requires maintenance.",
+        "Blacklisting is always better",
+        "Whitelisting only works for IPv4"
+      ],
+      "answerIndex": 1,
+      "explanation": "Whitelist (allowlist): allow IPs 1.2.3.4 and 4.5.6.7, deny all others. Safe default. Hard to maintain (must update when IPs change). Blacklist (denylist): deny known bad IPs. Easier but reactive (must keep up with new threats). Principle: whitelist internal APIs, deny-all external, whitelist specific CDN/partner IPs.",
+      "tags": [
+        "firewalls",
+        "whitelist",
+        "blacklist"
+      ]
+    },
+    {
+      "id": "fw-q14",
+      "type": "mcq",
+      "prompt": "What is a next-generation firewall (NGFW)?",
+      "choices": [
+        "A firewall from the future",
+        "Combines traditional stateful firewall with deep packet inspection, application awareness, intrusion prevention (IPS), and TLS inspection",
+        "A cloud-only firewall",
+        "A firewall with AI"
+      ],
+      "answerIndex": 1,
+      "explanation": "NGFW: all of stateful L3/L4 + application identification (is this Facebook? TikTok? Zoom? regardless of port) + IPS (detect and block attack patterns) + SSL/TLS inspection (decrypt, inspect, re-encrypt) + user identification (block specific users, not just IPs). Palo Alto, Fortinet, Cisco Firepower are NGFW vendors.",
+      "tags": [
+        "firewalls",
+        "ngfw"
+      ]
+    },
+    {
+      "id": "fw-q15",
+      "type": "mcq",
+      "prompt": "What port and protocol should almost always be blocked from public internet to databases?",
+      "choices": [
+        "Port 443 (HTTPS)",
+        "Port 80 (HTTP)",
+        "Database ports (5432 PostgreSQL, 3306 MySQL, 27017 MongoDB) should NEVER be reachable from public internet — databases belong in private subnets only",
+        "Port 53 (DNS)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Databases in public subnets with open ports: attackers can attempt direct connections. Default postgres password? Compromised instantly. Databases MUST be in private subnets. Only app servers (in same VPC) connect via security group rule. Firewall rule: PostgreSQL port accessible only from app-server security group.",
+      "tags": [
+        "firewalls",
+        "database",
+        "security"
+      ]
+    },
+    {
+      "id": "fw-q16",
+      "type": "mcq",
+      "prompt": "What is intrusion detection vs intrusion prevention (IDS vs IPS)?",
+      "choices": [
+        "They are identical",
+        "IDS: monitors and ALERTS on suspicious traffic (passive). IPS: monitors and ACTIVELY BLOCKS suspicious traffic (inline). IPS is in the traffic path, IDS is a copy.",
+        "IDS is newer",
+        "IPS requires hardware"
+      ],
+      "answerIndex": 1,
+      "explanation": "IDS: receives a copy of traffic (port mirror), analyzes, sends alerts. If it misses something: no impact (it's just monitoring). IPS: sits inline in traffic path, drops suspicious packets. If it false-positives: legitimate traffic blocked. Most NGFWs combine IDS+IPS modes.",
+      "tags": [
+        "firewalls",
+        "ids",
+        "ips"
+      ]
+    },
+    {
+      "id": "fw-q17",
+      "type": "mcq",
+      "prompt": "What is TLS/SSL inspection by a firewall?",
+      "choices": [
+        "Blocking all HTTPS traffic",
+        "Firewall acts as man-in-the-middle: decrypts TLS, inspects plaintext HTTP, re-encrypts. Requires installing firewall's CA cert as trusted on client machines.",
+        "A VPN protocol",
+        "Encrypting firewall logs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without TLS inspection: WAF/NGFW sees encrypted blob. Can't detect SQLi/XSS in HTTPS. SSL inspection: firewall has certificate authority cert. Decrypts client's HTTPS, inspects, re-encrypts with real server cert (signed by firewall CA). Client must trust firewall CA. Common in corporate networks.",
+      "tags": [
+        "firewalls",
+        "tls",
+        "inspection"
+      ]
+    },
+    {
+      "id": "fw-q18",
+      "type": "mcq",
+      "prompt": "What is the principle of least privilege applied to firewall rules?",
+      "choices": [
+        "Grant all access then revoke",
+        "Allow only the minimum network access needed for each service to function. App server: needs port 5432 to DB, port 443 outbound for APIs. Nothing else needed = nothing else allowed.",
+        "Use default-allow for convenience",
+        "Share security groups across all services"
+      ],
+      "answerIndex": 1,
+      "explanation": "Least privilege at network level: each security group allows only the specific ports and sources it needs. App server SG: inbound 443 from ALB-SG only, outbound 5432 to DB-SG only, outbound 443 to 0.0.0.0/0. Not: all traffic allowed. Limits lateral movement if server is compromised.",
+      "tags": [
+        "firewalls",
+        "least-privilege",
+        "security"
+      ]
+    },
+    {
+      "id": "fw-q19",
+      "type": "mcq",
+      "prompt": "What is a bastion host (jump server)?",
+      "choices": [
+        "A high-availability server",
+        "A hardened entry point for SSH access to private subnet servers — the only server with SSH port 22 open from internet, all other servers only allow SSH from bastion IP",
+        "A database server",
+        "A load balancer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bastion: port 22 open only from specific IPs (office IP, engineer home IPs). Internal servers: port 22 open only from bastion's security group. To access internal server: SSH to bastion -> SSH from bastion to internal server. Reduces attack surface to one hardened host with MFA/audit logging.",
+      "tags": [
+        "firewalls",
+        "bastion",
+        "ssh"
+      ]
+    },
+    {
+      "id": "fw-q20",
+      "type": "mcq",
+      "prompt": "How does a Security Group reference work in AWS (source = another SG)?",
+      "choices": [
+        "Only IP ranges can be sources",
+        "A Security Group rule with source = another SG ID allows traffic from any resource with that SG attached, regardless of IP — auto-updates as instances scale",
+        "SG references require static IPs",
+        "SG references are deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDS SG inbound rule: source = app-server-sg. ANY EC2 with app-server-sg attached can connect. New EC2 added to auto-scaling group? It gets app-server-sg automatically, immediately can reach RDS. Better than IP-based: IPs change as instances scale. SG-to-SG references are the correct AWS pattern.",
+      "tags": [
+        "firewalls",
+        "aws",
+        "security-groups"
       ]
     }
   ],
@@ -83,10 +387,56 @@
     {
       "id": "fw-fc3",
       "front": "Default deny principle",
-      "back": "DENY ALL by default, then ALLOW minimum required. Reduces attack surface \u2014 misconfiguration adds security rather than removing it.",
+      "back": "DENY ALL by default, then ALLOW minimum required. Reduces attack surface — misconfiguration adds security rather than removing it.",
       "tags": [
         "firewalls",
         "security"
+      ]
+    },
+    {
+      "id": "fw-fc4",
+      "front": "Stateful vs stateless firewall",
+      "back": "Stateless: per-packet decision, no memory, must allow both directions. Stateful: tracks connections in state table, return traffic auto-allowed, detects port scans. AWS Security Groups = stateful. NACLs = stateless.",
+      "tags": [
+        "firewalls",
+        "stateful"
+      ]
+    },
+    {
+      "id": "fw-fc5",
+      "front": "AWS Security Group vs NACL",
+      "back": "SG: stateful, per-instance, ALLOW rules only, SG-to-SG references. NACL: stateless, per-subnet, ALLOW+DENY, numbered order. Use SG for most. Use NACL for: subnet-level IP blocking, compliance DENY rules, DDoS mitigation.",
+      "tags": [
+        "firewalls",
+        "aws"
+      ]
+    },
+    {
+      "id": "fw-fc6",
+      "front": "WAF vs traditional firewall",
+      "back": "L3/L4 firewall: filters by IP, port, protocol. Cannot see inside TLS. WAF (L7): decrypts HTTPS, inspects HTTP payload, blocks SQLi/XSS/bots, rate limits by IP/user. Run both: firewall for network control, WAF for application protection.",
+      "tags": [
+        "firewalls",
+        "waf"
+      ]
+    },
+    {
+      "id": "fw-fc7",
+      "front": "Default-deny principle",
+      "back": "Last rule = DENY ALL. Only explicitly opened ports/IPs are allowed. Principle of least privilege at network level. AWS SG default: deny all inbound, allow all outbound. Best practice: also lock down outbound (egress filtering).",
+      "tags": [
+        "firewalls",
+        "default-deny"
+      ]
+    },
+    {
+      "id": "fw-fc8",
+      "front": "Database firewall rule",
+      "back": "NEVER open DB ports (5432, 3306, 27017) to internet. RDS SG inbound: allow TCP 5432 from app-server-sg ONLY. DB in private subnet (no public IP). App server connects via private VPC network. Bastion for admin access.",
+      "tags": [
+        "firewalls",
+        "database",
+        "aws"
       ]
     }
   ],

@@ -7,408 +7,437 @@
   "prereqs": [
     "aws-practitioner"
   ],
-  "guide": "# AWS Mastery - Lambda and Beyond\n\n> **Reading time:** ~15 min\n\n## What is AWS Mastery - Lambda and Beyond?\n\nAWS Mastery - Lambda and Beyond addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd AWS Mastery - Lambda and Beyond when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nAWS Mastery - Lambda and Beyond\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: lambda\n",
+  "guide": "# AWS Mastery — Lambda, API Gateway, CloudFormation, CDK\n\n## Beyond the Basics — What This Course Covers\n\nAWS Practitioner gives you the vocabulary. AWS Mastery is about building real systems.\nThis topic focuses on the serverless-first, infrastructure-as-code approach that\nmodern AWS engineers use daily.\n\n```\nThe serverless stack you will master:\n\n  Client Browser/Mobile\n        |\n        | HTTPS\n        v\n  API Gateway   --- routes requests by path/method\n        |\n        v\n  Lambda Functions  --- stateless business logic\n        |\n        v\n  DynamoDB / RDS / S3 / ElastiCache  --- data tier\n\nAll of this defined in code (CDK/SAM/CloudFormation)\nDeployed and updated via CI/CD pipeline\n```\n\n---\n\n## Lambda Deep Dive — Memory, Concurrency, Invocation Types\n\n```\nMEMORY AND CPU:\n  Lambda: 128MB - 10,240MB memory\n  CPU is proportional to memory (no separate CPU setting)\n  128MB  = 0.125 vCPU\n  1024MB = 1 vCPU\n  10GB   = ~6 vCPU\n\n  Key insight: increasing memory often reduces duration enough to be cost-neutral\n  or cheaper. Profile your function.\n\n  Cost = (duration in ms) x (memory in GB) x price_per_GB_second\n  512MB for 100ms vs 1024MB for 50ms = same cost, twice the speed\n\nINVOCATION TYPES:\n  Synchronous:  caller waits for response\n    API Gateway -> Lambda -> caller gets response\n    If Lambda errors: caller immediately gets error\n\n  Asynchronous: caller doesn't wait\n    S3 event, SNS, EventBridge -> Lambda\n    Lambda retries 2x on failure\n    Configure DLQ for failed events\n\n  Stream/Poll:  Lambda polls the source\n    SQS, Kinesis, DynamoDB Streams -> Lambda\n    Lambda manages polling, you manage batch size and concurrency\n\nCONCURRENCY TYPES:\n  Unreserved concurrency:  shares account limit (default 1000)\n  Reserved concurrency:    guarantees N for this function, caps it at N\n  Provisioned concurrency: pre-warms containers (eliminates cold start)\n\nLAMBDA EXECUTION CONTEXT REUSE:\n  INIT code (outside handler):  runs once per cold start\n    db_client = boto3.client('dynamodb')     # runs once\n    secret = get_secret()                     # runs once\n\n  HANDLER code:  runs on every invocation\n    def handler(event, context):\n        result = db_client.get_item(...)     # reuses connection\n        return result\n```\n\n---\n\n## API Gateway — Types and Configuration\n\nAPI Gateway is the front door for your Lambda-based APIs.\nTwo main flavours:\n\n```\nREST API (API Gateway v1):\n  Full-featured: request/response transformation, API keys, usage plans,\n  WAF integration, per-stage deployments, stage variables\n  More expensive, more configuration\n  Use when: you need API keys for third-party access, custom authorisers,\n  request validation, response mapping\n\nHTTP API (API Gateway v2):\n  Simpler, 70% cheaper than REST API\n  Lower latency\n  Supports: JWT authorisers, CORS, Lambda proxy\n  Missing: API keys, usage plans, request/response transformation\n  Use when: simple Lambda proxy, internal microservices, JWT auth\n\nREQUEST FLOW:\n  Browser sends: POST /users\n        |\n        v\n  API Gateway receives request\n  Validates (optional: request schema, API key)\n  Applies authoriser (optional: Lambda authoriser, JWT)\n        |\n        v\n  Lambda invoked with event:\n  {\n    httpMethod: 'POST',\n    path: '/users',\n    headers: {...},\n    body: '{\"name\": \"Alice\"}'\n  }\n        |\n        v\n  Lambda returns:\n  {\n    statusCode: 201,\n    headers: {'Content-Type': 'application/json'},\n    body: '{\"userId\": \"abc123\"}'\n  }\n        |\n        v\n  API Gateway forwards response to browser\n\nAUTHORISATION:\n  Lambda Authoriser:  custom Bearer token validation lambda\n                      returns IAM policy allowing/denying access\n  JWT Authoriser:     API Gateway validates JWT against JWKS endpoint\n                      (Cognito, Auth0, custom)\n  IAM Authoriser:     AWS Signature V4 — for service-to-service calls\n  Cognito Authoriser: built-in Cognito User Pool integration\n```\n\n---\n\n## CloudFormation — Infrastructure as Code\n\nCloudFormation lets you define ALL your AWS infrastructure in a YAML/JSON template.\nThe same template, deployed twice, creates identical environments every time.\n\n```yaml\n# cloudformation-template.yaml\nAWSTemplateFormatVersion: '2010-09-09'\nDescription: Simple web app infrastructure\n\nParameters:\n  Environment:\n    Type: String\n    AllowedValues: [dev, staging, production]\n    Default: dev\n\nResources:\n  # DynamoDB Table\n  UsersTable:\n    Type: AWS::DynamoDB::Table\n    Properties:\n      TableName: !Sub 'users-${Environment}'\n      BillingMode: PAY_PER_REQUEST\n      AttributeDefinitions:\n        - AttributeName: userId\n          AttributeType: S\n      KeySchema:\n        - AttributeName: userId\n          KeyType: HASH\n\n  # Lambda Function\n  GetUserFunction:\n    Type: AWS::Lambda::Function\n    Properties:\n      FunctionName: !Sub 'get-user-${Environment}'\n      Runtime: python3.12\n      Handler: index.handler\n      MemorySize: 512\n      Timeout: 10\n      Role: !GetAtt LambdaExecutionRole.Arn\n      Environment:\n        Variables:\n          TABLE_NAME: !Ref UsersTable\n\n  # IAM Role for Lambda\n  LambdaExecutionRole:\n    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n        Version: '2012-10-17'\n        Statement:\n          - Effect: Allow\n            Principal: {Service: lambda.amazonaws.com}\n            Action: sts:AssumeRole\n      ManagedPolicyArns:\n        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole\n      Policies:\n        - PolicyName: DynamoDBAccess\n          PolicyDocument:\n            Statement:\n              - Effect: Allow\n                Action: [dynamodb:GetItem, dynamodb:PutItem]\n                Resource: !GetAtt UsersTable.Arn\n\nOutputs:\n  TableName:\n    Value: !Ref UsersTable\n    Export:\n      Name: !Sub '${Environment}-UsersTableName'\n```\n\n```bash\n# Deploy:\naws cloudformation deploy \\\n  --template-file template.yaml \\\n  --stack-name my-app-production \\\n  --parameter-overrides Environment=production \\\n  --capabilities CAPABILITY_IAM\n\n# Update (same command — CF detects changes, updates only what changed):\naws cloudformation deploy ...\n\n# Delete everything:\naws cloudformation delete-stack --stack-name my-app-production\n```\n\n---\n\n## AWS CDK — CloudFormation with Real Code\n\nCDK (Cloud Development Kit) lets you define infrastructure in TypeScript, Python,\nJava, or Go. It compiles to CloudFormation under the hood.\n\n**Why CDK over raw CloudFormation?**\n```\nCloudFormation YAML:                    CDK (TypeScript):\n  500 lines of YAML                       100 lines of TypeScript\n  No loops, no conditions (limited)       Full programming language features\n  No type checking                        TypeScript type safety\n  No IDE completion                       Full IDE autocompletion\n  Copy-paste for repetition               Loops, functions, abstractions\n  Hard to understand structure            Code is self-documenting\n```\n\n```typescript\n// AWS CDK TypeScript example\nimport * as cdk from 'aws-cdk-lib';\nimport * as lambda from 'aws-cdk-lib/aws-lambda';\nimport * as apigateway from 'aws-cdk-lib/aws-apigateway';\nimport * as dynamodb from 'aws-cdk-lib/aws-dynamodb';\n\nexport class MyAppStack extends cdk.Stack {\n  constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {\n    super(scope, id, props);\n\n    // DynamoDB Table\n    const table = new dynamodb.Table(this, 'UsersTable', {\n      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },\n      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,\n      removalPolicy: cdk.RemovalPolicy.RETAIN,  // don't delete on stack delete\n    });\n\n    // Lambda Function\n    const getUser = new lambda.Function(this, 'GetUser', {\n      runtime: lambda.Runtime.PYTHON_3_12,\n      handler: 'index.handler',\n      code: lambda.Code.fromAsset('src/handlers/get-user'),\n      memorySize: 512,\n      timeout: cdk.Duration.seconds(10),\n      environment: {\n        TABLE_NAME: table.tableName,\n      },\n    });\n\n    // Grant Lambda access to table (CDK generates least-privilege IAM policy)\n    table.grantReadData(getUser);\n\n    // API Gateway\n    const api = new apigateway.RestApi(this, 'UsersApi');\n    api.root\n      .addResource('users')\n      .addResource('{userId}')\n      .addMethod('GET', new apigateway.LambdaIntegration(getUser));\n  }\n}\n```\n\n```bash\ncdk synth   # compile to CloudFormation YAML (review it)\ncdk diff    # show what would change if deployed\ncdk deploy  # deploy to AWS\ncdk destroy # tear down all resources in stack\n```\n\n---\n\n## Design Exercise: Serverless URL Shortener\n\nDesign a URL shortener (like bit.ly) using serverless AWS services.\nThis is a classic AWS design interview question.\n\n```\nRequirements:\n  POST /shorten  body: {longUrl: 'https://...'} -> returns {shortCode: 'abc123'}\n  GET  /{code}   -> 301 redirect to original URL\n\nArchitecture:\n\n  Client\n    |\n    v\n  API Gateway (HTTP API)\n    |\n    +--- POST /shorten ---> Lambda: ShortenUrl\n    |                           |\n    |                       DynamoDB: put item\n    |                           {shortCode: 'abc123', longUrl: '...', ttl: ...}\n    |                           Return {shortCode: 'abc123'}\n    |\n    +--- GET /{code} ----> Lambda: RedirectUrl\n                               |\n                           DynamoDB: get item by shortCode\n                           Return 301 Location: longUrl\n\nDesign decisions:\n  Short code generation:\n    Option A: hash(longUrl) -> take first 6 chars of MD5\n    Option B: base62(auto-increment counter in DynamoDB atomic counter)\n    Option C: random 6-char alphanumeric, check for collisions\n\n  DynamoDB schema:\n    PK: shortCode (partition key)\n    Attributes: longUrl, createdAt, userId, clickCount\n    TTL attribute: auto-expire codes after 1 year\n\n  CDK stack includes:\n    DynamoDB table (PAY_PER_REQUEST, TTL enabled)\n    2 Lambda functions (ShortenUrl, RedirectUrl)\n    API Gateway HTTP API (2 routes)\n    Lambda execution roles (least privilege DynamoDB access)\n    CloudWatch alarms (error rate > 1%)\n```\n\n---\n\n## X-Ray — Distributed Tracing\n\n```\nX-Ray traces requests as they flow through your distributed system.\nWithout X-Ray: 'My API is slow, but which Lambda / which DynamoDB call?'\nWith X-Ray: see a timeline of every service hop with durations.\n\n  API Gateway (5ms)\n    |\n    v\n  Lambda: GetUser (250ms total)\n    |\n    +-- DynamoDB GetItem (45ms)  <- this is slow!\n    +-- ElastiCache Get (2ms)\n    +-- Processing (200ms)\n\nEnable in Lambda:\n  In CDK:  tracing: lambda.Tracing.ACTIVE\n  In SAM:  Tracing: Active\n\nAdds subsegments automatically for AWS SDK calls.\nAdd custom subsegments for expensive business logic.\nView traces in AWS Console -> X-Ray -> Service Map.\n```\n\n---\n\n## Secrets Manager and Parameter Store\n\n```\nNever hardcode secrets in Lambda environment variables or code.\n\nAWS SECRETS MANAGER:\n  Store: DB passwords, API keys, certificates\n  Automatic rotation: rotates RDS passwords automatically\n  Access: Lambda fetches secret at runtime\n  Cost: $0.40/secret/month + API calls\n\n  # Lambda (Python) example:\n  import boto3, json\n  client = boto3.client('secretsmanager')\n  secret = json.loads(client.get_secret_value(\n      SecretId='prod/myapp/db-password',\n  )['SecretString'])\n  DB_PASSWORD = secret['password']\n\n  Cache secrets in Lambda global scope (fetched once per cold start).\n\nAWS SYSTEMS MANAGER PARAMETER STORE:\n  Store: non-sensitive config that needs versioning\n  SecureString tier: encrypted with KMS\n  Free for standard parameters\n  Use for: feature flags, config values, environment-specific settings\n\nWHEN TO USE WHICH:\n  Secrets Manager: actual secrets (passwords, API keys) + auto-rotation\n  Parameter Store: config values, feature flags, non-secret strings\n```\n\n---\n\n## VPC Lambda — When and Why\n\n```\nBy default, Lambda runs OUTSIDE your VPC and cannot access:\n  - RDS in private subnet\n  - ElastiCache in private subnet\n  - Other private resources\n\nVPC Lambda: attach Lambda to your VPC subnets\n  Lambda can now reach private resources inside the VPC\n  Lambda gets an ENI (Elastic Network Interface) in your subnet\n\nTRADE-OFF:\n  VPC Lambda: can reach RDS, ElastiCache\n  Non-VPC Lambda: faster cold start, can reach internet directly\n\nVPC Lambda cold starts: used to be much slower (ENI creation)\nAWS fixed this in 2019 — VPC Lambda cold starts now similar to non-VPC\n\nCONFIGURATION:\n  Lambda -> Configuration -> VPC\n  Select VPC, private subnets, security group\n  Security group: must allow outbound to RDS security group on port 5432\n  RDS security group: must ALLOW inbound from Lambda security group\n\nCDK example:\n  const fn = new lambda.Function(this, 'MyFn', {\n    vpc: myVpc,\n    vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },\n    securityGroups: [lambdaSg],\n    ... other props\n  })\n```\n\n---\n\n## Mind Map\n\n```\nAWS MASTERY\n|\n+-- LAMBDA ADVANCED\n|   +-- Memory = CPU (proportional)\n|   +-- Sync / Async / Stream invocation types\n|   +-- Reserved vs Provisioned concurrency\n|   +-- Execution context reuse (global scope)\n|   +-- VPC Lambda (private resource access)\n|\n+-- API GATEWAY\n|   +-- REST API (full features, expensive)\n|   +-- HTTP API (simpler, 70% cheaper)\n|   +-- Authorisation: JWT, Lambda, IAM, Cognito\n|   +-- Request/response flow and event structure\n|\n+-- CLOUDFORMATION\n|   +-- YAML/JSON template declares resources\n|   +-- Parameters, Outputs, !Ref, !GetAtt\n|   +-- Stacks: create / update / delete atomically\n|\n+-- CDK\n|   +-- TypeScript/Python/Java -> CloudFormation\n|   +-- Type safety, IDE support, real code constructs\n|   +-- cdk synth / diff / deploy / destroy\n|   +-- grantReadData = least-privilege auto-IAM\n|\n+-- OBSERVABILITY\n|   +-- X-Ray (distributed tracing)\n|   +-- CloudWatch (metrics, logs, alarms)\n|\n+-- SECRETS\n    +-- Secrets Manager (passwords + rotation)\n    +-- Parameter Store (config + feature flags)\n```\n\n---\n\n## How AWS Mastery Connects to Other Topics\n\n- **Serverless Patterns**: This topic adds depth to Lambda + API Gateway coverage.\n  CDK/CloudFormation is how you actually deploy those patterns.\n- **CI/CD**: CDK deploy wired into your CI/CD pipeline = GitOps for AWS infrastructure.\n- **Security**: IAM roles for Lambda, Secrets Manager, VPC isolation — all security fundamentals.\n- **Docker/K8s**: CDK also deploys ECS Fargate and EKS — the same IaC approach applies.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **AWS CDK Course for Beginners** by freeCodeCamp:\n  https://www.youtube.com/watch?v=T-H4nJQyMig\n  - 3 hours. Build real infrastructure with CDK TypeScript.\n- **API Gateway + Lambda Deep Dive** by Be A Better Dev:\n  https://www.youtube.com/watch?v=M91vXdjve7A\n  - REST vs HTTP API comparison, authorisers, performance.\n\n### Free Books and Articles\n- **AWS CDK Official Workshop**: https://cdkworkshop.com/\n  - Interactive CDK tutorial. Build a complete serverless app step by step.\n- **The CDK Book** (free chapter): https://thecdkbook.com/\n- **AWS Well-Architected Serverless Lens**: https://docs.aws.amazon.com/wellarchitected/latest/serverless-applications-lens/\n\n### Practice\n- **Build a Serverless URL Shortener** — implement the design exercise in this guide.\n- **CDK Patterns**: https://cdkpatterns.com/ — ready-made CDK patterns for common architectures.",
   "questions": [
     {
       "id": "aws-mastery-q1",
       "type": "mcq",
-      "prompt": "Core concept 1: which statement best describes AWS Mastery - Lambda and Beyond?",
+      "prompt": "In Lambda, what is the relationship between memory and CPU?",
       "choices": [
-        "AWS Mastery - Lambda and Beyond always requires dedicated hardware",
-        "AWS Mastery - Lambda and Beyond trade-offs depend on requirements and scale",
-        "AWS Mastery - Lambda and Beyond is only for large enterprises",
-        "AWS Mastery - Lambda and Beyond eliminates all database needs"
+        "CPU and memory are configured independently",
+        "There is no CPU — Lambda is memory only",
+        "CPU scales proportionally with memory — more memory = more vCPU. 128MB ≈ 0.125 vCPU, 1024MB ≈ 1 vCPU",
+        "CPU is fixed at 1 vCPU regardless of memory"
       ],
-      "answerIndex": 1,
-      "explanation": "AWS Mastery - Lambda and Beyond is context-dependent. Trade-offs matter more than API memorisation.",
+      "answerIndex": 2,
+      "explanation": "Lambda has no separate CPU setting. Allocate more memory and you get proportionally more CPU. Often doubling memory reduces duration enough that cost stays the same or decreases while performance doubles.",
       "tags": [
         "lambda",
-        "fundamentals"
+        "performance",
+        "memory"
       ]
     },
     {
       "id": "aws-mastery-q2",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Mastery - Lambda and Beyond is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
+      "type": "mcq",
+      "prompt": "What is the difference between synchronous and asynchronous Lambda invocation?",
+      "choices": [
+        "No difference in practice",
+        "Sync: caller waits for response, gets error immediately on failure. Async: caller returns immediately, Lambda retries 2x on failure, DLQ captures final failures",
+        "Async is always faster",
+        "Sync invocations don't support retry"
       ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "answerIndex": 1,
+      "explanation": "API Gateway -> Lambda: synchronous (caller waits). S3/SNS/EventBridge -> Lambda: asynchronous (event source doesn't wait). Async adds 2 automatic retries and DLQ support. Choose based on whether the caller needs a real-time response.",
       "tags": [
         "lambda",
-        "trade-offs"
+        "invocation-types"
       ]
     },
     {
       "id": "aws-mastery-q3",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Mastery - Lambda and Beyond to a system?",
+      "prompt": "What is the key advantage of AWS CDK over raw CloudFormation YAML?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "CDK is faster to deploy",
+        "CDK uses a real programming language (TypeScript/Python/Java) enabling loops, functions, type safety, and IDE autocompletion — making complex infra manageable",
+        "CDK doesn't use CloudFormation",
+        "CDK is always cheaper"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "CDK compiles to CloudFormation under the hood but lets you write real code. 500-line CloudFormation YAML becomes 100-line TypeScript. Use loops to create 5 identical resources. Use functions for reusable patterns. IDE catches type errors before deployment.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "cdk",
+        "cloudformation",
+        "iac"
       ]
     },
     {
       "id": "aws-mastery-q4",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Mastery - Lambda and Beyond system is healthy?",
+      "prompt": "What does `table.grantReadData(lambdaFn)` do in CDK?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Copies table data to Lambda",
+        "Creates a CloudWatch alarm",
+        "Automatically generates an IAM policy granting the Lambda role minimum DynamoDB read permissions on that specific table",
+        "Configures DynamoDB Streams"
       ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "answerIndex": 2,
+      "explanation": "CDK's grant methods implement least privilege automatically. grantReadData creates a policy allowing only GetItem, Query, Scan on that table. No need to write IAM JSON by hand. CDK knows what permissions each action requires.",
       "tags": [
-        "lambda",
-        "monitoring"
+        "cdk",
+        "iam",
+        "least-privilege"
       ]
     },
     {
       "id": "aws-mastery-q5",
       "type": "mcq",
-      "prompt": "Core concept 5: which statement best describes AWS Mastery - Lambda and Beyond?",
+      "prompt": "What is the difference between REST API and HTTP API in API Gateway?",
       "choices": [
-        "AWS Mastery - Lambda and Beyond always requires dedicated hardware",
-        "AWS Mastery - Lambda and Beyond trade-offs depend on requirements and scale",
-        "AWS Mastery - Lambda and Beyond is only for large enterprises",
-        "AWS Mastery - Lambda and Beyond eliminates all database needs"
+        "REST API is HTTP, HTTP API is WebSocket",
+        "REST API: full features (API keys, usage plans, transformations, WAF). HTTP API: simpler, 70% cheaper, JWT auth. Use HTTP API unless you need REST API features.",
+        "They are identical",
+        "REST API only works with Lambda"
       ],
       "answerIndex": 1,
-      "explanation": "AWS Mastery - Lambda and Beyond is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "HTTP API launched in 2019: lower latency, 70% cheaper, supports JWT authorisers and Lambda proxy. Missing: API keys, usage plans, request/response transformation, per-method throttling. Use HTTP API as default for new projects.",
       "tags": [
-        "lambda",
-        "fundamentals"
+        "api-gateway",
+        "rest-api",
+        "http-api"
       ]
     },
     {
       "id": "aws-mastery-q6",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Mastery - Lambda and Beyond is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
+      "type": "mcq",
+      "prompt": "Why would you attach a Lambda function to a VPC?",
+      "choices": [
+        "VPC Lambda always runs faster",
+        "To access private resources in the VPC — RDS databases, ElastiCache caches, internal services — that have no public internet endpoint",
+        "VPC Lambda is required for all production functions",
+        "To reduce Lambda costs"
       ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "answerIndex": 1,
+      "explanation": "Non-VPC Lambda runs outside your VPC. It can hit public internet but not your private RDS or ElastiCache. VPC Lambda gets a network interface in your private subnet, enabling access to private resources. Cold starts are now similar to non-VPC.",
       "tags": [
         "lambda",
-        "trade-offs"
+        "vpc",
+        "networking"
       ]
     },
     {
       "id": "aws-mastery-q7",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Mastery - Lambda and Beyond to a system?",
+      "prompt": "What does `cdk diff` do?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "Shows git diff for CDK files",
+        "Shows what AWS resource changes WOULD be made if you ran cdk deploy — without actually deploying",
+        "Compares two CDK stacks",
+        "Rolls back the last deployment"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "cdk diff is like git diff but for infrastructure. It compares your current CDK code against what is deployed and shows: resources to add, modify, or delete. Always run cdk diff before cdk deploy in production.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "cdk",
+        "safety"
       ]
     },
     {
       "id": "aws-mastery-q8",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Mastery - Lambda and Beyond system is healthy?",
+      "prompt": "What is AWS X-Ray used for?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Security vulnerability scanning",
+        "Distributed tracing — shows the request journey across Lambda, DynamoDB, API Gateway with timing for each segment to identify bottlenecks",
+        "Monitoring billing",
+        "Log aggregation"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "X-Ray traces requests end-to-end. Instead of 'my API is slow', you see: API Gateway 5ms -> Lambda 250ms (DynamoDB 45ms + processing 200ms). Identify the slow subsegment. Enable with Tracing: Active in Lambda config.",
       "tags": [
-        "lambda",
-        "monitoring"
+        "x-ray",
+        "observability",
+        "tracing"
       ]
     },
     {
       "id": "aws-mastery-q9",
       "type": "mcq",
-      "prompt": "Core concept 9: which statement best describes AWS Mastery - Lambda and Beyond?",
+      "prompt": "When should you use Secrets Manager over Parameter Store?",
       "choices": [
-        "AWS Mastery - Lambda and Beyond always requires dedicated hardware",
-        "AWS Mastery - Lambda and Beyond trade-offs depend on requirements and scale",
-        "AWS Mastery - Lambda and Beyond is only for large enterprises",
-        "AWS Mastery - Lambda and Beyond eliminates all database needs"
+        "Secrets Manager is always better",
+        "Secrets Manager for sensitive secrets that need automatic rotation (RDS passwords, API keys). Parameter Store for non-sensitive config, feature flags, app settings (free, simpler).",
+        "Parameter Store for all secrets",
+        "They serve identical purposes"
       ],
       "answerIndex": 1,
-      "explanation": "AWS Mastery - Lambda and Beyond is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Secrets Manager: $0.40/secret/month, supports automatic rotation of RDS passwords. Parameter Store: free for standard tier, simpler, no rotation. Use Secrets Manager for passwords/tokens that rotate. Parameter Store for DB hostnames, feature flags, config.",
       "tags": [
-        "lambda",
-        "fundamentals"
+        "secrets-manager",
+        "parameter-store",
+        "security"
       ]
     },
     {
       "id": "aws-mastery-q10",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Mastery - Lambda and Beyond is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
+      "type": "mcq",
+      "prompt": "What does CloudFormation's !Ref intrinsic function do?",
+      "choices": [
+        "Creates a reference to an external API",
+        "Returns the physical ID or value of a resource — used to pass resource identifiers (table name, ARN) to other resources in the same template",
+        "Imports a module",
+        "Makes an HTTP request"
       ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "answerIndex": 1,
+      "explanation": "!Ref UsersTable returns the DynamoDB table name. !GetAtt UsersTable.Arn returns the ARN. These are CF intrinsic functions for wiring resources together without hardcoding. Dynamic references that resolve at deploy time.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "cloudformation",
+        "intrinsic-functions"
       ]
     },
     {
       "id": "aws-mastery-q11",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Mastery - Lambda and Beyond to a system?",
+      "prompt": "In a serverless URL shortener, where should you store the short code to long URL mapping?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "In Lambda global variables (in-memory)",
+        "In S3 as JSON files",
+        "In DynamoDB with shortCode as partition key — fast key-value lookups, scales to billions of records, pay per request",
+        "In RDS with a URLs table"
       ],
-      "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "answerIndex": 2,
+      "explanation": "URL shortener: simple key-value lookup (shortCode -> longUrl). DynamoDB PK=shortCode. GetItem = single-digit ms at any scale. No JOINs needed. Enable TTL to auto-expire old codes. No EC2/RDS to manage. Perfect DynamoDB use case.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "dynamodb",
+        "architecture",
+        "design"
       ]
     },
     {
       "id": "aws-mastery-q12",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Mastery - Lambda and Beyond system is healthy?",
+      "prompt": "What is the purpose of the Lambda execution context reuse principle?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Reduces Lambda costs by sharing containers",
+        "Allows expensive initialisation (DB connections, SDK clients, secret fetching) to run once per cold start and be reused across many warm invocations",
+        "Enables Lambda to share state with other functions",
+        "Reduces memory usage"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Code outside the handler function runs once on cold start. Code inside runs per invocation. DB connection outside = one connection per container, reused. DB connection inside = new connection every request (very slow). Global scope is for expensive-to-create, safe-to-reuse objects.",
       "tags": [
         "lambda",
-        "monitoring"
+        "performance",
+        "context-reuse"
       ]
     },
     {
       "id": "aws-mastery-q13",
       "type": "mcq",
-      "prompt": "Core concept 13: which statement best describes AWS Mastery - Lambda and Beyond?",
+      "prompt": "What are CloudFormation Outputs used for?",
       "choices": [
-        "AWS Mastery - Lambda and Beyond always requires dedicated hardware",
-        "AWS Mastery - Lambda and Beyond trade-offs depend on requirements and scale",
-        "AWS Mastery - Lambda and Beyond is only for large enterprises",
-        "AWS Mastery - Lambda and Beyond eliminates all database needs"
+        "Print debug information",
+        "Export resource values (ARNs, names, URLs) from a stack for use by other stacks or to display after deployment",
+        "Define stack parameters",
+        "Rollback configuration"
       ],
       "answerIndex": 1,
-      "explanation": "AWS Mastery - Lambda and Beyond is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Outputs export values from a stack. Other stacks import them with Fn::ImportValue. Example: network stack exports VPC ID and subnet IDs. Application stack imports them. Enables modular multi-stack architectures without duplicating resource definitions.",
       "tags": [
-        "lambda",
-        "fundamentals"
+        "cloudformation",
+        "outputs",
+        "cross-stack"
       ]
     },
     {
       "id": "aws-mastery-q14",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Mastery - Lambda and Beyond is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
+      "type": "mcq",
+      "prompt": "In API Gateway, what is a Lambda Authoriser?",
+      "choices": [
+        "A Lambda function that handles all requests",
+        "A Lambda function that validates bearer tokens or headers and returns an IAM policy allowing or denying the request — enables custom auth logic",
+        "An IAM role for API Gateway",
+        "A CloudWatch alarm for API quotas"
       ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "answerIndex": 1,
+      "explanation": "Lambda Authoriser: API Gateway calls your auth Lambda with the token. Lambda validates it (verify JWT signature, call a user database, check an internal auth service) and returns Allow or Deny. Cached for performance. Use for custom auth not covered by built-in JWT/Cognito.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "api-gateway",
+        "authorisation",
+        "lambda"
       ]
     },
     {
       "id": "aws-mastery-q15",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Mastery - Lambda and Beyond to a system?",
+      "prompt": "What does `cdk synth` produce?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "Python bytecode",
+        "A CloudFormation template (YAML) from your CDK code — review it before deploying to understand exactly what AWS resources will be created",
+        "A Docker image",
+        "A test report"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "cdk synth compiles your CDK TypeScript/Python to a CloudFormation template. This is what gets deployed. Running synth and reviewing the output is how you verify CDK is generating the correct resources and IAM policies.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "cdk",
+        "cloudformation"
       ]
     },
     {
       "id": "aws-mastery-q16",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Mastery - Lambda and Beyond system is healthy?",
+      "prompt": "What is Lambda Reserved Concurrency?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Pre-warmed containers",
+        "A concurrency setting that both GUARANTEES a minimum and CAPS a maximum — the function cannot exceed this concurrency, protecting downstream resources",
+        "Maximum concurrent Lambda requests across account",
+        "Free Lambda tier allocation"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Reserved Concurrency = N means: (1) this function always has N concurrency available (not stolen by other functions), AND (2) this function cannot exceed N. Cap your payment Lambda at 20 to prevent overwhelming the payment API with 20+ simultaneous requests.",
       "tags": [
         "lambda",
-        "monitoring"
+        "concurrency",
+        "reserved"
       ]
     },
     {
       "id": "aws-mastery-q17",
       "type": "mcq",
-      "prompt": "Core concept 17: which statement best describes AWS Mastery - Lambda and Beyond?",
+      "prompt": "In CloudFormation, what happens when a stack update fails?",
       "choices": [
-        "AWS Mastery - Lambda and Beyond always requires dedicated hardware",
-        "AWS Mastery - Lambda and Beyond trade-offs depend on requirements and scale",
-        "AWS Mastery - Lambda and Beyond is only for large enterprises",
-        "AWS Mastery - Lambda and Beyond eliminates all database needs"
+        "Partial update remains in place",
+        "CloudFormation rolls back ALL changes in the update — restores every resource to its previous state automatically",
+        "Stack is deleted",
+        "You must manually roll back"
       ],
       "answerIndex": 1,
-      "explanation": "AWS Mastery - Lambda and Beyond is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "CloudFormation updates are transactional. If any resource update fails, CF rolls back all changes in that update. Your infrastructure returns to the last known-good state. This is why CF is safer than running individual API calls that can leave infra in inconsistent states.",
       "tags": [
-        "lambda",
-        "fundamentals"
+        "cloudformation",
+        "rollback",
+        "reliability"
       ]
     },
     {
       "id": "aws-mastery-q18",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Mastery - Lambda and Beyond is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
+      "type": "mcq",
+      "prompt": "What does `CAPABILITY_IAM` flag mean in CloudFormation deploy commands?",
+      "choices": [
+        "Enables IAM user creation only",
+        "Acknowledges that the template creates or modifies IAM resources (roles, policies) — required as a safety confirmation to prevent accidental privilege escalation",
+        "Grants admin IAM access",
+        "Required for all deployments"
       ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "answerIndex": 1,
+      "explanation": "CloudFormation requires explicit acknowledgement when creating IAM resources because misconfigured IAM can grant excessive permissions. --capabilities CAPABILITY_IAM tells CF: 'Yes, I understand this template creates IAM resources, proceed.'",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "cloudformation",
+        "iam",
+        "safety"
       ]
     },
     {
       "id": "aws-mastery-q19",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Mastery - Lambda and Beyond to a system?",
+      "prompt": "What is the purpose of DynamoDB TTL (Time to Live)?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "TTL controls DynamoDB performance",
+        "TTL automatically deletes items after a specified timestamp — no cost for deletion, no Lambda needed, great for session data, caches, expired short URLs",
+        "TTL limits DynamoDB table size",
+        "TTL is for DynamoDB Global Tables"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "Enable TTL on a timestamp attribute. Items with that attribute set to a past Unix timestamp are automatically deleted within 48 hours. No cost for TTL deletions. Perfect for: session tokens, short URL expiration, cache invalidation, event logs.",
       "tags": [
-        "lambda",
-        "trade-offs"
+        "dynamodb",
+        "ttl",
+        "data-management"
       ]
     },
     {
       "id": "aws-mastery-q20",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Mastery - Lambda and Beyond system is healthy?",
+      "prompt": "What is a CloudFormation Stack?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "A list of AWS regions",
+        "A collection of AWS resources managed as a unit — created, updated, and deleted together. One template = one stack.",
+        "A Lambda deployment package",
+        "An S3 bucket for CloudFormation templates"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "A stack is a collection of resources that are created and managed together. Deploying a template creates a stack. Update the template = update the stack (CF handles change detection). Delete the stack = deletes all resources in it (including data — be careful!).",
       "tags": [
-        "lambda",
-        "monitoring"
+        "cloudformation",
+        "stacks"
       ]
     }
   ],
   "flashcards": [
     {
       "id": "aws-mastery-fc1",
-      "front": "One-line definition of AWS Mastery - Lambda and Beyond?",
-      "back": "[Complete after studying — self-generation improves retention]",
+      "front": "CDK workflow commands",
+      "back": "cdk synth (compile to CF YAML, review) -> cdk diff (see what changes) -> cdk deploy (apply changes). Always diff before deploy in prod. cdk destroy = delete entire stack (including databases if not RETAIN).",
       "tags": [
-        "lambda"
+        "cdk",
+        "workflow"
       ]
     },
     {
       "id": "aws-mastery-fc2",
-      "front": "Core trade-off in AWS Mastery - Lambda and Beyond?",
-      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
+      "front": "Lambda cold start mitigation order",
+      "back": "1. Smaller package (deps in Layers)  2. Python/Node over Java  3. Provisioned Concurrency (pre-warm, costs $)  4. Ping with EventBridge (free)  5. GraalVM native for Java  6. Use HTTP API (lower overhead than REST API)",
       "tags": [
-        "lambda"
+        "lambda",
+        "cold-start"
       ]
     },
     {
       "id": "aws-mastery-fc3",
-      "front": "When to use AWS Mastery - Lambda and Beyond?",
-      "back": "When the problem it solves is actively costing you at your scale.",
+      "front": "API Gateway: REST API vs HTTP API",
+      "back": "HTTP API: default choice. 70% cheaper, lower latency, JWT auth, CORS, Lambda proxy. REST API: only when you need API keys/usage plans, per-method auth, request/response transformation, WAF at API level.",
       "tags": [
-        "lambda"
+        "api-gateway",
+        "rest-api",
+        "http-api"
       ]
     },
     {
       "id": "aws-mastery-fc4",
-      "front": "When NOT to use AWS Mastery - Lambda and Beyond?",
-      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
+      "front": "CloudFormation atomic rollback",
+      "back": "Stack update fails -> CF rolls back ALL changes in that update atomically. Infrastructure returns to last known-good state. This is why IaC > manual API calls for production.",
       "tags": [
-        "lambda"
+        "cloudformation",
+        "reliability"
       ]
     },
     {
       "id": "aws-mastery-fc5",
-      "front": "Top 3 failure modes of AWS Mastery - Lambda and Beyond?",
-      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
+      "front": "Serverless URL shortener design",
+      "back": "DynamoDB (PK=shortCode, TTL=expiry). HTTP API + 2 Lambda functions (shorten, redirect). ShortenUrl: generate base62 code, write to DynamoDB, return short URL. RedirectUrl: GetItem by code, return 301 Location header.",
       "tags": [
+        "design",
+        "dynamodb",
         "lambda"
       ]
     },
     {
       "id": "aws-mastery-fc6",
-      "front": "How to monitor AWS Mastery - Lambda and Beyond in production?",
-      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
+      "front": "Lambda global scope rule",
+      "back": "OUTSIDE handler: initialise once (DB client, secrets, large config). Reused across warm invocations = good. INSIDE handler: per-request state only (user-specific data, request context). NEVER store user data globally.",
       "tags": [
-        "lambda"
+        "lambda",
+        "context-reuse"
       ]
     },
     {
       "id": "aws-mastery-fc7",
-      "front": "AWS Mastery - Lambda and Beyond in one interview sentence?",
-      "back": "[Draft: what it is + what problem it solves + when to use it]",
+      "front": "Secrets Manager vs Parameter Store",
+      "back": "Secrets Manager: passwords + API keys + auto-rotation support. $0.40/secret/month. Parameter Store: config + feature flags. Free (standard tier). Use SM for actual secrets, SSM PS for config. Both much better than env vars in Lambda.",
       "tags": [
-        "lambda"
+        "secrets",
+        "security"
       ]
     },
     {
       "id": "aws-mastery-fc8",
-      "front": "How does AWS Mastery - Lambda and Beyond connect to caching?",
-      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "front": "X-Ray tracing — enable and use",
+      "back": "CDK: tracing: lambda.Tracing.ACTIVE. SAM: Tracing: Active. Automatically traces AWS SDK calls. Add custom segments with xray.begin_segment(). View in Console -> X-Ray -> Traces or Service Map to find slow subsegments.",
       "tags": [
-        "lambda",
-        "caching"
+        "x-ray",
+        "observability"
       ]
     }
   ],

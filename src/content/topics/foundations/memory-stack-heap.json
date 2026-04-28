@@ -1,0 +1,480 @@
+{
+  "id": "memory-stack-heap",
+  "unit": 1,
+  "order": 3,
+  "title": "Memory: Stack vs Heap",
+  "summary": "How memory is organised, when stack vs heap is used, garbage collection, and finding memory leaks.",
+  "prereqs": [
+    "recursion-mental-model"
+  ],
+  "guide": "# Memory — Stack vs Heap\n\n## Why Should I Care About Memory?\n\nWhen your code runs, every variable lives somewhere in RAM. Whether it lives on\nthe **stack** or the **heap** affects: how fast it's accessed, when it's freed,\nwhether you can have memory leaks, and what happens when you pass it to a function.\n\nUnderstanding stack vs heap explains:\n- Why local variables disappear when a function returns\n- Why `new SomeObject()` survives across function calls\n- Why infinite recursion crashes with StackOverflowError\n- Why allocating millions of objects causes OutOfMemoryError\n- What the JVM garbage collector actually does\n\n---\n\n## The Big Picture: Two Regions of Memory\n\n```\n  ┌─────────────────────────────────────┐\n  │           HIGH ADDRESSES            │\n  │  ┌───────────────────────────────┐  │\n  │  │            STACK              │  │ ← grows DOWNWARD\n  │  │  function call frames here    │  │\n  │  │  fast, automatic, small       │  │\n  │  ├───────────────────────────────┤  │\n  │  │           ↓ (free)            │  │\n  │  │           ↑ (free)            │  │\n  │  ├───────────────────────────────┤  │\n  │  │             HEAP              │  │ ← grows UPWARD\n  │  │  objects, arrays, dynamic     │  │\n  │  │  large, slower, GC-managed    │  │\n  │  ├───────────────────────────────┤  │\n  │  │  STATIC / METASPACE           │  │ ← class data, constants\n  │  ├───────────────────────────────┤  │\n  │  │  CODE                         │  │ ← compiled bytecode\n  │  └───────────────────────────────┘  │\n  │           LOW ADDRESSES             │\n  └─────────────────────────────────────┘\n```\n\n---\n\n## The Stack — Fast, Automatic, Small\n\n```\nWHAT LIVES HERE:\n  - Function parameters\n  - Local variables (primitives in Java/C, pointers in C)\n  - Return addresses (where to go when function ends)\n\nHOW IT WORKS:\n  Each function call allocates a 'stack frame' on top.\n  Function returns: frame is popped (instantly freed).\n  No need to manually free — automatic.\n\nCHARACTERISTICS:\n  Speed:        Very fast (just move stack pointer)\n  Size:         Small (~1MB default per thread in Java)\n  Lifetime:     Tied to function call — vanishes on return\n  Allocation:   Always succeeds (until size limit)\n  Errors:       StackOverflowError when too deep\n\n  void example() {\n      int x = 10;        // x is on the stack\n      int y = 20;        // y is on the stack\n      add(x, y);         // new frame for add() pushed\n  }                       // frame popped: x, y are gone\n```\n\n**Stack frame in detail (for `factorial(3)` calling `factorial(2)`):**\n\n```\n  ┌──────────────────────────────┐  ← top of stack\n  │ factorial(2) frame:          │\n  │   n = 2                      │\n  │   return addr = ...          │\n  ├──────────────────────────────┤\n  │ factorial(3) frame:          │\n  │   n = 3                      │\n  │   return addr = main()       │\n  ├──────────────────────────────┤\n  │ main() frame:                │\n  │   args                       │\n  └──────────────────────────────┘  ← bottom of stack\n\nWhen factorial(2) returns, its frame is popped instantly.\nControl returns to factorial(3) at the saved return address.\n```\n\n---\n\n## The Heap — Big, Dynamic, GC-Managed\n\n```\nWHAT LIVES HERE:\n  - Objects (everything created with `new` in Java)\n  - Arrays (Java/C# arrays are objects)\n  - Strings\n  - Anything that needs to OUTLIVE the function that created it\n\nHOW IT WORKS:\n  `new Foo()` allocates space in heap, returns a reference (address).\n  The reference is a small pointer; the actual object lives in heap.\n  Multiple references can point to the same heap object.\n  When no references exist anymore, GC reclaims the memory.\n\nCHARACTERISTICS:\n  Speed:        Slower (allocator finds space, GC tracks)\n  Size:         Large (configurable, GBs)\n  Lifetime:     Until garbage collected (no live references)\n  Allocation:   Can fail (OutOfMemoryError when full)\n  Errors:       OOM, memory leaks (refs that should be released)\n\n  void example() {\n      // x is on stack (reference), object is on heap\n      MyClass x = new MyClass();\n      doStuff(x);\n  }\n  // x (reference) is gone, but object on heap may still\n  // exist if doStuff() saved a reference somewhere.\n```\n\n**Visualising stack and heap together:**\n\n```java\nvoid foo() {\n    int n = 42;\n    String s = \"hello\";\n    int[] arr = new int[]{1, 2, 3};\n}\n```\n\n```\n  STACK (foo's frame)            HEAP\n  ┌────────────────┐             ┌───────────────────┐\n  │ n = 42          │             │ String 'hello'    │ ← s points here\n  │ s ──────────────┼────────────►│                   │\n  │ arr ────────────┼────┐        ├───────────────────┤\n  │ return addr     │    │        │ int[3] {1,2,3}    │ ← arr points here\n  └────────────────┘    └───────►│                   │\n                                  └───────────────────┘\n\n  After foo() returns:\n  - Stack frame is popped (n, s, arr — all gone)\n  - But HEAP objects may still exist (if other refs held)\n  - Otherwise, garbage collector reclaims them later\n```\n\n---\n\n## Java: Primitives vs References\n\n```\nPRIMITIVES (int, long, double, char, boolean, byte, short, float):\n  Stored DIRECTLY in stack (or in object fields on heap).\n  Pass-by-value: a copy is made when passed to functions.\n\nREFERENCE TYPES (everything else: String, Object, arrays, your classes):\n  Reference (address) is on stack, ACTUAL OBJECT is on heap.\n  Pass-by-value: the REFERENCE value is copied.\n  Both copies point to the SAME heap object.\n  Modifying the object's fields is visible to caller.\n  Re-assigning the reference does NOT affect caller.\n\nExample:\n\n  void modifyPrimitive(int x) { x = 99; }       // affects nothing\n  void modifyList(List<Integer> list) { list.add(99); }  // visible!\n  void reassignList(List<Integer> list) {\n      list = new ArrayList<>();   // local re-bind, caller unaffected\n  }\n\n  int n = 10;\n  modifyPrimitive(n);           // n still 10\n\n  List<Integer> l = new ArrayList<>();\n  modifyList(l);                // l now contains 99\n  reassignList(l);              // l unchanged, still contains 99\n\nCommon confusion: Java is ALWAYS pass-by-value.\n  For references, the value being passed is the address.\n  This explains the 'modifies object but not the variable' behaviour.\n```\n\n---\n\n## Garbage Collection (Java/JVM)\n\n```\nHeap memory must be RECLAIMED when objects are no longer used.\nC/C++: programmer manually free()s — bug-prone.\nJava/Go/Python/JS: garbage collector does it automatically.\n\nGC ROOTS:\n  Starting points where 'live' references begin:\n  - Local variables (stack frames currently active)\n  - Static fields (class-level)\n  - JNI references (native code)\n  - Thread-local storage\n\nMARK-AND-SWEEP (simplified):\n  1. MARK: starting from GC roots, follow every reference and mark all\n          reachable objects as 'live'.\n  2. SWEEP: any heap object NOT marked is unreachable — reclaim its memory.\n\n  Roots                              Heap\n    │                                  │\n    ├─► Object A ──► Object B          │\n    │                  │               │\n    │                  └─► Object C    │\n    │                                  │\n    └─► Object D                       │  Object X (no ref → garbage)\n                                       │  Object Y (no ref → garbage)\n    Live: A, B, C, D\n    Garbage: X, Y → reclaimed\n\nGENERATIONAL GC (modern JVMs):\n  Most objects die young (request handlers, temp vars).\n  Heap split into 'young' (Eden + Survivor) and 'old' (Tenured) generations.\n  Young GC: frequent, fast (only scans young region).\n  Old GC (full GC): rare, slower (scans entire heap).\n  Modern collectors: G1, ZGC, Shenandoah — low-pause, parallel.\n```\n\n---\n\n## Memory Leaks in GC Languages\n\nGC doesn't prevent ALL leaks — only frees objects with NO references.\nIf you accidentally hold a reference, the object stays forever.\n\n```java\n// COMMON LEAKS:\n\n// 1. Static collection grows forever\nstatic Map<String, User> CACHE = new HashMap<>();\n// Adding to CACHE without ever removing → leak\n// Fix: use a bounded cache (LinkedHashMap with removeEldestEntry, or Caffeine)\n\n// 2. Listener not removed\nbutton.addClickListener(this::handleClick);\n// Component destroyed but listener remains → leaks 'this'\n// Fix: removeClickListener in cleanup\n\n// 3. ThreadLocal not removed\nThreadLocal<BigData> tl = new ThreadLocal<>();\ntl.set(new BigData());\n// In a thread pool, threads live forever → BigData held forever\n// Fix: tl.remove() in finally block\n\n// 4. Inner class holding outer reference\nclass Outer {\n    void start() {\n        new Thread(() -> {\n            // anonymous Runnable holds implicit ref to Outer instance\n            doSomething();\n        }).start();\n    }\n}\n// Outer can't be GC'd until thread ends\n// Fix: use static lambdas or pass needed fields explicitly\n```\n\n**Tools to find leaks:**\n- VisualVM, JProfiler, YourKit (Java)\n- Heap dumps: `jmap -dump:live,file=heap.hprof <pid>`\n- Eclipse MAT (Memory Analyzer Tool) — analyse the heap dump\n\n---\n\n## Stack Overflow vs OutOfMemory\n\n```\nSTACK OVERFLOW (StackOverflowError):\n  Cause: too many nested function calls (deep recursion)\n  Stack depth exceeds limit (~10K frames in Java default)\n  Fix: convert recursion to iteration with explicit Deque<>\n       OR increase stack size: java -Xss2m\n\nOUT OF MEMORY (OutOfMemoryError):\n  Cause: heap is full, can't allocate new objects\n  Either: legitimate large data set, OR memory leak\n  Fix:\n    - Increase heap: java -Xmx4g (max heap 4GB)\n    - Find leak with profiler\n    - Stream/page through data instead of loading all\n\n  Different errors. Different causes. Different fixes.\n```\n\n---\n\n## C/C++: Manual Memory Management\n\nJava/Python/Go developers don't manage memory manually, but you'll see this in legacy code:\n\n```c\nvoid leakExample() {\n    int* arr = malloc(100 * sizeof(int));   // allocate on heap\n    // ... use arr ...\n    // OOPS: forgot to free(arr) → memory leak\n}\n\nvoid correctExample() {\n    int* arr = malloc(100 * sizeof(int));\n    // ... use arr ...\n    free(arr);   // manually release heap memory\n}\n\nvoid useAfterFree() {\n    int* arr = malloc(100 * sizeof(int));\n    free(arr);\n    arr[0] = 42;   // BUG! using freed memory — undefined behaviour\n}\n\nvoid doubleFree() {\n    int* arr = malloc(100 * sizeof(int));\n    free(arr);\n    free(arr);   // BUG! freeing twice — heap corruption\n}\n\n// Modern C++ uses RAII (smart pointers) to avoid these bugs:\nstd::unique_ptr<int[]> arr(new int[100]);\n// auto-freed when arr goes out of scope, no manual free needed\n```\n\n---\n\n## Mind Map\n\n```\nMEMORY\n|\n+-- STACK\n|   +-- Function frames\n|   +-- Locals + parameters\n|   +-- Fast (~ns)\n|   +-- Auto-freed on return\n|   +-- Small (1MB default)\n|   +-- StackOverflowError\n|\n+-- HEAP\n|   +-- Objects (new in Java)\n|   +-- Survives function returns\n|   +-- Slower (allocator + GC)\n|   +-- Large (GB)\n|   +-- OutOfMemoryError\n|\n+-- JAVA SPECIFICS\n|   +-- Primitives on stack\n|   +-- Objects on heap\n|   +-- References on stack point to heap\n|   +-- Pass-by-value (incl. references)\n|\n+-- GARBAGE COLLECTION\n|   +-- Mark live objects from GC roots\n|   +-- Sweep unmarked → garbage\n|   +-- Generational (young/old)\n|   +-- Modern: G1, ZGC, Shenandoah\n|\n+-- LEAKS DESPITE GC\n    +-- Static collections growing\n    +-- Unremoved listeners\n    +-- ThreadLocal in pools\n    +-- Inner class capturing outer\n```\n\n---\n\n## How Memory Connects to Other Topics\n\n- **Recursion**: each call uses stack — too deep = StackOverflowError\n- **Big-O**: space complexity = heap usage by your data structures\n- **JVM tuning**: `-Xmx` (max heap), `-Xss` (stack size), GC algorithm choice\n- **Performance**: cache locality (contiguous arrays beat linked lists)\n- **Concurrency**: heap is shared between threads, stack is per-thread\n\n---\n\n## References\n\n### Videos\n- **Stack vs Heap explained** by Jenny's Lectures: https://www.youtube.com/watch?v=ZTuRZuRi-mU\n- **Java Memory Model** by Java Brains: https://www.youtube.com/watch?v=UcoQqLbT_Wo\n\n### Articles\n- **JVM Memory Model**: https://www.baeldung.com/java-stack-heap\n- **Garbage Collection in Java**: https://www.oracle.com/technical-resources/articles/java/g1gc.html",
+  "questions": [
+    {
+      "id": "mem-q1",
+      "type": "mcq",
+      "prompt": "What's the key difference between stack and heap memory?",
+      "choices": [
+        "Stack is faster but smaller; heap is bigger but slower",
+        "Stack is for primitives only",
+        "Stack lives in CPU cache",
+        "No difference, both are RAM"
+      ],
+      "answerIndex": 0,
+      "explanation": "Stack: fast (move pointer), small (1MB), auto-managed (frame popped on return), tied to function calls. Heap: slower (allocator + GC), large (GB), managed by GC, survives function returns. Stack for short-lived locals; heap for objects that must outlive the creator.",
+      "tags": [
+        "memory",
+        "stack",
+        "heap"
+      ]
+    },
+    {
+      "id": "mem-q2",
+      "type": "mcq",
+      "prompt": "In Java, where do PRIMITIVE local variables (int, double, boolean) live?",
+      "choices": [
+        "Heap",
+        "Stack — directly inside the function's stack frame",
+        "CPU registers only",
+        "Constant pool"
+      ],
+      "answerIndex": 1,
+      "explanation": "Java primitives in local scope live on the stack inside the current frame. They have no object header. When the function returns, the frame is popped and primitives are gone. Compare to objects: 'Integer i' is a reference on stack pointing to an object on heap.",
+      "tags": [
+        "java",
+        "stack",
+        "primitives"
+      ]
+    },
+    {
+      "id": "mem-q3",
+      "type": "mcq",
+      "prompt": "In Java, where does the OBJECT created by `new ArrayList<>()` live?",
+      "choices": [
+        "Stack",
+        "Heap — the actual object always lives on heap. The variable holding the reference may be on stack (local var) or heap (field of another object).",
+        "Constant pool",
+        "Both stack and heap"
+      ],
+      "answerIndex": 1,
+      "explanation": "In Java, ALL objects (anything created with new) live on the heap. The reference (pointer) might be on the stack if it's a local variable. So 'ArrayList<Integer> list = new ArrayList<>()': 'list' (reference) on stack, ArrayList object itself on heap.",
+      "tags": [
+        "java",
+        "heap",
+        "objects"
+      ]
+    },
+    {
+      "id": "mem-q4",
+      "type": "mcq",
+      "prompt": "What causes a StackOverflowError in Java?",
+      "choices": [
+        "Too many objects allocated",
+        "Stack memory full from too many nested function calls (deep recursion is the most common cause)",
+        "Heap fragmentation",
+        "Static fields too large"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each function call adds a stack frame. Default stack size is ~1MB. Frames use 50-200 bytes each, so ~10K frames fit. Infinite recursion or unbounded recursion exceeds this. Fix: convert to iteration with explicit Deque, or increase stack size with -Xss flag.",
+      "tags": [
+        "stack",
+        "errors"
+      ]
+    },
+    {
+      "id": "mem-q5",
+      "type": "mcq",
+      "prompt": "What causes OutOfMemoryError in Java?",
+      "choices": [
+        "Stack full",
+        "HEAP is full — either legitimate large data set or a memory leak preventing GC from reclaiming objects",
+        "Disk full",
+        "Network timeout"
+      ],
+      "answerIndex": 1,
+      "explanation": "OOME = heap exhausted. Causes: 1) Genuinely too much data (load entire DB into memory) — fix: stream/paginate. 2) Memory leak — refs held to objects no longer needed (caches, listeners, ThreadLocal). Fix: profile with VisualVM, take heap dump, find leak.",
+      "tags": [
+        "heap",
+        "errors",
+        "oom"
+      ]
+    },
+    {
+      "id": "mem-q6",
+      "type": "mcq",
+      "prompt": "What does 'Java is pass-by-value' mean for object references?",
+      "choices": [
+        "Java creates a deep copy of objects",
+        "Java copies the REFERENCE (address) value. Both caller and callee point to the SAME object on heap. Mutating fields is visible; reassigning the local reference is NOT.",
+        "Java is pass-by-reference",
+        "References can't be passed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Java passes references by value. The address bits are copied. Both refs point to same heap object — so list.add() is seen by caller. But 'list = new ArrayList<>()' inside method just rebinds the LOCAL copy, caller unaffected. This nuance trips up beginners.",
+      "tags": [
+        "java",
+        "pass-by-value",
+        "references"
+      ]
+    },
+    {
+      "id": "mem-q7",
+      "type": "codeOutput",
+      "prompt": "What does this print?\n\nvoid f(int x) { x = 99; }\nint n = 10;\nf(n);\nSystem.out.println(n);",
+      "code": "primitive passed by value",
+      "choices": [
+        "10 — primitives are copied; modifying x in f doesn't affect n",
+        "99",
+        "0",
+        "Compile error"
+      ],
+      "answerIndex": 0,
+      "explanation": "Primitives are passed by value. f receives a COPY of n. Setting x=99 modifies only the local copy. n is unchanged. Output: 10. Same goes for any primitive type. Pass an array or object, and mutations to the object's contents WOULD be visible.",
+      "tags": [
+        "pass-by-value",
+        "primitives"
+      ]
+    },
+    {
+      "id": "mem-q8",
+      "type": "codeOutput",
+      "prompt": "What does this print?\n\nvoid g(int[] arr) { arr[0] = 99; }\nint[] a = {10, 20};\ng(a);\nSystem.out.println(a[0]);",
+      "code": "array element modification through reference",
+      "choices": [
+        "10",
+        "99 — the reference points to same array on heap; modifying contents is visible",
+        "Compile error",
+        "null"
+      ],
+      "answerIndex": 1,
+      "explanation": "Array is on heap. arr (in g) and a (in caller) both reference the same heap array. arr[0] = 99 modifies the heap object. Caller sees the change because it points to the same object. This is why mutating method parameters can have surprising effects.",
+      "tags": [
+        "pass-by-value",
+        "references",
+        "arrays"
+      ]
+    },
+    {
+      "id": "mem-q9",
+      "type": "codeOutput",
+      "prompt": "What does this print?\n\nvoid h(int[] arr) { arr = new int[]{99, 100}; }\nint[] a = {10, 20};\nh(a);\nSystem.out.println(a[0]);",
+      "code": "reassigning local reference does not affect caller",
+      "choices": [
+        "99",
+        "10 — assigning to arr inside h rebinds the LOCAL parameter; caller's variable a still points to the original array",
+        "100",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Inside h, arr is a local copy of the reference. 'arr = new int[]{...}' rebinds the local arr to a new heap array. The caller's variable a is untouched. Caller still sees original array. Subtle but critical: only mutations through the reference affect caller.",
+      "tags": [
+        "pass-by-value",
+        "references"
+      ]
+    },
+    {
+      "id": "mem-q10",
+      "type": "mcq",
+      "prompt": "What does the JVM Garbage Collector do?",
+      "choices": [
+        "Frees stack memory",
+        "Identifies heap objects with NO live references (unreachable from GC roots) and reclaims their memory automatically",
+        "Compresses files",
+        "Compiles bytecode"
+      ],
+      "answerIndex": 1,
+      "explanation": "GC tracks heap objects. Starting from GC roots (active locals, statics), it traces all reachable objects. Anything unreachable = garbage = memory reclaimed. You don't manually free. But you can still leak if you accidentally hold references (caches, listeners).",
+      "tags": [
+        "gc",
+        "jvm"
+      ]
+    },
+    {
+      "id": "mem-q11",
+      "type": "mcq",
+      "prompt": "Which is a common memory leak in Java despite garbage collection?",
+      "choices": [
+        "Adding to a static Map without ever removing entries — references stay forever, GC can't reclaim",
+        "All allocations leak",
+        "Recursion always leaks",
+        "Lambdas always leak"
+      ],
+      "answerIndex": 0,
+      "explanation": "GC frees objects with NO references. A static Map<String, User> that grows forever holds references to all User objects forever. They can't be GC'd. Fix: bounded cache (LinkedHashMap removeEldestEntry, Caffeine, Guava). Other leaks: unremoved listeners, ThreadLocal in pools.",
+      "tags": [
+        "leaks",
+        "static",
+        "cache"
+      ]
+    },
+    {
+      "id": "mem-q12",
+      "type": "mcq",
+      "prompt": "What are GC roots?",
+      "choices": [
+        "The heap itself",
+        "Starting points the GC uses to trace live references: active stack frames, static fields, JNI refs, thread-local storage. Anything reachable from a root is 'live'.",
+        "Database connections",
+        "Object constructors"
+      ],
+      "answerIndex": 1,
+      "explanation": "GC roots: things the JVM knows are 'live'. From these, GC walks the reference graph and marks reachable objects. Unreachable = garbage. Stack frames are roots (their locals reference live objects). Statics are roots (class-level). JNI refs from native code are roots.",
+      "tags": [
+        "gc",
+        "roots"
+      ]
+    },
+    {
+      "id": "mem-q13",
+      "type": "mcq",
+      "prompt": "In a generational garbage collector, the 'young generation' holds:",
+      "choices": [
+        "Old objects",
+        "Newly allocated objects, which mostly die young (locals, request-scoped data). Cleared frequently and quickly.",
+        "Static fields",
+        "Class metadata"
+      ],
+      "answerIndex": 1,
+      "explanation": "Generational hypothesis: most objects die young. Young gen is small + cleared often (fast). Survivors get promoted to old gen (collected less often, slower). This optimisation makes most GCs much faster than naive mark-sweep. Eden + Survivor spaces in HotSpot.",
+      "tags": [
+        "gc",
+        "generational"
+      ]
+    },
+    {
+      "id": "mem-q14",
+      "type": "mcq",
+      "prompt": "Why do String objects (often) live in a special pool in Java?",
+      "choices": [
+        "For security",
+        "String interning: identical string literals are deduplicated to save memory; multiple variables can share one String object on the heap",
+        "Strings are primitive",
+        "Required by JVM"
+      ],
+      "answerIndex": 1,
+      "explanation": "String pool (interning): 'hello' literal stored once, all variables pointing to 'hello' share the same object. Saves memory for repeated literals. String s = 'x'; String t = 'x'; s == t (TRUE — same reference). Use .intern() to manually intern. Doesn't apply to 'new String()'.",
+      "tags": [
+        "strings",
+        "interning"
+      ]
+    },
+    {
+      "id": "mem-q15",
+      "type": "mcq",
+      "prompt": "What does the -Xmx2g JVM flag do?",
+      "choices": [
+        "Sets stack size",
+        "Sets MAXIMUM heap size to 2GB. JVM will allocate up to this and never more, throwing OOME if exceeded.",
+        "Sets buffer pool",
+        "Disables GC"
+      ],
+      "answerIndex": 1,
+      "explanation": "-Xmx: max heap size. -Xms: initial heap size. -Xss: stack size per thread. Set -Xmx based on your workload + headroom. Too small = OOME. Too large on shared host = waste. Common production: -Xmx4g for moderate apps, more for heavy.",
+      "tags": [
+        "jvm",
+        "flags",
+        "heap"
+      ]
+    },
+    {
+      "id": "mem-q16",
+      "type": "mcq",
+      "prompt": "In C, what's the bug?\n\nint* p = malloc(100);\nfree(p);\np[0] = 42;",
+      "choices": [
+        "No bug",
+        "Use-after-free: writing to memory that was just released. Undefined behaviour — could corrupt heap, crash, or silently work then fail later.",
+        "Memory leak",
+        "Double allocation"
+      ],
+      "answerIndex": 1,
+      "explanation": "After free(p), the memory is returned to the allocator and may be reused for another allocation. Writing to it corrupts whatever now lives there. UB: program may crash, or appear to work then fail. Modern C++: use std::unique_ptr to prevent. Java: GC handles this — no use-after-free possible.",
+      "tags": [
+        "c",
+        "memory",
+        "uaf"
+      ]
+    },
+    {
+      "id": "mem-q17",
+      "type": "multi",
+      "prompt": "Which can cause OutOfMemoryError in Java? (Select all)",
+      "choices": [
+        "Loading a 10GB file fully into memory",
+        "Static cache that never evicts",
+        "Adding listeners without removing them",
+        "An infinite loop with int counter"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "All three can fill the heap: 1) genuine large data without streaming, 2) cache holds refs forever, 3) each listener holds object alive. The infinite loop with int doesn't allocate — uses fixed stack space; would hang CPU but not OOM unless the loop body allocates.",
+      "tags": [
+        "oom",
+        "leaks"
+      ]
+    },
+    {
+      "id": "mem-q18",
+      "type": "mcq",
+      "prompt": "How do you find a memory leak in a running Java app?",
+      "choices": [
+        "Add print statements",
+        "Take a heap dump (jmap -dump:live,file=heap.hprof PID), open in Eclipse MAT or VisualVM. Look at biggest objects/retained sizes. Compare two dumps over time.",
+        "Restart the JVM",
+        "Disable GC"
+      ],
+      "answerIndex": 1,
+      "explanation": "Heap dump: snapshot of all heap objects + references. Tools (MAT, VisualVM, JProfiler) analyse: dominators, retained heap, leak suspects. Take 2 dumps after a leak operation; compare object counts. Pinpoint which class is growing. Then trace back through references to find the holder.",
+      "tags": [
+        "debugging",
+        "leaks",
+        "tools"
+      ]
+    },
+    {
+      "id": "mem-q19",
+      "type": "mcq",
+      "prompt": "What is the difference between -Xmx and -Xss JVM flags?",
+      "choices": [
+        "Same thing",
+        "-Xmx: maximum heap size (objects). -Xss: stack size PER THREAD (function call frames). Both increase memory use but for different regions.",
+        "-Xss is for SSL",
+        "-Xmx is for metaspace"
+      ],
+      "answerIndex": 1,
+      "explanation": "-Xmx (heap) and -Xss (stack) target different memory regions. Increase -Xmx if OOME on heap. Increase -Xss if StackOverflowError (deep recursion). Note: -Xss is per thread — 1000 threads × 2MB stack = 2GB just for stacks. Default Xss is 1MB.",
+      "tags": [
+        "jvm",
+        "flags"
+      ]
+    },
+    {
+      "id": "mem-q20",
+      "type": "mcq",
+      "prompt": "Which JVM garbage collector is good for low-pause production apps?",
+      "choices": [
+        "Serial GC",
+        "G1 (default in Java 9+) — designed for low-pause, can target a max pause time. ZGC and Shenandoah for sub-millisecond pauses on huge heaps.",
+        "Mark-sweep manual",
+        "Reference counting"
+      ],
+      "answerIndex": 1,
+      "explanation": "Serial GC: single-thread, stops everything. OK for desktop apps. Parallel GC: multi-thread, still stops world. CMS: concurrent (deprecated). G1: regional, low-pause target. ZGC, Shenandoah: sub-millisecond pauses, even for 100GB+ heaps. Most production: G1 or ZGC.",
+      "tags": [
+        "jvm",
+        "gc",
+        "tuning"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "mem-fc1",
+      "front": "Stack vs Heap quick reference",
+      "back": "Stack: fast, small (~1MB), auto-managed, function-scoped. Holds frames + primitives + references. Heap: slower, large (GB), GC-managed, lives until unreferenced. Holds objects + arrays. StackOverflowError vs OutOfMemoryError = different root causes.",
+      "tags": [
+        "memory",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "mem-fc2",
+      "front": "Java pass-by-value rule",
+      "back": "Java is ALWAYS pass-by-value. For primitives: value copied (changes don't propagate). For objects: REFERENCE value (address) copied — both pointers go to same heap object, so mutating fields IS visible to caller, but reassigning the local ref is NOT.",
+      "tags": [
+        "java",
+        "pass-by-value"
+      ]
+    },
+    {
+      "id": "mem-fc3",
+      "front": "GC roots — what's a root?",
+      "back": "GC roots are starting points for liveness tracking: 1) Active stack frames' local variables, 2) Static fields, 3) JNI references from native code, 4) ThreadLocal storage. Anything reachable from any root = live. Otherwise = garbage.",
+      "tags": [
+        "gc",
+        "roots"
+      ]
+    },
+    {
+      "id": "mem-fc4",
+      "front": "Memory leak patterns in GC languages",
+      "back": "GC frees only unreferenced objects. Leaks happen when refs are accidentally held: 1) Static Map/List growing forever (use bounded cache). 2) Listeners not removed. 3) ThreadLocal in thread pool. 4) Anonymous inner class capturing outer.",
+      "tags": [
+        "leaks",
+        "patterns"
+      ]
+    },
+    {
+      "id": "mem-fc5",
+      "front": "JVM memory flags",
+      "back": "-Xmx2g: max heap = 2GB. -Xms1g: initial heap = 1GB. -Xss512k: stack per thread = 512KB. Set Xmx based on workload + 30% headroom. Watch GC logs (-Xlog:gc) to see if heap is too small. Big Xss × many threads = surprising RAM use.",
+      "tags": [
+        "jvm",
+        "flags"
+      ]
+    },
+    {
+      "id": "mem-fc6",
+      "front": "Generational GC concept",
+      "back": "Most objects die young (request handlers, locals). Young gen: small, fast minor GC. Old gen: larger, infrequent major GC. Promotion: surviving young objects move to old. G1, ZGC, Shenandoah are modern low-pause collectors used in production.",
+      "tags": [
+        "gc",
+        "generational"
+      ]
+    },
+    {
+      "id": "mem-fc7",
+      "front": "Use heap dump to find leaks",
+      "back": "jmap -dump:live,file=heap.hprof <pid>. Open in Eclipse MAT. Look at: Dominator tree (biggest retainers), Leak Suspects report. Take 2 dumps over time, compare counts to spot growing classes. Trace incoming refs to find holder.",
+      "tags": [
+        "debugging",
+        "tools"
+      ]
+    },
+    {
+      "id": "mem-fc8",
+      "front": "Stack overflow vs OOM",
+      "back": "StackOverflowError: stack full from deep recursion. Fix: iteration with explicit Deque, or -Xss for bigger stack. OutOfMemoryError: heap full. Fix: -Xmx for bigger heap, or fix leak with profiler, or stream large data. Different errors, different root causes.",
+      "tags": [
+        "errors",
+        "jvm"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Your Java REST service runs fine for a week, then crashes with OutOfMemoryError. Restart fixes it temporarily. Design a debugging approach: 1) How to capture state without losing the running process. 2) Which tool to analyse the dump. 3) What to look for. 4) Common patterns of leaks to check. 5) How to validate the fix.",
+    "checklist": [
+      {
+        "id": "m1",
+        "text": "Capture heap dump without killing JVM: jmap -dump:live,format=b,file=heap.hprof <pid>. Or auto-dump on OOM with -XX:+HeapDumpOnOutOfMemoryError.",
+        "weight": 20
+      },
+      {
+        "id": "m2",
+        "text": "Open dump in Eclipse MAT (Memory Analyzer Tool). Use Leak Suspects report and Dominator Tree to find biggest retained heap.",
+        "weight": 20
+      },
+      {
+        "id": "m3",
+        "text": "Look for: large collection sizes, classes with surprisingly many instances, retained-by chains showing what holds the leaked objects.",
+        "weight": 20
+      },
+      {
+        "id": "m4",
+        "text": "Common patterns: static cache without eviction, listeners not removed, ThreadLocal in thread pool, inner classes capturing outer.",
+        "weight": 20
+      },
+      {
+        "id": "m5",
+        "text": "Validate fix: take heap dump pre and post operation. Confirm count of leaked-class instances no longer grows. Run load test for hours. Watch heap usage flatten not climb.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "If dump is too big to open: jmap -histo for class-instance-count only, much faster, identifies class without full structure.",
+      "Use VisualVM in development to watch live heap. Real-time graph during a test scenario reveals which operation triggers the growth.",
+      "If you can reproduce in a test environment: set -Xmx64m to force OOM faster, then dump on OOM. Tiny heap exposes leaks quickly."
+    ]
+  }
+}

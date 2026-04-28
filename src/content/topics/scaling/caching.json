@@ -7,81 +7,388 @@
   "prereqs": [
     "load-balancing"
   ],
-  "guide": "# Caching\n\nCaching stores **frequently accessed data** in fast-access storage so future requests are served without re-computing or re-fetching from slow sources.\n\n## Caching Layers\n\n```\nL1: CPU cache (nanoseconds) \u2014 hardware managed\nL2: In-process memory (microseconds) \u2014 Map/LRU cache in app\nL3: Distributed cache (sub-millisecond) \u2014 Redis, Memcached\nL4: CDN edge cache (milliseconds, geographically close)\nL5: Browser cache \u2014 local to user\n```\n\n## Cache Policies\n\n```\nEviction policies (when cache is full):\n  LRU (Least Recently Used): evict what hasn't been accessed recently\n  LFU (Least Frequently Used): evict what's accessed least overall\n  TTL (Time To Live): expire after fixed duration regardless of access\n\nWrite patterns:\n  Write-through: write to cache AND DB simultaneously\n    \u2192 No stale data, slightly slower writes\n  Write-behind (write-back): write to cache only, async to DB\n    \u2192 Faster writes, risk of data loss on crash\n  Cache-aside (lazy loading): app checks cache, misses load from DB + cache\n    \u2192 Most common pattern\n```\n\n## Redis Cache-Aside Pattern\n\n```javascript\nasync function getUser(userId) {\n  const cacheKey = `user:${userId}`;\n\n  // 1. Try cache\n  const cached = await redis.get(cacheKey);\n  if (cached) return JSON.parse(cached);  // Cache HIT\n\n  // 2. Cache MISS \u2014 fetch from DB\n  const user = await db.users.findById(userId);\n  if (!user) return null;\n\n  // 3. Store in cache with TTL\n  await redis.setex(cacheKey, 300, JSON.stringify(user));  // 5 min TTL\n  return user;\n}\n\n// Cache invalidation on update:\nasync function updateUser(userId, data) {\n  await db.users.update(userId, data);\n  await redis.del(`user:${userId}`);   // \u2190 invalidate\n}\n```\n\n## Cache Invalidation Problem\n\n\"There are only two hard things in CS: cache invalidation and naming things.\"\n\n```\nStrategies:\n  TTL-based: expire after N seconds \u2014 simple, eventual consistency\n  Event-driven: invalidate on write \u2014 consistent, needs coordination\n  Version-based: cache key includes version (user:123:v3) \u2014 safe but cache bloat\n  Write-through: always update cache AND DB together\n```\n\n## Cache Stampede / Thundering Herd\n\n```\nProblem: popular key expires \u2192 1000 concurrent requests miss \u2192\n  all 1000 query DB simultaneously \u2192 DB overloads\n\nSolutions:\n  Mutex locking: first miss locks, fetches, others wait for lock\n  Probabilistic early expiry: randomly refresh before TTL expires\n  Background refresh: proactively refresh popular keys before they expire\n```\n\n## Common Pitfalls\n- **Caching mutable data without invalidation** \u2014 cache serves stale data forever. Always set TTL or invalidate on write.\n- **Caching large objects** \u2014 large cached objects waste memory. Consider caching IDs only, or paginated results.\n- **Not handling cache misses gracefully** \u2014 if Redis is down, app must fall back to DB, not crash.\n- **Cache key collisions** \u2014 namespace keys: `user:123`, `product:123` not just `123`.\n",
+  "guide": "# Caching\n\n## What Is Caching? (Start From Zero)\n\nImagine you work in a library. Every time someone asks for a book, you walk to the\nstoreroom in the basement, find the book, carry it back upstairs. That takes 10 minutes.\n\nOne day you realise: some books are requested 100 times a day. So you keep a small shelf\nat the front desk with the most popular books. Now when someone asks, you hand it over\nin 5 seconds — 120x faster.\n\nThat small shelf IS a cache. A cache is a temporary, fast-access store for frequently\nrequested data so you don't have to fetch it from the slow original source every time.\n\n**Why caching matters:**\n```\nWithout cache:           With cache:\n  Request -> DB query      Request -> Cache hit -> Response\n  100ms per request        1ms per request\n  DB: 10,000 queries/sec   DB: 100 queries/sec (99% cache hit rate)\n  DB overwhelmed           DB relaxed, app 100x faster\n```\n\n---\n\n## The Caching Layers\n\nData can be cached at multiple levels — each faster and closer to the CPU:\n\n```\nLAYER 1: CPU Cache (L1/L2/L3)\n  Speed:    1-10 nanoseconds\n  Size:     KB to MB\n  Managed:  by hardware automatically\n  You don't code this — CPU does it for you\n\nLAYER 2: Application In-Process Memory\n  Speed:    ~100 nanoseconds (RAM access)\n  Size:     limited by JVM heap / process memory\n  Example:  Java HashMap, Guava LoadingCache, Caffeine\n  Use for:  small, rarely-changing data (config, lookup tables)\n            Only works for single-process apps (not horizontally scaled)\n\nLAYER 3: Distributed Cache (Redis, Memcached)\n  Speed:    ~1 millisecond (network + memory)\n  Size:     GBs to TBs across a cluster\n  Example:  Redis, Memcached, AWS ElastiCache\n  Use for:  shared cache across multiple app server instances\n            Session data, user profiles, rate limiting counters\n\nLAYER 4: Database Query Cache / Read Replicas\n  Speed:    10-100ms\n  Example:  MySQL query cache, PostgreSQL pg_bouncer, read replicas\n  Use for:  expensive aggregation queries, reporting\n\nLAYER 5: CDN (Content Delivery Network)\n  Speed:    5-50ms (geographically close edge server)\n  Example:  CloudFront, Cloudflare, Fastly\n  Use for:  static assets (images, CSS, JS), entire API responses\n            User in Tokyo gets content from Tokyo edge, not US server\n\nThe further right in the request path you can answer from cache,\nthe more work you save.\n```\n\n---\n\n## Cache Write Strategies — Write-Through vs Write-Back vs Write-Around\n\nWhen data is written, how does it get into the cache?\n\n```\nWRITE-THROUGH:\n  Application writes to CACHE first\n  Cache immediately writes to DATABASE\n  Both updated synchronously\n\n  App -> Cache -> DB (in same operation)\n\n  Pros:\n    Cache and DB always consistent\n    No data loss on cache crash (already in DB)\n  Cons:\n    Write latency = DB write latency (cache doesn't speed up writes)\n  Use for: financial data, anything where consistency > write speed\n\nWRITE-BACK (Write-Behind):\n  Application writes to CACHE only\n  Cache flushes to DATABASE asynchronously later (every N seconds or N writes)\n\n  App -> Cache   (fast!)\n         |  (later, async)\n         v\n         DB\n\n  Pros:\n    Very fast writes (cache speed, not DB speed)\n    Can batch multiple writes into one DB operation\n  Cons:\n    Risk of data loss if cache crashes before flush\n    Cache and DB temporarily inconsistent\n  Use for: high-write workloads, analytics counters, session activity\n\nWRITE-AROUND:\n  Application writes DIRECTLY to DATABASE, bypassing cache\n  Cache is populated on first read (cache miss -> load from DB -> store in cache)\n\n  App -> DB   (writes bypass cache)\n  App -> Cache (reads check cache first)\n\n  Pros:\n    Cache only stores data that's actually READ (no wasted cache space)\n  Cons:\n    First read after write always a cache miss (cold start per key)\n  Use for: write-once-read-many data, large datasets where most writes never read\n```\n\n---\n\n## Cache Eviction Policies — What Gets Removed When Cache Is Full\n\nCache has limited memory. When it fills up, something must be evicted.\n\n```\nLRU (Least Recently Used) — MOST COMMON:\n  Evict the item that hasn't been accessed for the longest time.\n  Assumption: if it hasn't been used recently, it probably won't be needed soon.\n\n  Access log: A B C D A B  (cache size=3)\n  Cache:      [D, A, B]   <- C was evicted (least recently used)\n\n  Redis default. Good for general-purpose caching.\n\nLFU (Least Frequently Used):\n  Evict the item with the lowest access count.\n  Assumption: popular items should stay, unpopular ones go.\n\n  Use when: some items are permanently popular (top 10 products), others are temporary bursts.\n  Problem: long-lived items accumulate high frequency and never evict even if stale.\n\nTTL (Time To Live):\n  Items automatically expire after a set time regardless of usage.\n  key: user_profile:123  TTL: 300 seconds (5 minutes)\n  After 5 minutes, next access = cache miss, fetch fresh from DB.\n\n  Best practice: combine LRU AND TTL.\n    LRU: evict when memory full\n    TTL: ensure stale data doesn't linger forever\n\nRANDOM:\n  Evict a random item. Simple, surprisingly effective for large caches.\n\nFIFO (First In First Out):\n  Evict the oldest inserted item regardless of usage. Rarely ideal.\n```\n\n---\n\n## Cache Invalidation — The Hard Problem\n\nPhil Karlton famously said: \"There are only two hard things in Computer Science:\ncache invalidation and naming things.\"\n\n```\nTHE PROBLEM:\n  You cache user profile for user_id=123.\n  User updates their email address.\n  DB is updated with new email.\n  Cache still has OLD email for 5 more minutes.\n  User sees stale data — confusing and buggy!\n\nINVALIDATION STRATEGIES:\n\n1. TTL-based (simplest):\n   Accept some staleness. TTL=60s means at most 60s of stale data.\n   ✓ Simple to implement\n   ✗ User may see stale data for up to TTL duration\n\n2. Explicit invalidation:\n   When data changes, DELETE the cache key immediately.\n   user.update(email=new_email) -> cache.delete(\"user_profile:123\")\n   ✓ Instant consistency\n   ✗ You must remember to invalidate everywhere data changes\n   ✗ \"Cache stampede\" if many requests hit DB simultaneously after invalidation\n\n3. Cache-aside (lazy loading):\n   App checks cache first. Miss -> fetch from DB -> store in cache.\n   When data updates -> delete cache key (not invalidate -> repopulate).\n   Next read will repopulate. Simple and common.\n\n4. Write-through automatically invalidates:\n   Since every write goes through cache, cache is always current.\n   No separate invalidation logic needed.\n\nCACHE STAMPEDE (Thundering Herd):\n  Popular key expires at same time.\n  1000 concurrent requests all get cache miss simultaneously.\n  All 1000 hit the database at once -> DB overwhelmed.\n\n  Solutions:\n    - Probabilistic early expiration: randomly refresh before TTL expires\n    - Mutex lock: only one request rebuilds cache, others wait\n    - Background refresh: async refresh before TTL expires\n    - Stale-while-revalidate: serve stale data, refresh in background\n```\n\n---\n\n## Redis — The Most Popular Distributed Cache\n\nRedis is an in-memory data structure server. Way more than just a cache.\n\n```\nDATA STRUCTURES (not just strings!):\n  String:     GET/SET key value  (basic caching)\n  List:       LPUSH/RPOP         (queues, timelines)\n  Set:        SADD/SMEMBERS      (unique visitors, tags)\n  Sorted Set: ZADD/ZRANGE        (leaderboards, rate limiting)\n  Hash:       HSET/HGET          (user profiles as field->value)\n  Bitmap:     SETBIT/GETBIT      (feature flags, daily active users)\n  HyperLogLog: PFADD/PFCOUNT     (approximate unique count)\n\nKEY PATTERNS:\n  user:123:profile     -> Hash of user fields\n  session:abc123       -> String (serialised session JSON)\n  rate_limit:user:123  -> Integer counter + TTL\n  leaderboard:weekly   -> Sorted Set (score -> userId)\n  cache:product:456    -> String (serialised JSON) + TTL\n\nPERSISTENCE:\n  RDB: periodic snapshots to disk (data safe across restarts)\n  AOF: append-only log of every write command (more durable)\n  Both: for production; just RDB for cache-only use\n\nREDIS CLUSTER:\n  Horizontal sharding across multiple Redis nodes.\n  16384 hash slots distributed across N masters.\n  Each key -> hash slot -> shard node.\n  Automatic resharding when nodes added/removed.\n```\n\n---\n\n## CDN Caching — The Outermost Layer\n\n```\nCDN = Content Delivery Network\n  Geographically distributed servers that cache your content at the edge.\n  User request goes to nearest edge (50ms) not origin server (200ms).\n\nSTATIC ASSETS (always cache):\n  Images, CSS, JavaScript, fonts\n  Cache-Control: max-age=31536000, immutable (1 year, never revalidate)\n  Use content-hashed filenames: main.a3f8c.js (hash changes when content changes)\n\nAPI RESPONSES (sometimes cache):\n  GET /api/products/featured -> same for all users -> cache at CDN edge\n  GET /api/users/me -> personalised -> DO NOT cache at CDN (or vary by cookie)\n\nHTTP CACHE HEADERS:\n  Cache-Control: max-age=3600           -> cache for 1 hour\n  Cache-Control: no-store               -> never cache (sensitive data)\n  Cache-Control: no-cache               -> cache but revalidate every time\n  Cache-Control: public                 -> CDN and browsers can cache\n  Cache-Control: private                -> only browser caches (not CDN)\n  ETag: \"abc123\"                        -> fingerprint of content\n  Last-Modified: Mon, 28 Apr 2026 ...   -> when content last changed\n  Vary: Accept-Encoding, Accept-Language -> different cache per encoding/language\n```\n\n---\n\n## Common Caching Patterns\n\n```\nCACHE-ASIDE (Lazy Loading) — most common:\n  1. App checks cache\n  2. Hit: return value\n  3. Miss: fetch from DB, store in cache, return value\n\n  def get_user(user_id):\n      cached = redis.get(f\"user:{user_id}\")\n      if cached:\n          return json.loads(cached)\n      user = db.query(\"SELECT * FROM users WHERE id = ?\", user_id)\n      redis.setex(f\"user:{user_id}\", 300, json.dumps(user))  # TTL 5min\n      return user\n\nREAD-THROUGH:\n  Cache sits in front of DB. Cache itself fetches from DB on miss.\n  App only talks to cache, never directly to DB.\n  Popular in ORMs and caching libraries (Hibernate second-level cache).\n\nHOT KEY PROBLEM:\n  One cache key gets 1,000,000 requests/second (celebrity post, trending product).\n  Single Redis node becomes bottleneck.\n  Solutions:\n    - Local in-process cache as L2 (JVM HashMap in front of Redis)\n    - Key replication: store same value in cache:product:123:shard0 through :shard9\n      Distribute reads across 10 keys (each handles 100K rps)\n```\n\n---\n\n## Mind Map\n\n```\nCACHING\n|\n+-- LAYERS\n|   +-- L1/L2/L3 CPU (hardware)\n|   +-- In-process (HashMap/Caffeine)\n|   +-- Distributed (Redis/Memcached)\n|   +-- DB read replicas\n|   +-- CDN (edge, global)\n|\n+-- WRITE STRATEGIES\n|   +-- Write-through (consistent, slower writes)\n|   +-- Write-back (fast writes, risk of loss)\n|   +-- Write-around (cache only on read)\n|\n+-- EVICTION\n|   +-- LRU (recency — most common)\n|   +-- LFU (frequency)\n|   +-- TTL (time-based expiry)\n|   +-- Random\n|\n+-- INVALIDATION\n|   +-- TTL (accept staleness)\n|   +-- Explicit delete on write\n|   +-- Cache stampede prevention\n|\n+-- REDIS\n|   +-- Strings, Lists, Sets, Sorted Sets, Hashes\n|   +-- TTL per key\n|   +-- Persistence (RDB/AOF)\n|   +-- Cluster (sharding)\n|\n+-- CDN\n    +-- Static assets (long TTL, content-hashed)\n    +-- Cache-Control headers\n    +-- Personalised responses: do NOT cache at CDN\n```\n\n---\n\n## How Caching Connects to Other Topics\n\n- **Sharding**: When a DB is sharded, caching reduces cross-shard queries dramatically.\n- **Rate Limiting**: Redis Sorted Sets and counters power token bucket and sliding window rate limiters.\n- **Load Balancing**: CDN caching reduces load balancer and origin server load.\n- **Databases**: Read replicas are a form of caching. ElastiCache sits in front of RDS.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Redis Crash Course** by Traversy Media:\n  https://www.youtube.com/watch?v=jgpVdJB2sKQ\n  - 40 minutes. Redis commands, data structures, Node.js integration.\n- **Caching Explained** by ByteByteGo:\n  https://www.youtube.com/watch?v=dGAgxozNWFE\n  - System design-focused overview of all caching strategies.\n\n### Free Books and Articles\n- **Redis official docs**: https://redis.io/docs/manual/data-types/\n- **The System Design Primer — Caching**: https://github.com/donnemartin/system-design-primer#cache\n  - Comprehensive system design caching section.\n\n### Diagrams\n- **Cache write strategies diagram**: search 'write-through vs write-back cache diagram'\n- **CDN caching flow**: search 'CloudFront caching diagram'\n\n### Practice\n- **Try Redis in browser**: https://try.redis.io/ — interactive Redis tutorial\n- **Redis University (free)**: https://university.redis.com/\n",
   "questions": [
     {
       "id": "cache-q1",
       "type": "mcq",
-      "prompt": "Cache-aside (lazy loading) pattern \u2014 how does it work?",
+      "prompt": "What is a cache hit and a cache miss?",
       "choices": [
-        "Cache reads DB automatically",
-        "App checks cache first. On miss: load from DB, store in cache with TTL, return. On hit: return from cache. Cache only populated for items actually requested",
-        "Write-through is always used",
-        "Cache is pre-warmed with all data"
+        "Hit = error, Miss = success",
+        "Hit = requested data found in cache (fast). Miss = data not in cache, must fetch from slower source (DB/API)",
+        "Hit = write, Miss = read",
+        "They are the same thing"
       ],
       "answerIndex": 1,
-      "explanation": "Cache-aside is the most common pattern: read cache \u2192 miss \u2192 read DB \u2192 store in cache \u2192 return. Benefits: only cache what's used. Tradeoff: cache misses add latency (two operations).",
+      "explanation": "Cache hit: data found in cache, served in <1ms. Cache miss: data not in cache, must go to database (10-100ms). Cache hit rate = hits/(hits+misses). 99% hit rate means DB only serves 1% of traffic.",
       "tags": [
         "caching",
-        "patterns"
+        "basics"
       ]
     },
     {
       "id": "cache-q2",
       "type": "mcq",
-      "prompt": "Cache stampede problem and a solution?",
+      "prompt": "What is write-through caching?",
       "choices": [
-        "Too many cache hits",
-        "Popular key expires \u2192 all concurrent requesters cache-miss simultaneously \u2192 all query DB \u2192 DB overloaded. Solution: mutex lock (first miss fetches + populates; others wait) or probabilistic early expiration",
-        "Stampede is a feature",
-        "Solved by LRU eviction"
+        "Write only to cache, skip DB",
+        "Write to DB only",
+        "Write to cache AND DB synchronously — both updated together, always consistent",
+        "Write to a message queue"
       ],
-      "answerIndex": 1,
-      "explanation": "Thundering herd: 1000 concurrent requests all get miss at the same moment \u2192 1000 DB queries. Mutex/probabilistic expiry prevents stampede by serializing the cache population.",
+      "answerIndex": 2,
+      "explanation": "Write-through: every write updates cache and DB in the same operation. Cache is always consistent with DB. Trade-off: write latency = DB write latency (cache doesn't speed up writes). Use for critical data where consistency matters.",
       "tags": [
         "caching",
-        "stampede"
+        "write-through"
       ]
     },
     {
       "id": "cache-q3",
       "type": "mcq",
-      "prompt": "Write-through vs write-behind caching \u2014 key tradeoff?",
+      "prompt": "What is write-back (write-behind) caching?",
       "choices": [
-        "Same behavior",
-        "Write-through: write to cache AND DB synchronously \u2014 consistent, slightly slower writes. Write-behind: write cache only, async DB write \u2014 faster writes but risk of data loss if cache crashes before DB write completes",
-        "Write-through doesn't exist",
-        "Write-behind is deprecated"
+        "Write to DB only, then refresh cache",
+        "Write to cache only, flush to DB asynchronously later — fast writes, risk of data loss on crash",
+        "Skip the cache entirely",
+        "Write only on cache miss"
       ],
       "answerIndex": 1,
-      "explanation": "Write-behind is faster (fire and forget) but introduces a window where cache has data that DB doesn't. Crash during that window = data loss. Write-through is safer at the cost of write latency.",
+      "explanation": "Write-back: write to cache (fast), flush to DB later in batches. Risk: if cache crashes before flush, recent writes are lost. Benefit: very fast write path. Use for high-write workloads that can tolerate brief inconsistency.",
       "tags": [
         "caching",
-        "write-patterns"
+        "write-back"
+      ]
+    },
+    {
+      "id": "cache-q4",
+      "type": "mcq",
+      "prompt": "What does LRU (Least Recently Used) eviction mean?",
+      "choices": [
+        "Evict the largest item",
+        "Evict the item most recently added",
+        "When cache is full, remove the item that hasn't been accessed for the longest time — based on recency of use",
+        "Evict items randomly"
+      ],
+      "answerIndex": 2,
+      "explanation": "LRU keeps recently accessed items and evicts the oldest-accessed. Works on the assumption: if something hasn't been used recently, it probably won't be needed soon. Most popular cache eviction strategy. Redis default.",
+      "tags": [
+        "caching",
+        "lru",
+        "eviction"
+      ]
+    },
+    {
+      "id": "cache-q5",
+      "type": "mcq",
+      "prompt": "What is a cache stampede (thundering herd)?",
+      "choices": [
+        "When too many items are cached",
+        "When a popular cached key expires and many simultaneous requests all hit the database at once, overwhelming it",
+        "When cache runs out of memory",
+        "When two caches have conflicting data"
+      ],
+      "answerIndex": 1,
+      "explanation": "If a hot key expires and 10,000 concurrent requests all get a cache miss simultaneously, all 10,000 hit the DB at once. Solutions: mutex lock (one rebuilds, others wait), probabilistic early expiration, or stale-while-revalidate pattern.",
+      "tags": [
+        "caching",
+        "stampede",
+        "reliability"
+      ]
+    },
+    {
+      "id": "cache-q6",
+      "type": "mcq",
+      "prompt": "What is the Cache-Aside (lazy loading) pattern?",
+      "choices": [
+        "Cache writes whenever DB writes",
+        "Application checks cache first; on miss, fetches from DB, stores in cache, returns result",
+        "Cache automatically syncs with DB",
+        "Write through multiple cache layers"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cache-aside is the most common pattern. App: 1) Check cache. 2) Hit? Return it. 3) Miss? Query DB, store in cache with TTL, return. Cache only stores data that's actually requested. App code controls caching logic.",
+      "tags": [
+        "caching",
+        "cache-aside",
+        "pattern"
+      ]
+    },
+    {
+      "id": "cache-q7",
+      "type": "mcq",
+      "prompt": "What Redis data structure is best for a leaderboard (rank users by score)?",
+      "choices": [
+        "String",
+        "List",
+        "Hash",
+        "Sorted Set (ZADD/ZRANGE with scores)"
+      ],
+      "answerIndex": 3,
+      "explanation": "Redis Sorted Set: ZADD leaderboard 1500 user:123. ZRANGE leaderboard 0 9 WITHSCORES gets top 10. ZRANK leaderboard user:123 gets a user's rank. O(log N) operations. Perfect for any ranked data.",
+      "tags": [
+        "redis",
+        "data-structures",
+        "sorted-set"
+      ]
+    },
+    {
+      "id": "cache-q8",
+      "type": "mcq",
+      "prompt": "Your app runs 10 instances. You use an in-process HashMap as cache. What problem arises?",
+      "choices": [
+        "HashMap is too slow",
+        "10 instances have 10 separate caches — different instances may have different cached values; cache invalidation must happen on every instance separately",
+        "HashMap doesn't support TTL",
+        "Memory is shared across instances"
+      ],
+      "answerIndex": 1,
+      "explanation": "In-process caches are local to each server instance. Instance A caches user profile, user updates, Instance B deletes its cache — but Instance A still serves stale data. Solution: use distributed cache (Redis) shared by all instances.",
+      "tags": [
+        "caching",
+        "distributed",
+        "in-process"
+      ]
+    },
+    {
+      "id": "cache-q9",
+      "type": "mcq",
+      "prompt": "What HTTP header controls how long a browser and CDN cache a response?",
+      "choices": [
+        "X-Cache-Control",
+        "Authorization",
+        "Cache-Control: max-age=3600 controls caching duration (3600 seconds = 1 hour)",
+        "Content-Type"
+      ],
+      "answerIndex": 2,
+      "explanation": "Cache-Control header: max-age=N (cache for N seconds), no-store (never cache), public (CDN and browsers cache), private (only browser caches, not CDN). Content-hashed filenames + max-age=31536000 is the standard pattern for JS/CSS assets.",
+      "tags": [
+        "caching",
+        "cdn",
+        "http-headers"
+      ]
+    },
+    {
+      "id": "cache-q10",
+      "type": "mcq",
+      "prompt": "What is the TTL (Time To Live) in caching?",
+      "choices": [
+        "Total Transaction Log",
+        "Time a cached value is considered valid — after TTL expires, access = cache miss, fresh data fetched from source",
+        "Total Traffic Limit",
+        "Transaction Timeout Limit"
+      ],
+      "answerIndex": 1,
+      "explanation": "TTL automatically expires stale data. redis.setex('user:123', 300, data) — expires after 300 seconds. Short TTL = more cache misses but fresher data. Long TTL = fewer misses but risk of serving stale data. Choose based on data change frequency.",
+      "tags": [
+        "caching",
+        "ttl",
+        "expiry"
+      ]
+    },
+    {
+      "id": "cache-q11",
+      "type": "mcq",
+      "prompt": "What is the hot key problem in distributed caching?",
+      "choices": [
+        "A key that is too large",
+        "When one cache key receives disproportionate traffic (e.g., a celebrity's post) causing a single shard to become a bottleneck",
+        "A key that never expires",
+        "Keys with special characters"
+      ],
+      "answerIndex": 1,
+      "explanation": "If product:bestseller gets 1M requests/second but all map to one Redis node, that node is overwhelmed. Solutions: local in-process cache as L2, key replication (store at cache:key:shard0..9, read from random shard), or Consistent Hashing.",
+      "tags": [
+        "caching",
+        "hot-key",
+        "redis"
+      ]
+    },
+    {
+      "id": "cache-q12",
+      "type": "mcq",
+      "prompt": "What does a CDN cache and why?",
+      "choices": [
+        "User sessions and passwords",
+        "Static assets (images, JS, CSS) and static API responses — served from edge locations near users, reducing latency and origin server load",
+        "Database queries",
+        "Only HTML pages"
+      ],
+      "answerIndex": 1,
+      "explanation": "CDN caches static assets (long-lived, same for all users) and optionally public API responses. Never cache user-specific data (personalised pages, tokens). Enable caching: Cache-Control: public, max-age=86400. Disable: Cache-Control: private, no-store.",
+      "tags": [
+        "caching",
+        "cdn",
+        "static-assets"
+      ]
+    },
+    {
+      "id": "cache-q13",
+      "type": "mcq",
+      "prompt": "What is Redis persistence and why does it matter?",
+      "choices": [
+        "Redis clears data on restart — persistence doesn't exist",
+        "RDB (periodic snapshots) and AOF (append-only log) let Redis survive restarts without losing data",
+        "Redis automatically syncs with MySQL",
+        "Persistence only works in Redis Cluster"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis is in-memory but supports persistence. RDB: periodic snapshot to disk (faster restore). AOF: log every write command (more durable, slower). For pure cache use RDB only. For data you can't lose (sessions, rate limit counters) use AOF or both.",
+      "tags": [
+        "redis",
+        "persistence"
+      ]
+    },
+    {
+      "id": "cache-q14",
+      "type": "mcq",
+      "prompt": "When should you NOT use a cache?",
+      "choices": [
+        "When traffic is high",
+        "For financial data",
+        "When data changes on every request, is unique per user, or when stale data causes serious harm (bank balance during transfer, medical records)",
+        "When using a relational database"
+      ],
+      "answerIndex": 2,
+      "explanation": "Caching is harmful when: data changes faster than TTL (cache is never fresh), data is unique per request (cache miss every time = wasted overhead), or serving stale data is dangerous (inventory count during checkout, real-time pricing).",
+      "tags": [
+        "caching",
+        "trade-offs",
+        "when-not-to-use"
+      ]
+    },
+    {
+      "id": "cache-q15",
+      "type": "mcq",
+      "prompt": "What is the difference between Redis and Memcached?",
+      "choices": [
+        "They are identical",
+        "Redis: rich data structures, persistence, replication, Lua scripting, pub/sub. Memcached: simple string key-value only, multi-threaded, pure cache. Choose Redis for almost all new projects.",
+        "Memcached is faster for all use cases",
+        "Redis is only for caching"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis has overtaken Memcached in popularity due to richer feature set. Memcached advantage: multi-threaded, slightly better throughput for simple get/set. Redis advantage: data structures, persistence, replication, atomic operations, pub/sub. Use Redis.",
+      "tags": [
+        "redis",
+        "memcached",
+        "comparison"
+      ]
+    },
+    {
+      "id": "cache-q16",
+      "type": "mcq",
+      "prompt": "What is cache eviction vs cache invalidation?",
+      "choices": [
+        "They mean the same thing",
+        "Eviction: cache removes items due to memory pressure (LRU/LFU). Invalidation: explicitly removing/updating cached item because source data changed.",
+        "Eviction is for CDN only",
+        "Invalidation only applies to TTL"
+      ],
+      "answerIndex": 1,
+      "explanation": "Eviction = cache is full, remove least valuable item (LRU etc.) to make room. Invalidation = data in DB changed, remove the cached copy so next read gets fresh data. Both can trigger a cache miss but for different reasons.",
+      "tags": [
+        "caching",
+        "eviction",
+        "invalidation"
+      ]
+    },
+    {
+      "id": "cache-q17",
+      "type": "mcq",
+      "prompt": "What write strategy is recommended for caching user session data?",
+      "choices": [
+        "Write-around (session in DB only)",
+        "Write-back (cache only, flush later)",
+        "Write-through or cache-aside with short TTL — session data must be consistent, and loss on crash is unacceptable",
+        "No caching for sessions"
+      ],
+      "answerIndex": 1,
+      "explanation": "Session data must survive cache restarts and be consistent across instances. Write-back risks loss. Write-through or cache-aside with Redis persistence (AOF) is standard. Redis with TTL = sessions auto-expire. Most web frameworks use Redis for session storage.",
+      "tags": [
+        "caching",
+        "sessions",
+        "write-strategy"
+      ]
+    },
+    {
+      "id": "cache-q18",
+      "type": "mcq",
+      "prompt": "What is stale-while-revalidate caching?",
+      "choices": [
+        "A Redis feature",
+        "Serve cached (possibly stale) response immediately while fetching fresh data in background — user gets fast response, cache is refreshed asynchronously",
+        "A SQL caching technique",
+        "Force clients to always revalidate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cache-Control: max-age=60, stale-while-revalidate=30. After 60s, serve stale while async-refreshing. User never waits for a cache miss. CDNs and service workers support this. Trades perfect freshness for zero-latency responses.",
+      "tags": [
+        "caching",
+        "stale-while-revalidate",
+        "cdn"
+      ]
+    },
+    {
+      "id": "cache-q19",
+      "type": "mcq",
+      "prompt": "What is a read-through cache?",
+      "choices": [
+        "Cache that only caches reads, not writes",
+        "Cache layer sits IN FRONT of database and automatically loads data on cache miss — app only ever talks to cache, never to DB directly",
+        "Reading data from multiple caches",
+        "Cache that reads from disk"
+      ],
+      "answerIndex": 1,
+      "explanation": "Read-through: app talks only to cache. On miss: cache itself fetches from DB and stores result. App code is simpler — no explicit cache logic. Trade-off: cache must know how to fetch from DB (coupling). Used by Hibernate L2 cache, Spring @Cacheable.",
+      "tags": [
+        "caching",
+        "read-through",
+        "pattern"
+      ]
+    },
+    {
+      "id": "cache-q20",
+      "type": "mcq",
+      "prompt": "What cache eviction policy should you use for a 'top 100 products' cache where 20 new products are added daily but old ones remain popular?",
+      "choices": [
+        "FIFO — evict the oldest-added items",
+        "LFU — keep items by access frequency; new products start at count=0 but quickly accumulate counts if popular, while truly unpopular ones fade",
+        "Random eviction",
+        "Always full scan, no eviction needed"
+      ],
+      "answerIndex": 1,
+      "explanation": "LFU is better than LRU here. LRU might evict a popular product just because it wasn't accessed in the last minute. LFU tracks total access count — a product with 10,000 accesses stays even if not accessed in the last 10 minutes.",
+      "tags": [
+        "caching",
+        "lfu",
+        "eviction"
       ]
     }
   ],
   "flashcards": [
     {
       "id": "cache-fc1",
-      "front": "Cache-aside pattern",
-      "back": "1. Check cache (hit \u2192 return). 2. Miss \u2192 query DB. 3. Store result in cache with TTL. 4. Return. Invalidate on write: del(key). Most common, handles cold start gracefully.",
+      "front": "Write-through vs write-back vs write-around",
+      "back": "Write-through: write cache+DB sync (consistent, slow writes). Write-back: write cache only, flush DB async (fast writes, risk of loss). Write-around: write DB only, cache on first read (cache only stores read data).",
       "tags": [
-        "caching"
+        "caching",
+        "write-strategies"
       ]
     },
     {
       "id": "cache-fc2",
-      "front": "Cache eviction policies",
-      "back": "LRU: evict least recently used (good for recency bias). LFU: evict least frequently used (good for hot keys). TTL: expire after time. Redis default: noeviction (fails on full). Set maxmemory-policy.",
+      "front": "LRU vs LFU vs TTL eviction",
+      "back": "LRU: evict least recently accessed (default, good general purpose). LFU: evict least frequently accessed (better for stable popular items). TTL: auto-expire after time (prevent stale data). Combine LRU + TTL in production.",
       "tags": [
-        "caching"
+        "caching",
+        "eviction"
       ]
     },
     {
       "id": "cache-fc3",
-      "front": "Cache stampede / thundering herd",
-      "back": "Popular key expires \u2192 N concurrent misses \u2192 N DB queries. Fixes: mutex lock (one refetch, others wait), probabilistic early expiry (refresh before expiry), async background refresh for hot keys.",
+      "front": "Cache stampede prevention",
+      "back": "Hot key expires -> thousands hit DB simultaneously. Fix: mutex lock (one rebuilds), probabilistic early expiry (randomly refresh before TTL), stale-while-revalidate (serve stale, refresh async), or pre-warm cache before expiry.",
       "tags": [
         "caching",
         "stampede"
@@ -89,10 +396,49 @@
     },
     {
       "id": "cache-fc4",
-      "front": "Write patterns",
-      "back": "Write-through: update cache + DB together (consistent, slower writes). Write-behind: cache only + async DB (fast, loss risk). Cache-aside: invalidate on write (simple, eventual). Cache should never be source of truth.",
+      "front": "Redis data structure cheatsheet",
+      "back": "String: simple cache. Hash: object fields. List: queue/timeline. Set: unique tags/visitors. Sorted Set: leaderboard/rate limiter. HyperLogLog: approx unique count. Bitmap: feature flags, daily active users.",
       "tags": [
-        "caching"
+        "redis",
+        "data-structures"
+      ]
+    },
+    {
+      "id": "cache-fc5",
+      "front": "When NOT to cache",
+      "back": "Data changes on every request (no benefit). Unique per user (every request = miss). Data where staleness causes harm (bank balance, inventory during checkout). Highly sensitive data (cache may leak across users).",
+      "tags": [
+        "caching",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "cache-fc6",
+      "front": "CDN cache headers rule",
+      "back": "Static assets (JS/CSS/images): Cache-Control: public, max-age=31536000 + content-hashed filename. Dynamic personalised: Cache-Control: private, no-store. Public API (same for all): Cache-Control: public, max-age=60, stale-while-revalidate=30.",
+      "tags": [
+        "caching",
+        "cdn",
+        "http-headers"
+      ]
+    },
+    {
+      "id": "cache-fc7",
+      "front": "Cache-aside pattern steps",
+      "back": "1) Check cache for key. 2) HIT: return cached value. 3) MISS: query DB. 4) Store in cache with TTL. 5) Return value. App controls caching explicitly. Cache only contains data actually requested. Most common caching pattern.",
+      "tags": [
+        "caching",
+        "cache-aside"
+      ]
+    },
+    {
+      "id": "cache-fc8",
+      "front": "Hot key problem and solution",
+      "back": "One Redis key gets millions of requests/sec -> single shard is bottleneck. Fix: local in-process L2 cache in front of Redis, OR key replication (cache:key:shard0..9, read from random shard). Reduces per-shard load by 10x.",
+      "tags": [
+        "redis",
+        "hot-key",
+        "scaling"
       ]
     }
   ],

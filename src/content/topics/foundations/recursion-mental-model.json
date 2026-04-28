@@ -1,0 +1,474 @@
+{
+  "id": "recursion-mental-model",
+  "unit": 1,
+  "order": 2,
+  "title": "Recursion Mental Model",
+  "summary": "Trust-the-recursion thinking, base/recursive cases, common patterns, and converting recursion to iteration.",
+  "prereqs": [
+    "time-space-complexity"
+  ],
+  "guide": "# Recursion — A Mental Model That Works\n\n## What Is Recursion?\n\nA recursive function calls itself. Sounds simple, but new programmers find it mind-bending.\nThe key insight: **trust the recursion**. Don't try to trace through every call manually.\nInstead, think 'if my function works for smaller inputs, it works for the bigger one.'\n\n```\nImagine looking up a word in a paper dictionary:\n  Open dictionary in middle, see word at top of page.\n  Word starts with M, my word starts with R → look in second half.\n  Take second half, open in middle, see Q.\n  My word starts with R → look in second half of THAT.\n  Continue until you find your word or run out of pages.\n\nEach step: 'do same operation on smaller input.' That's recursion.\n```\n\n---\n\n## Anatomy of a Recursive Function\n\nEvery recursive function MUST have two things:\n\n```\n1. BASE CASE: a condition that stops recursion (no more calls)\n2. RECURSIVE CASE: calls itself with a SMALLER input\n\nIf missing base case  → infinite recursion → StackOverflowError\nIf recursive case isn't smaller → infinite recursion → StackOverflowError\n\nExample — factorial:\n\n  int factorial(int n) {\n      if (n <= 1) return 1;          // BASE CASE — stops here\n      return n * factorial(n - 1);    // RECURSIVE CASE — smaller input\n  }\n\n  factorial(4)\n    = 4 * factorial(3)\n        = 4 * (3 * factorial(2))\n            = 4 * (3 * (2 * factorial(1)))\n                = 4 * (3 * (2 * 1))    ← base case returns 1\n                = 4 * (3 * 2)\n                = 4 * 6\n                = 24\n```\n\n---\n\n## The Three Steps to Solve Any Recursion\n\n```\nSTEP 1: BASE CASE\n  What's the simplest input where the answer is obvious?\n  - factorial(0) or factorial(1) = 1\n  - sum of empty list = 0\n  - reverse of empty string = empty string\n\nSTEP 2: RECURSIVE CASE\n  Assume the function works for a smaller input (TRUST IT).\n  How can you use that result to solve the current one?\n  - factorial(n) = n × factorial(n-1)\n  - sum([first, ...rest]) = first + sum(rest)\n  - reverse(s) = reverse(s[1:]) + s[0]\n\nSTEP 3: VERIFY PROGRESS\n  Each recursive call must move TOWARD the base case.\n  - factorial(n-1) is smaller than n ✓\n  - rest is shorter than original ✓\n  - s[1:] is shorter than s ✓\n\nIf all three are correct, the function works. Don't trace manually.\n```\n\n---\n\n## Visualising the Call Stack\n\n```\nEach function call adds a STACK FRAME (locals + return address).\nWhen the call returns, its frame is removed.\n\nfactorial(3):\n\nTime →\n\n  Stack:                       Return value:\n  ┌─────────────┐\n  │ factorial(3)│\n  └─────────────┘\n       │ calls\n       ▼\n  ┌─────────────┐\n  │ factorial(2)│\n  ├─────────────┤\n  │ factorial(3)│\n  └─────────────┘\n       │ calls\n       ▼\n  ┌─────────────┐\n  │ factorial(1)│   returns 1 (base case)\n  ├─────────────┤\n  │ factorial(2)│\n  ├─────────────┤\n  │ factorial(3)│\n  └─────────────┘\n       │ unwinds\n       ▼\n  ┌─────────────┐\n  │ factorial(2)│   returns 2 * 1 = 2\n  ├─────────────┤\n  │ factorial(3)│\n  └─────────────┘\n       │ unwinds\n       ▼\n  ┌─────────────┐\n  │ factorial(3)│   returns 3 * 2 = 6\n  └─────────────┘\n       │\n       ▼\n  Final result: 6\n\nStack depth = max number of nested calls = O(n) for factorial\n```\n\n---\n\n## Common Recursion Patterns\n\n```\nPATTERN 1: REDUCE-AND-COMBINE\n\n  Problem can be split: solve smaller part, combine with current.\n\n  int sumList(List<Integer> list) {\n      if (list.isEmpty()) return 0;\n      return list.get(0) + sumList(list.subList(1, list.size()));\n  }\n\nPATTERN 2: DIVIDE-AND-CONQUER\n\n  Split input into halves, recurse on each, combine.\n\n  int[] mergeSort(int[] arr) {\n      if (arr.length <= 1) return arr;\n      int mid = arr.length / 2;\n      int[] left = mergeSort(slice(arr, 0, mid));      // recurse\n      int[] right = mergeSort(slice(arr, mid, arr.length)); // recurse\n      return merge(left, right);\n  }\n\nPATTERN 3: BACKTRACKING (try all paths)\n\n  Try a choice, recurse, undo if it doesn't lead to solution.\n\n  void permute(char[] chars, int start) {\n      if (start == chars.length) {\n          print(chars);   // base case: full permutation\n          return;\n      }\n      for (int i = start; i < chars.length; i++) {\n          swap(chars, start, i);     // try this choice\n          permute(chars, start + 1); // recurse\n          swap(chars, start, i);     // undo (backtrack)\n      }\n  }\n\nPATTERN 4: TREE / GRAPH TRAVERSAL\n\n  Process current node, recurse on children.\n\n  int treeSum(TreeNode node) {\n      if (node == null) return 0;            // base case\n      return node.val + treeSum(node.left) + treeSum(node.right);\n  }\n\nPATTERN 5: TAIL RECURSION (loop in recursion form)\n\n  Recursive call is the LAST thing the function does.\n  Some languages optimise this to a loop (no stack growth) — Java does NOT.\n\n  int factorialTail(int n, int acc) {\n      if (n <= 1) return acc;\n      return factorialTail(n - 1, n * acc);  // last operation\n  }\n  // Initial call: factorialTail(5, 1)\n```\n\n---\n\n## When NOT to Use Recursion\n\n```\n1. STACK OVERFLOW RISK:\n   Java default stack size: ~1MB ≈ 10,000 frames\n   Don't recurse deeper than this. For depth >10K, use iteration.\n\n   Bad: factorial(100000) → StackOverflowError\n   Fix: convert to a for loop accumulating result.\n\n2. EXPONENTIAL TIME WITHOUT MEMOISATION:\n\n   int fib(int n) {\n       if (n <= 1) return n;\n       return fib(n-1) + fib(n-2);     // O(2^n) time!\n   }\n\n   fib(40) takes seconds. fib(50) hours. fib(60) impossible.\n   Fix: memoise (cache results) or convert to bottom-up DP.\n\n3. WHEN ITERATION IS CLEARER:\n   sumOfArray with for loop: 3 lines, obvious.\n   sumOfArray with recursion: 4 lines, requires base-case thinking.\n   Don't be cute — use the simpler form.\n\n4. PERFORMANCE-CRITICAL CODE:\n   Function call overhead: each call has push/pop/jump = slow.\n   Iteration is faster for the same algorithm in CPU-bound code.\n```\n\n---\n\n## Recursion vs Iteration — Conversion\n\nMost recursive functions can be rewritten as loops with an explicit stack.\n\n```java\n// Recursive in-order BST traversal\nvoid inOrder(TreeNode node) {\n    if (node == null) return;\n    inOrder(node.left);\n    print(node.val);\n    inOrder(node.right);\n}\n\n// Iterative version using explicit Deque as stack\nvoid inOrderIterative(TreeNode root) {\n    Deque<TreeNode> stack = new ArrayDeque<>();\n    TreeNode current = root;\n    while (current != null || !stack.isEmpty()) {\n        while (current != null) {\n            stack.push(current);\n            current = current.left;\n        }\n        current = stack.pop();\n        print(current.val);\n        current = current.right;\n    }\n}\n// Same O(n) time, but no stack overflow risk for deep trees.\n```\n\n---\n\n## Mind Map\n\n```\nRECURSION\n|\n+-- ANATOMY\n|   +-- Base case (stops)\n|   +-- Recursive case (smaller input)\n|   +-- Progress toward base\n|\n+-- THINKING APPROACH\n|   +-- TRUST the recursion\n|   +-- Don't trace manually\n|   +-- 'If it works for n-1, does it work for n?'\n|\n+-- PATTERNS\n|   +-- Reduce-and-combine (sum, fib)\n|   +-- Divide-and-conquer (mergesort)\n|   +-- Backtracking (permutations)\n|   +-- Tree/graph traversal\n|   +-- Tail recursion\n|\n+-- PITFALLS\n|   +-- Missing base case → stack overflow\n|   +-- Not getting smaller → stack overflow\n|   +-- Naive fib = O(2^n) without memoisation\n|\n+-- COMPLEXITY\n|   +-- Time: count total calls\n|   +-- Space: max stack depth\n|   +-- Branching factor matters!\n|\n+-- ITERATION CONVERSION\n    +-- Replace stack frames with explicit Deque\n    +-- Avoids StackOverflowError\n    +-- Often faster (less overhead)\n```\n\n---\n\n## How Recursion Connects to Other Topics\n\n- **Trees & Graphs**: nearly all tree/graph algorithms are naturally recursive\n- **Divide-and-conquer**: mergesort, quicksort, binary search\n- **Dynamic Programming**: top-down DP = recursion + memoisation\n- **Backtracking**: solving puzzles, generating combinations, N-queens\n- **Functional Programming**: recursion replaces loops in pure FP languages\n\n---\n\n## Common Beginner Mistakes\n\n1. **No base case** — function never returns, stack blows up\n2. **Base case never reached** — recursion not making input smaller\n3. **Trying to trace recursion manually** — works for depth 3, impossible for depth 20\n4. **Forgetting return statement** — `factorial(n-1)` instead of `return n * factorial(n-1)`\n5. **Recomputing same subproblem** — naive fib is O(2^n); memoise for O(n)\n6. **Stack overflow on deep input** — recursion depth > ~10K crashes Java\n7. **Modifying shared state** — backtracking must restore state on return\n\n---\n\n## References\n\n### Videos\n- **5 Simple Steps to Solve Recursion** by Reducible: https://www.youtube.com/watch?v=ngCos392W4w\n- **Recursion Visualised** by Computerphile: https://www.youtube.com/watch?v=Mv9NEXX1VHc\n\n### Articles\n- **The Little Book of Recursion** (free): https://inventwithpython.com/recursion/\n- **Visualising Recursion** (interactive): https://recursion.vercel.app/",
+  "questions": [
+    {
+      "id": "rec-q1",
+      "type": "mcq",
+      "prompt": "What MUST every recursive function have?",
+      "choices": [
+        "A loop",
+        "A base case (stopping condition) AND a recursive case that moves toward the base",
+        "A return type of int",
+        "An array parameter"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both are required: 1) base case to stop recursion (otherwise infinite calls = StackOverflowError), 2) recursive case making input smaller (otherwise same input → infinite recursion). Missing either guarantees a crash. Always write the base case FIRST when implementing.",
+      "tags": [
+        "recursion",
+        "fundamentals",
+        "base-case"
+      ]
+    },
+    {
+      "id": "rec-q2",
+      "type": "mcq",
+      "prompt": "What is the time complexity of naive recursive Fibonacci: fib(n) = fib(n-1) + fib(n-2)?",
+      "choices": [
+        "O(n)",
+        "O(2^n) — each call branches into 2 calls, building an exponential call tree",
+        "O(n log n)",
+        "O(n^2)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each call makes 2 calls. Tree depth n. Total nodes ≈ 2^n. Same subproblems computed many times: fib(40) requires ~10^9 calls. fib(45) takes ~30 seconds. Memoisation reduces this to O(n) by caching each fib(k) once.",
+      "tags": [
+        "fibonacci",
+        "complexity",
+        "exponential"
+      ]
+    },
+    {
+      "id": "rec-q3",
+      "type": "mcq",
+      "prompt": "Why does this code cause StackOverflowError?\n\nint f(int n) { return f(n - 1) + 1; }",
+      "choices": [
+        "Too much memory",
+        "No base case — recursion never stops, infinitely deep call stack",
+        "Compilation error",
+        "Wrong return type"
+      ],
+      "answerIndex": 1,
+      "explanation": "Missing base case. Each call adds a stack frame. After ~10K frames (Java default 1MB stack), JVM throws StackOverflowError. Fix: add 'if (n == 0) return 0;' or similar before the recursive call. ALWAYS write the base case FIRST.",
+      "tags": [
+        "stack-overflow",
+        "base-case"
+      ]
+    },
+    {
+      "id": "rec-q4",
+      "type": "mcq",
+      "prompt": "What is the SPACE complexity of naive recursive Fibonacci?",
+      "choices": [
+        "O(2^n) like time",
+        "O(n) — at any moment, only one branch is being computed; max stack depth is n. Space is reclaimed when each call returns.",
+        "O(1)",
+        "O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Time: O(2^n) due to recursive branching. Space: only one path through the recursion tree exists in memory at a time. After fib(n-1) returns, its frames are freed before fib(n-2) starts. Max simultaneous depth = n. Subtle but important: time and space differ.",
+      "tags": [
+        "fibonacci",
+        "space-complexity"
+      ]
+    },
+    {
+      "id": "rec-q5",
+      "type": "mcq",
+      "prompt": "Tail recursion is when:",
+      "choices": [
+        "The function recurses many times",
+        "The recursive call is the LAST operation in the function — no further work after the call returns",
+        "The function is in a loop",
+        "The function calls itself once"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tail recursion: 'return f(...)' with no operations after. Some languages (Scala, Scheme, JS strict mode) optimise this to a loop, eliminating stack growth (TCO). Java does NOT optimise tail calls — same stack overflow risk. Convert to iteration manually.",
+      "tags": [
+        "tail-recursion",
+        "optimisation"
+      ]
+    },
+    {
+      "id": "rec-q6",
+      "type": "codeOutput",
+      "prompt": "What does this print?\n\nvoid f(int n) {\n    if (n == 0) return;\n    System.out.print(n + \" \");\n    f(n - 1);\n    System.out.print(n + \" \");\n}\nf(3);",
+      "code": "f(3) prints n, calls f(2), then prints n again",
+      "choices": [
+        "3 2 1 1 2 3",
+        "3 2 1 0 1 2 3",
+        "3 3 2 2 1 1",
+        "3 2 1"
+      ],
+      "answerIndex": 0,
+      "explanation": "Pre-order print: 3 2 1 (going down). Then call returns: each prints n again on the way back: 1 2 3. Total: '3 2 1 1 2 3'. The pattern of work-before-call vs work-after-call is fundamental to tree traversals (pre/in/post-order).",
+      "tags": [
+        "recursion",
+        "trace",
+        "output"
+      ]
+    },
+    {
+      "id": "rec-q7",
+      "type": "mcq",
+      "prompt": "Memoisation transforms naive Fibonacci from O(2^n) to:",
+      "choices": [
+        "O(n^2)",
+        "O(n) time, O(n) space — each fib(k) computed exactly once and cached",
+        "O(log n)",
+        "O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Naive fib(n) recomputes fib(5) hundreds of times in fib(40). Memoised: store result on first computation, return cached on subsequent. Each fib(k) for k=0..n computed once = O(n) calls. Cache + call stack = O(n) space. Trade space for time, classic dynamic programming.",
+      "tags": [
+        "memoisation",
+        "fibonacci",
+        "dp"
+      ]
+    },
+    {
+      "id": "rec-q8",
+      "type": "mcq",
+      "prompt": "What is the maximum recursion depth typically supported in Java?",
+      "choices": [
+        "1 million",
+        "About 10,000-20,000 frames (default stack ~1MB)",
+        "Unlimited",
+        "100"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default JVM thread stack size is 512KB-1MB. Each frame uses 50-200 bytes (locals, return addr). Max depth ~10K. Configurable: -Xss2m (2MB stack). For deeper recursion: convert to iteration with explicit Deque<>. Tree depth is rarely an issue; linked list/array recursion can blow up.",
+      "tags": [
+        "stack",
+        "limits",
+        "java"
+      ]
+    },
+    {
+      "id": "rec-q9",
+      "type": "mcq",
+      "prompt": "Backtracking pattern — what's the key step that distinguishes it from regular recursion?",
+      "choices": [
+        "Multiple return values",
+        "UNDOING the choice after the recursive call returns — exploring all paths by trying each, then reverting state",
+        "Using a stack",
+        "No base case"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backtracking: try a choice, recurse, undo. The undo step (backtrack) lets the algorithm explore other paths. Example: N-queens places queen, recurses, removes queen if solution not found. Permutations swap, recurse, swap back. Without undo, you'd corrupt shared state.",
+      "tags": [
+        "backtracking",
+        "pattern"
+      ]
+    },
+    {
+      "id": "rec-q10",
+      "type": "mcq",
+      "prompt": "Trust the recursion principle: when implementing 'reverse a linked list recursively', what should you assume?",
+      "choices": [
+        "Nothing — trace through every call",
+        "Assume the recursive call CORRECTLY reverses the rest of the list, then just attach the current node correctly. Don't trace mentally.",
+        "The function is iterative",
+        "All bases cases are wrong"
+      ],
+      "answerIndex": 1,
+      "explanation": "The 'leap of faith' is essential. reverse(head): assume reverse(head.next) returns the reversed sublist correctly. Then your only job: attach 'head' as the new tail. This thinking pattern works for ALL tree/list recursion. Don't try to mentally simulate deep recursion — trust the smaller case works.",
+      "tags": [
+        "recursion",
+        "mental-model"
+      ]
+    },
+    {
+      "id": "rec-q11",
+      "type": "mcq",
+      "prompt": "Why is iteration often faster than recursion for the same algorithm?",
+      "choices": [
+        "Iteration uses less memory always",
+        "Function call overhead: each recursive call requires push/pop of stack frame, parameter passing, return jumps. Iteration avoids this in a tight loop.",
+        "Compilers can't optimise recursion",
+        "Recursion is asymptotically slower"
+      ],
+      "answerIndex": 1,
+      "explanation": "Iteration in a tight loop: a few CPU instructions per iteration. Recursion: parameter packaging, stack push, jump, return jump, stack pop = 10x more overhead per 'step'. Same Big-O, but constant factor differs. For performance-critical code, prefer iteration. For clarity, recursion.",
+      "tags": [
+        "performance",
+        "iteration"
+      ]
+    },
+    {
+      "id": "rec-q12",
+      "type": "mcq",
+      "prompt": "What's wrong with this 'sum array' function?\n\nint sum(int[] arr, int i) {\n    if (i == arr.length) return 0;\n    sum(arr, i + 1);\n    return arr[i];\n}",
+      "choices": [
+        "Missing base case",
+        "Recursive call result is discarded — should be 'return arr[i] + sum(arr, i+1)'",
+        "Index out of bounds",
+        "Stack overflow"
+      ],
+      "answerIndex": 1,
+      "explanation": "The function calls sum recursively but THROWS AWAY the result. Each call returns just arr[i], not the sum. To fix: 'return arr[i] + sum(arr, i+1);'. Common bug: forgetting to combine the recursive result with current value.",
+      "tags": [
+        "recursion",
+        "bug"
+      ]
+    },
+    {
+      "id": "rec-q13",
+      "type": "mcq",
+      "prompt": "For a balanced binary tree with n nodes, recursive traversal complexity is:",
+      "choices": [
+        "O(log n) time, O(n) space",
+        "O(n) time (visit each node once), O(log n) space (tree height = call stack depth)",
+        "O(n^2)",
+        "O(2^n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tree traversal: each node visited once → O(n) time. Recursion depth = max path from root to leaf = tree height. Balanced tree: height log n. Skewed tree (degenerate): height n. So balanced O(log n) space, unbalanced O(n) space. This is why we balance trees!",
+      "tags": [
+        "tree",
+        "traversal",
+        "complexity"
+      ]
+    },
+    {
+      "id": "rec-q14",
+      "type": "mcq",
+      "prompt": "How does the 'pre-order' vs 'post-order' tree traversal differ in code?",
+      "choices": [
+        "Different tree types",
+        "WHEN you process the current node: pre-order = process THEN recurse; post-order = recurse THEN process. Order changes which nodes get processed first.",
+        "Pre-order is iterative",
+        "No difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pre-order: process node, recurse left, recurse right. Visits root before children. Used for tree COPY. Post-order: recurse left, recurse right, process node. Visits children before root. Used for tree DELETION (delete children first). In-order (BST): recurse left, process, recurse right. Yields sorted order for BST.",
+      "tags": [
+        "tree",
+        "traversal",
+        "ordering"
+      ]
+    },
+    {
+      "id": "rec-q15",
+      "type": "mcq",
+      "prompt": "What does this print?\n\nint f(int n) {\n    if (n == 0) return 0;\n    return n + f(n - 1);\n}\nSystem.out.println(f(5));",
+      "choices": [
+        "5",
+        "15 — sum 5+4+3+2+1+0",
+        "10",
+        "25"
+      ],
+      "answerIndex": 1,
+      "explanation": "f(5)=5+f(4)=5+4+f(3)=5+4+3+f(2)=...=5+4+3+2+1+0=15. Classic 'sum 1 to n' via recursion. Iterative: n*(n+1)/2 = 5*6/2 = 15. Same answer, recursive form vs closed-form. Recognise the pattern: each call adds n and reduces.",
+      "tags": [
+        "recursion",
+        "trace",
+        "sum"
+      ]
+    },
+    {
+      "id": "rec-q16",
+      "type": "multi",
+      "prompt": "Which patterns naturally use recursion? (Select all)",
+      "choices": [
+        "Tree traversal (pre/in/post-order)",
+        "Divide and conquer (mergesort)",
+        "Backtracking (permutations, N-queens)",
+        "Iterating a fixed-size array"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Trees: hierarchical structure matches recursion perfectly. Divide-and-conquer: split into smaller similar subproblems. Backtracking: try-recurse-undo paradigm. Fixed-size array iteration: for-loop is more idiomatic and faster — recursion adds unnecessary overhead.",
+      "tags": [
+        "patterns",
+        "when-to-use"
+      ]
+    },
+    {
+      "id": "rec-q17",
+      "type": "mcq",
+      "prompt": "Recursion vs Stack-based iteration — when is iteration mandatory?",
+      "choices": [
+        "Always",
+        "When recursion depth might exceed JVM stack limit (~10K frames). E.g., processing a 1M-node linked list recursively will StackOverflowError; iteration handles any size.",
+        "When recursion is slow",
+        "Never"
+      ],
+      "answerIndex": 1,
+      "explanation": "For deep linear recursion (linked list of N=10⁶ nodes), recursion will crash. Convert to iteration with explicit Deque<Node>. Java has no tail-call optimisation. Trees with bounded depth (height < 30 for balanced tree of 1B nodes) are safe with recursion.",
+      "tags": [
+        "stack-overflow",
+        "iteration",
+        "conversion"
+      ]
+    },
+    {
+      "id": "rec-q18",
+      "type": "mcq",
+      "prompt": "What is mutual recursion?",
+      "choices": [
+        "A function calling itself twice",
+        "Two or more functions that call each other — a calls b, b calls a, eventually one hits a base case",
+        "Recursion across threads",
+        "Recursion in classes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Mutual recursion: isEven(n) returns isOdd(n-1); isOdd(n) returns isEven(n-1). They alternate calls. Less common than self-recursion but useful for state-machine-like problems. Same StackOverflowError risk if no base case.",
+      "tags": [
+        "mutual-recursion"
+      ]
+    },
+    {
+      "id": "rec-q19",
+      "type": "mcq",
+      "prompt": "Top-down DP (memoisation) vs bottom-up DP (tabulation) for Fibonacci — both achieve O(n) time. Difference?",
+      "choices": [
+        "No difference",
+        "Top-down: recursive with cache, intuitive ('what does fib(n) need?'). Bottom-up: iterative loop building up from fib(0). Same complexity but bottom-up has no recursion overhead and no stack overflow risk.",
+        "Bottom-up is asymptotically faster",
+        "Top-down uses more time"
+      ],
+      "answerIndex": 1,
+      "explanation": "Top-down (recursion + memo): natural to write, follows problem definition. Risk: stack overflow for deep n. Bottom-up (iteration): build dp[0], dp[1], ..., dp[n] in a loop. No recursion, faster constants, no stack issue. Most production DP code is bottom-up.",
+      "tags": [
+        "dp",
+        "memoisation",
+        "tabulation"
+      ]
+    },
+    {
+      "id": "rec-q20",
+      "type": "mcq",
+      "prompt": "In backtracking, what's the consequence of FORGETTING to undo a choice after the recursive call?",
+      "choices": [
+        "Nothing — recursion handles it",
+        "State leakage: subsequent recursive paths see corrupted state, generating wrong/duplicate results. The undo (e.g., swap back, remove from set) is essential.",
+        "Compilation error",
+        "Faster execution"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backtracking explores ONE path at a time. After exploring with choice X, you must restore state so you can try choice Y from the SAME starting state. Forgetting undo: 'add x to set, recurse, [forget to remove x]' → next iteration sees x already in set. Always undo immediately after recursion returns.",
+      "tags": [
+        "backtracking",
+        "state-management"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rec-fc1",
+      "front": "Recursion checklist",
+      "back": "1) Base case (when to stop) — write FIRST. 2) Recursive case (smaller input). 3) Verify each call moves toward base. Missing any = StackOverflowError. Trust the recursion: assume recursive call works for smaller input.",
+      "tags": [
+        "recursion",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "rec-fc2",
+      "front": "Time vs space for recursion",
+      "back": "Time: count total recursive calls. Branching factor matters: fib has 2 children = O(2^n). Linear recursion (factorial, sum) = O(n). Space: max stack depth at any moment. Linear recursion: O(n). Tree traversal: O(height) = O(log n) balanced, O(n) skewed.",
+      "tags": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "rec-fc3",
+      "front": "Recursion patterns",
+      "back": "Reduce-and-combine: solve smaller, combine with current (factorial, sum). Divide-and-conquer: split halves, recurse each, merge (mergesort). Backtracking: try, recurse, undo (permute, N-queens). Tree traversal: process node + recurse children.",
+      "tags": [
+        "patterns"
+      ]
+    },
+    {
+      "id": "rec-fc4",
+      "front": "When to convert recursion to iteration",
+      "back": "1) Depth >10K (Java stack limit). 2) Performance-critical (function call overhead). 3) When iteration is genuinely clearer. Use explicit Deque<> as stack for tree/graph algorithms. for-loop replaces simple linear recursion.",
+      "tags": [
+        "iteration",
+        "optimisation"
+      ]
+    },
+    {
+      "id": "rec-fc5",
+      "front": "Memoisation transformation",
+      "back": "Add Map<Input,Output> cache. On entry: if cache contains input, return cached value. On exit: store result before returning. Naive fib O(2^n) → memoised O(n). Each subproblem solved once. Trade space for time.",
+      "tags": [
+        "memoisation",
+        "dp"
+      ]
+    },
+    {
+      "id": "rec-fc6",
+      "front": "Backtracking template",
+      "back": "void solve(state) { if (isComplete(state)) record(); for (choice : choices) { make(choice); solve(state); undo(choice); } }. The undo is critical — forgetting it leaks state across paths.",
+      "tags": [
+        "backtracking",
+        "template"
+      ]
+    },
+    {
+      "id": "rec-fc7",
+      "front": "Tree traversal orders",
+      "back": "Pre-order: process, left, right (root first — for tree COPY). In-order: left, process, right (BST in sorted order). Post-order: left, right, process (children first — for tree DELETION). DFS pattern in all three.",
+      "tags": [
+        "tree",
+        "traversal"
+      ]
+    },
+    {
+      "id": "rec-fc8",
+      "front": "Trust the recursion mantra",
+      "back": "When writing recursive function: assume the recursive call CORRECTLY solves the smaller problem. Your only job: combine its result with current data to solve current case. Don't mentally trace deep — write base + recursive case clearly.",
+      "tags": [
+        "mental-model",
+        "problem-solving"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You're given a deeply nested JSON object representing a company org chart (employees with direct reports). Design recursive functions to: 1) Count total employees in any sub-tree. 2) Find the highest-paid employee at any level. 3) Print the chart with proper indentation (nested visualisation). 4) Find all leaves (employees with no reports). For each: identify base case, recursive case, complexity.",
+    "checklist": [
+      {
+        "id": "r1",
+        "text": "countEmployees: base = 1 (just current employee). Recursive: 1 + sum of countEmployees(report). Time: O(n) where n=total employees.",
+        "weight": 20
+      },
+      {
+        "id": "r2",
+        "text": "highestPaid: base = current employee (no reports). Recursive: max(current.salary, max of recursive results from each report). Time: O(n).",
+        "weight": 20
+      },
+      {
+        "id": "r3",
+        "text": "printChart: pre-order traversal with depth parameter. Print '\\t'.repeat(depth) + name. Recurse on each report with depth+1. Time: O(n).",
+        "weight": 20
+      },
+      {
+        "id": "r4",
+        "text": "findLeaves: base = if reports empty, return [current]. Recursive: flatten recursive results from all reports. Time: O(n).",
+        "weight": 20
+      },
+      {
+        "id": "r5",
+        "text": "Convert to iteration with explicit Deque<Employee> for org charts that might exceed stack limit (depth >10K levels).",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "All four functions follow the same pattern: process current employee, recurse on each direct report, combine results. The differences are in HOW you combine.",
+      "For unbalanced org charts (some reports have many sub-reports), space complexity = O(max depth) for recursion stack. Average org chart is shallow (<10 levels) so safe.",
+      "Iteration version: use Deque<Employee> as stack. Push root. While not empty: pop, process, push each report. Result built in result list as you go."
+    ]
+  }
+}

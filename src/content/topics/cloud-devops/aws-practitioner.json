@@ -7,408 +7,446 @@
   "prereqs": [
     "cloud-fundamentals"
   ],
-  "guide": "# AWS Practitioner Fundamentals\n\n> **Reading time:** ~15 min\n\n## What is AWS Practitioner Fundamentals?\n\nAWS Practitioner Fundamentals addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd AWS Practitioner Fundamentals when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nAWS Practitioner Fundamentals\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: aws\n",
+  "guide": "# AWS Practitioner Fundamentals\n\n## AWS in Plain English — Why It Exists\n\nAWS (Amazon Web Services) started because Amazon built a huge internal infrastructure\nto run amazon.com, then realised other companies needed the same thing.\nIn 2006 they opened it up — rent Amazon's servers and infrastructure on-demand.\nToday AWS is the world's largest cloud provider, used by Netflix, Airbnb, NASA, startups,\nand Fortune 500 companies alike.\n\n**The core promise:** You get access to world-class infrastructure — data centres,\nnetworking, databases, security — without buying or managing any hardware.\nPay only for what you use. Scale in minutes. Global in hours.\n\n```\nAWS has 200+ services across every category:\n  Compute:    EC2, Lambda, ECS, EKS, Fargate\n  Storage:    S3, EBS, EFS, Glacier\n  Database:   RDS, DynamoDB, ElastiCache, Redshift\n  Networking: VPC, CloudFront, Route 53, API Gateway\n  Security:   IAM, KMS, WAF, Shield, GuardDuty\n  AI/ML:      SageMaker, Bedrock, Rekognition, Transcribe\n  DevOps:     CodePipeline, CodeBuild, CloudFormation, CDK\n  Monitoring: CloudWatch, X-Ray, CloudTrail\n```\n\n---\n\n## Core Compute: EC2\n\nEC2 (Elastic Compute Cloud) is a virtual machine (VM) in the cloud.\nIt is the most fundamental AWS service — everything else often runs on top of EC2.\n\n```\nEC2 instance = a Linux (or Windows) server you rent by the hour\n\nInstance types: different CPU/RAM/storage combinations\n  t3.micro:   2 vCPU,  1GB RAM   ($0.01/hr) - free tier, dev/test\n  t3.medium:  2 vCPU,  4GB RAM   ($0.04/hr) - small apps\n  m5.xlarge:  4 vCPU, 16GB RAM   ($0.19/hr) - general workloads\n  c5.2xlarge: 8 vCPU, 16GB RAM   ($0.34/hr) - CPU-intensive\n  r5.4xlarge:16 vCPU,128GB RAM   ($1.00/hr) - memory-intensive (Redis,DBs)\n  p3.2xlarge: 8 vCPU, 61GB RAM + V100 GPU  - ML training\n\nInstance type naming convention:\n  [family][generation].[size]\n  m5.xlarge\n  |  | ---\n  |  +-- generation (5th gen is newer/better than 4th gen)\n  +----- family: m=general, c=compute, r=memory, p=GPU\n```\n\n**Launching an EC2 instance (mental model):**\n```\n1. Choose AMI (Amazon Machine Image) = the OS template\n   Amazon Linux 2023, Ubuntu 22.04, Windows Server 2022\n\n2. Choose instance type (CPU/RAM)\n\n3. Configure networking\n   Which VPC? Which subnet (public/private)?\n\n4. Configure storage (EBS volume)\n   Root volume: OS disk (default 8GB, encrypted)\n\n5. Configure security group (firewall rules)\n   Allow port 22 (SSH) from your IP\n   Allow port 443 (HTTPS) from anywhere\n\n6. Choose or create key pair (for SSH access)\n\n7. Launch -> running in ~60 seconds\n\n8. SSH: ssh -i mykey.pem ec2-user@<public-ip>\n```\n\n---\n\n## S3 — Simple Storage Service\n\nS3 is AWS's object storage. Think of it as an infinitely large, durable,\nglobally accessible hard drive for files.\n\n```\nKey concepts:\n\nBUCKET:\n  Container for objects (files)\n  Globally unique name across all AWS accounts\n  Belongs to one region\n  Example: my-company-logs-2026\n\nOBJECT:\n  A file stored in a bucket\n  Key = the 'path': photos/2026/01/vacation.jpg\n  Value = the file data (any format, up to 5TB)\n  Metadata: content-type, custom tags\n\nURL: https://my-bucket.s3.amazonaws.com/photos/vacation.jpg\n\nSTORAGE CLASSES (cost vs retrieval speed):\n  S3 Standard:            Frequent access, millisecond retrieval\n  S3-IA (Infrequent):     Lower cost, retrieval fee, 30-day min\n  S3 Glacier Instant:     Archive, millisecond retrieval\n  S3 Glacier Flexible:    Archive, 1-5 hour retrieval, cheapest storage\n\nCOMMON USE CASES:\n  Static website hosting (React/Vue SPA)\n  Application logs and backups\n  Large file storage (videos, datasets)\n  Data lake for analytics\n  Docker image layer caching\n  CloudFront origin (serve files globally)\n```\n\n**S3 access control:**\n```\nBucket Policy (JSON):  who can access which objects\nIAM Policy:            which IAM identities can access which bucket\nACLs:                  legacy, avoid for new buckets\nPre-signed URLs:       temporary URLs giving time-limited access to private objects\n\nBlock Public Access:   account-level setting, blocks all public access\n  Enable this on all buckets unless the bucket hosts a public website.\n  A misconfigured S3 public bucket has leaked millions of records.\n```\n\n---\n\n## VPC — Virtual Private Cloud\n\nVPC is your private network in AWS. All your resources (EC2, RDS, Lambda) live inside a VPC.\n\n```\nVPC: 10.0.0.0/16  (65,536 IP addresses)\n|\n+-- Public Subnet: 10.0.1.0/24\n|   +-- Internet Gateway (allows inbound + outbound internet)\n|   +-- Load Balancer (public IP, receives external traffic)\n|   +-- Bastion Host (SSH jump server)\n|\n+-- Private Subnet: 10.0.2.0/24\n|   +-- EC2 App Servers (no public IP)\n|   +-- RDS Database (no public IP)\n|   +-- ElastiCache (no public IP)\n|\n+-- NAT Gateway (in public subnet)\n    Allows private subnet resources to reach internet (outbound only)\n    e.g. EC2 app server downloads packages from internet\n    but internet cannot initiate connections TO private EC2\n\nSecurity Groups:  stateful firewall attached to instances\n  ALLOW port 443 from 0.0.0.0/0   (anyone can reach HTTPS)\n  ALLOW port 5432 from sg-app      (only app security group can reach DB)\n\nRoute Tables:  rules for how traffic is routed\n  Public subnet route: 0.0.0.0/0 -> Internet Gateway\n  Private subnet route: 0.0.0.0/0 -> NAT Gateway\n```\n\n---\n\n## IAM — Identity and Access Management\n\nIAM controls who can do what in your AWS account. Get this wrong and\nyour entire AWS account can be compromised.\n\n```\nUSERS:    Human identities (Alice, Bob)\n          Credentials: password (console) or access keys (CLI/API)\n          Best practice: human users should use SSO, not long-term access keys\n\nGROUPS:   Collections of users sharing permissions\n          'developers' group: read S3, describe EC2, invoke Lambda\n          'admins' group: full access\n\nROLES:    Identities for services (not humans)\n          EC2 instance assumes role -> gets temporary credentials\n          Lambda assumes role -> can write to DynamoDB\n          No hardcoded secrets! Credentials auto-rotate every hour\n\nPOLICIES: JSON permission documents attached to users/groups/roles\n  {\n    'Effect': 'Allow',\n    'Action': 's3:GetObject',\n    'Resource': 'arn:aws:s3:::my-bucket/*'\n  }\n\nCRITICAL RULE: Never use root account for daily work.\n  Root = god mode. Create an admin IAM user for yourself.\n  Enable MFA on root account immediately.\n  Root account credentials = keys to the kingdom.\n```\n\n---\n\n## RDS — Relational Database Service\n\nRDS is managed relational database. AWS handles: installation, patching,\nbackups, replication, failover. You manage: schema, queries, data.\n\n```\nSupported engines:\n  PostgreSQL, MySQL, MariaDB, Oracle, SQL Server, Aurora\n\nAurora:\n  AWS's own MySQL/PostgreSQL-compatible engine\n  5x faster than MySQL, 3x faster than PostgreSQL\n  Storage auto-scales up to 128TB\n  Multi-AZ by default, automated failover\n  Aurora Serverless: scales compute to zero when idle\n\nKey RDS features:\n  Multi-AZ:           automatic standby in another AZ, failover in 60-120s\n  Read Replicas:      read-only copies for offloading read traffic\n  Automated backups:  daily snapshot + transaction logs (point-in-time recovery)\n  Encryption at rest: KMS-managed keys\n\nRDS in your VPC (always):\n  RDS in private subnet = not reachable from internet\n  Only your app servers (same VPC) can reach it\n  Security group: ALLOW port 5432 from app-server security group only\n```\n\n---\n\n## DynamoDB — NoSQL at Scale\n\nDynamoDB is AWS's serverless NoSQL database. Zero servers to manage.\nSingle-digit millisecond latency at any scale.\n\n```\nCore concepts:\n  TABLE:          collection of items (like a table in SQL, but schemaless)\n  ITEM:           a record (like a row), JSON-like, up to 400KB\n  PRIMARY KEY:    uniquely identifies each item\n    Partition key:         single attribute (userId)\n    Partition + Sort key:  two attributes (userId + timestamp)\n\nCapacity modes:\n  ON-DEMAND:    pay per read/write request, scales automatically, good for unpredictable\n  PROVISIONED:  specify RCU/WCU, predictable traffic, cheaper at steady load\n\nGlobal Secondary Index (GSI):\n  Query on non-primary-key attributes\n  Table has userId as PK, but you want to query by email -> add GSI on email\n\nDynamoDB Streams:\n  Record every change (insert/update/delete) as a stream\n  Trigger Lambda on change -> event-driven architecture\n\nWhen to use DynamoDB vs RDS:\n  DynamoDB:  simple access patterns, high throughput, unlimited scale, serverless\n  RDS:       complex queries, JOINs, transactions, relational data model\n```\n\n---\n\n## CloudWatch — Monitoring and Observability\n\n```\nCloudWatch is AWS's monitoring service. Collect, visualise, alert on:\n  - Metrics: CPU, memory, request count, error rate, latency\n  - Logs: application logs, Lambda logs, VPC flow logs\n  - Alarms: trigger actions when metric crosses threshold\n  - Dashboards: visualise metrics in real-time\n\nKey metrics to monitor:\n  EC2:    CPUUtilization, NetworkIn/Out, DiskReadOps\n  RDS:    DatabaseConnections, FreeStorageSpace, CPUUtilization, ReadLatency\n  Lambda: Duration, Errors, Throttles, ConcurrentExecutions\n  SQS:    ApproximateNumberOfMessagesVisible, AgeOfOldestMessage\n  ALB:    RequestCount, TargetResponseTime, HTTPCode_ELB_5XX\n\nCloudWatch Alarms:\n  Metric: Lambda Errors > 10 per 5 min\n  Action: Send SNS notification -> trigger PagerDuty -> wake up engineer\n\nCloudWatch Logs Insights (query language):\n  fields @timestamp, @message\n  | filter @message like /ERROR/\n  | stats count() by bin(5m)\n  | sort @timestamp desc\n  | limit 100\n\nCloudTrail (different from CloudWatch!):\n  Logs ALL AWS API calls: who did what, when, from where\n  'Who deleted that S3 bucket at 3am?' -> CloudTrail shows you\n  Enable in all accounts and regions. Required for compliance.\n```\n\n---\n\n## Elastic Load Balancing (ELB)\n\n```\nLoad balancer distributes incoming traffic across multiple EC2/containers.\n\nALB (Application Load Balancer) - Layer 7 (HTTP):\n  Routes by URL path, hostname, headers\n  /api/* -> target group 1 (API servers)\n  /static/* -> target group 2 (static file servers)\n  Header: X-Version: v2 -> new version canary group\n  Supports WebSockets, HTTP/2, gRPC\n\nNLB (Network Load Balancer) - Layer 4 (TCP):\n  Ultra-low latency (millions of requests per second)\n  Routes by IP/port, no HTTP awareness\n  Use for: gaming, financial trading, IoT\n\nHealth checks:\n  ALB sends requests to /health endpoint on each target\n  Unhealthy target -> removed from rotation until healthy\n  New EC2 instance -> waits for N consecutive health checks -> added to rotation\n\nAuto Scaling Group:\n  Automatically add/remove EC2 instances based on load\n  Scale out when CPU > 70%, scale in when CPU < 30%\n  ALB automatically routes to new instances as they join\n```\n\n---\n\n## Well-Architected Framework — Five Pillars\n\n```\nAWS Well-Architected Framework = best practices guide for cloud architecture.\nFive pillars:\n\n1. OPERATIONAL EXCELLENCE:\n   Run and monitor systems, improve processes continuously.\n   IaC for everything, small reversible changes, automate operations.\n\n2. SECURITY:\n   Protect data and systems. Least privilege IAM, encrypt at rest and in transit,\n   enable CloudTrail, patch regularly, use private subnets.\n\n3. RELIABILITY:\n   Recover from failures, meet demand.\n   Multi-AZ deployments, auto-scaling, backups, chaos engineering.\n\n4. PERFORMANCE EFFICIENCY:\n   Use resources efficiently. Right-size instances, use managed services,\n   CloudFront for global distribution, caching.\n\n5. COST OPTIMISATION:\n   Avoid waste. Right-size, use Reserved Instances for steady workloads,\n   Spot for batch, turn off dev environments at night, use S3 lifecycle policies.\n```\n\n---\n\n## Mind Map\n\n```\nAWS PRACTITIONER\n|\n+-- COMPUTE\n|   +-- EC2 (VMs, hourly billing, AMI, instance types)\n|   +-- Lambda (serverless functions)\n|   +-- ECS/EKS (containers)\n|\n+-- STORAGE\n|   +-- S3 (object storage, static websites, backups)\n|   +-- EBS (block storage for EC2)\n|   +-- EFS (shared filesystem)\n|\n+-- DATABASE\n|   +-- RDS (managed relational: PostgreSQL/MySQL/Aurora)\n|   +-- DynamoDB (NoSQL, serverless, ms latency)\n|   +-- ElastiCache (managed Redis/Memcached)\n|\n+-- NETWORKING\n|   +-- VPC (private network, subnets, routing)\n|   +-- ALB/NLB (load balancers)\n|   +-- CloudFront (CDN)\n|   +-- Route 53 (DNS)\n|\n+-- SECURITY\n|   +-- IAM (users, roles, policies, least privilege)\n|   +-- KMS (key management)\n|   +-- CloudTrail (API audit log)\n|\n+-- MONITORING\n    +-- CloudWatch (metrics, logs, alarms)\n    +-- X-Ray (distributed tracing)\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **AWS Certified Cloud Practitioner - Full Course** by freeCodeCamp:\n  https://www.youtube.com/watch?v=SOTamWNgDKc\n  - 13 hours. Complete beginner to practitioner. Chapters 1-5 are essential.\n- **AWS Services Explained** by Fireship:\n  https://www.youtube.com/watch?v=M988_fsOSWo\n  - Quick 6-minute overview. Great starting point.\n\n### Free Books and Articles\n- **AWS Well-Architected Framework**: https://aws.amazon.com/architecture/well-architected/\n- **AWS Architecture Center**: https://aws.amazon.com/architecture/\n  - Reference architectures for common patterns (3-tier web, serverless, etc.)\n\n### Practice\n- **AWS Skill Builder** (official free training): https://skillbuilder.aws/\n  - 'AWS Cloud Practitioner Essentials' = 6 hours, free.\n- **AWS Free Tier**: https://aws.amazon.com/free/\n  - 12 months free EC2, always-free Lambda/DynamoDB tier.",
   "questions": [
     {
-      "id": "aws-practitioner-q1",
+      "id": "aws-prac-q1",
       "type": "mcq",
-      "prompt": "Core concept 1: which statement best describes AWS Practitioner Fundamentals?",
+      "prompt": "What is EC2?",
       "choices": [
-        "AWS Practitioner Fundamentals always requires dedicated hardware",
-        "AWS Practitioner Fundamentals trade-offs depend on requirements and scale",
-        "AWS Practitioner Fundamentals is only for large enterprises",
-        "AWS Practitioner Fundamentals eliminates all database needs"
+        "AWS email service",
+        "A serverless function",
+        "A virtual machine (server) you rent in the cloud — choose OS, CPU, RAM, and pay by the hour",
+        "AWS database service"
       ],
-      "answerIndex": 1,
-      "explanation": "AWS Practitioner Fundamentals is context-dependent. Trade-offs matter more than API memorisation.",
+      "answerIndex": 2,
+      "explanation": "EC2 (Elastic Compute Cloud) is the foundational AWS compute service. You get a virtual Linux/Windows machine, SSH in, install your app, and pay per second it runs. It is the most flexible but most ops-heavy compute option.",
       "tags": [
-        "aws",
-        "fundamentals"
+        "ec2",
+        "compute"
       ]
     },
     {
-      "id": "aws-practitioner-q2",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Practitioner Fundamentals is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
+      "id": "aws-prac-q2",
+      "type": "mcq",
+      "prompt": "What does S3 store?",
+      "choices": [
+        "Virtual machines",
+        "Running code",
+        "Objects (any file up to 5TB) in globally unique named buckets — images, videos, backups, static websites, datasets",
+        "Container images only"
       ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
+      "answerIndex": 2,
+      "explanation": "S3 is object storage. Not a filesystem — each object has a key (like a path) and value (file data). 11 nines durability. Used for: static websites, application backups, data lakes, logs, ML datasets, CloudFront origins.",
       "tags": [
-        "aws",
-        "trade-offs"
+        "s3",
+        "storage"
       ]
     },
     {
-      "id": "aws-practitioner-q3",
+      "id": "aws-prac-q3",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Practitioner Fundamentals to a system?",
+      "prompt": "What is the core purpose of an IAM Role?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "An IAM role is for human users",
+        "An IAM role provides temporary, automatically-rotated credentials to AWS services (EC2, Lambda) — eliminates the need for hardcoded access keys",
+        "IAM Roles are for read-only access",
+        "IAM Roles are required for billing"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "Roles are assumed by services. EC2 instance assumes a role -> gets temporary credentials refreshed every hour. Lambda assumes a role -> can write to DynamoDB. No hardcoded secrets in config files. This is the correct pattern for service-to-service access.",
       "tags": [
-        "aws",
-        "trade-offs"
+        "iam",
+        "roles",
+        "security"
       ]
     },
     {
-      "id": "aws-practitioner-q4",
+      "id": "aws-prac-q4",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Practitioner Fundamentals system is healthy?",
+      "prompt": "What is the difference between RDS and DynamoDB?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "RDS is NoSQL, DynamoDB is relational",
+        "RDS = managed relational database (SQL, joins, ACID transactions). DynamoDB = managed NoSQL key-value/document store (ms latency, infinite scale, serverless)",
+        "They are the same service",
+        "DynamoDB only works with Lambda"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "RDS: SQL engine (PostgreSQL/MySQL), complex queries with joins, ACID transactions, vertical scaling. DynamoDB: NoSQL, simple key-based access, scales horizontally to any load, pay per request, single-digit ms latency.",
       "tags": [
-        "aws",
+        "rds",
+        "dynamodb",
+        "databases"
+      ]
+    },
+    {
+      "id": "aws-prac-q5",
+      "type": "mcq",
+      "prompt": "Why should RDS always be in a private subnet?",
+      "choices": [
+        "Private subnets are faster",
+        "To reduce costs",
+        "Databases in public subnets are directly accessible from the internet — a security risk. Private subnet = only VPC-internal resources can connect.",
+        "RDS requires private subnets"
+      ],
+      "answerIndex": 2,
+      "explanation": "RDS in a public subnet has a public IP. Any attacker on the internet can attempt connections. Private subnet = no public IP, unreachable from internet. Only app servers in the same VPC (via security group rules) can connect.",
+      "tags": [
+        "rds",
+        "vpc",
+        "security"
+      ]
+    },
+    {
+      "id": "aws-prac-q6",
+      "type": "mcq",
+      "prompt": "What does CloudTrail record?",
+      "choices": [
+        "Application logs",
+        "AWS API calls — who did what action, when, from which IP, with what result across your entire AWS account",
+        "Network traffic",
+        "CloudWatch metrics"
+      ],
+      "answerIndex": 1,
+      "explanation": "CloudTrail is the audit log for your AWS account. Every API call is logged: 'user alice deleted security group sg-123 at 14:32 from IP 1.2.3.4'. Essential for security auditing, compliance, and incident investigation.",
+      "tags": [
+        "cloudtrail",
+        "security",
+        "auditing"
+      ]
+    },
+    {
+      "id": "aws-prac-q7",
+      "type": "mcq",
+      "prompt": "What is an Application Load Balancer (ALB) used for?",
+      "choices": [
+        "Storing application data",
+        "Running Lambda functions",
+        "Distributing HTTP/HTTPS traffic across multiple EC2/container targets, with routing by URL path and hostname",
+        "Encrypting S3 data"
+      ],
+      "answerIndex": 2,
+      "explanation": "ALB operates at Layer 7 (HTTP). Routes /api/* to API servers, /static/* to static file servers. Health-checks backend targets, removes unhealthy ones from rotation. Works with EC2, ECS containers, Lambda, and Kubernetes pods.",
+      "tags": [
+        "alb",
+        "load-balancing",
+        "networking"
+      ]
+    },
+    {
+      "id": "aws-prac-q8",
+      "type": "mcq",
+      "prompt": "What is CloudFront?",
+      "choices": [
+        "A compute service",
+        "AWS CDN (Content Delivery Network) — caches content at 400+ edge locations worldwide so users get content from a nearby server, reducing latency",
+        "A database service",
+        "A VPN service"
+      ],
+      "answerIndex": 1,
+      "explanation": "CloudFront has edge locations globally. User in Tokyo requests your US-hosted image -> gets it from Tokyo edge cache (milliseconds) instead of US server (hundreds of ms). Also protects against DDoS and integrates with WAF.",
+      "tags": [
+        "cloudfront",
+        "cdn",
+        "networking"
+      ]
+    },
+    {
+      "id": "aws-prac-q9",
+      "type": "mcq",
+      "prompt": "What is the Principle of Least Privilege in IAM?",
+      "choices": [
+        "Grant all permissions and revoke as needed",
+        "Give every IAM identity only the exact minimum permissions it needs — nothing more. Limits blast radius if credentials are compromised.",
+        "Only root account should have policies",
+        "Never deny any action"
+      ],
+      "answerIndex": 1,
+      "explanation": "An EC2 with only s3:GetObject on one bucket can only read that bucket — even if credentials are stolen. An EC2 with AdministratorAccess: attacker controls your entire AWS account. Start with zero, add permissions as needed.",
+      "tags": [
+        "iam",
+        "security",
+        "least-privilege"
+      ]
+    },
+    {
+      "id": "aws-prac-q10",
+      "type": "mcq",
+      "prompt": "What is an AWS Security Group?",
+      "choices": [
+        "An IAM group for security engineers",
+        "A stateful virtual firewall for EC2/RDS instances — controls which inbound/outbound traffic is allowed by IP address, port, and protocol",
+        "A VPC routing table",
+        "An encryption service"
+      ],
+      "answerIndex": 1,
+      "explanation": "Security Groups are instance-level firewalls. Stateful: if inbound connection is allowed, the response is automatically allowed. Default: deny all inbound. Your job: ALLOW only the specific ports from specific sources your app needs.",
+      "tags": [
+        "security-groups",
+        "vpc",
+        "security"
+      ]
+    },
+    {
+      "id": "aws-prac-q11",
+      "type": "mcq",
+      "prompt": "What is the S3 Block Public Access setting?",
+      "choices": [
+        "Prevents S3 from being accessed from other regions",
+        "Account-level safeguard that overrides all bucket policies/ACLs to prevent any public access — prevents accidental data exposure",
+        "Encrypts all S3 data",
+        "Limits S3 storage size"
+      ],
+      "answerIndex": 1,
+      "explanation": "Misconfigured S3 public buckets have caused massive data breaches. Block Public Access = account-level killswitch. Enable it everywhere and only disable for specific buckets that genuinely need public access (static website hosting).",
+      "tags": [
+        "s3",
+        "security",
+        "public-access"
+      ]
+    },
+    {
+      "id": "aws-prac-q12",
+      "type": "mcq",
+      "prompt": "What is Auto Scaling in AWS?",
+      "choices": [
+        "Automatically provisions new AWS accounts",
+        "Automatically adds or removes EC2 instances based on demand — scale out during traffic spikes, scale in when traffic drops",
+        "Automatically upgrades instance types",
+        "Automatic cost optimisation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Auto Scaling Group (ASG) maintains a fleet of EC2 instances. Define: min (always keep N), max (never exceed N), desired (target). Scaling policies: add instance when CPU > 70%, remove when CPU < 30%. Works with ALB to add new instances to rotation.",
+      "tags": [
+        "auto-scaling",
+        "ec2",
+        "elasticity"
+      ]
+    },
+    {
+      "id": "aws-prac-q13",
+      "type": "mcq",
+      "prompt": "What is AWS CloudFormation?",
+      "choices": [
+        "A monitoring service",
+        "Infrastructure as Code — define AWS resources in YAML/JSON templates, deploy and manage them consistently",
+        "A billing service",
+        "A container registry"
+      ],
+      "answerIndex": 1,
+      "explanation": "CloudFormation lets you declare: 'I want a VPC with 2 subnets, an EC2 in the private subnet, an RDS, and a security group'. CF creates them in the right order, handles dependencies. Version-controlled infra, reproducible environments.",
+      "tags": [
+        "cloudformation",
+        "iac",
+        "devops"
+      ]
+    },
+    {
+      "id": "aws-prac-q14",
+      "type": "mcq",
+      "prompt": "What is AWS KMS used for?",
+      "choices": [
+        "Key-based routing in DynamoDB",
+        "Managed encryption key service — create, store, and control cryptographic keys used to encrypt S3, EBS, RDS, DynamoDB data",
+        "Kubernetes service",
+        "Load balancing"
+      ],
+      "answerIndex": 1,
+      "explanation": "KMS (Key Management Service) manages encryption keys. You never see the raw key material — you just say 'encrypt this data with my key'. AWS handles key storage, rotation, and access control. All major AWS services integrate with KMS for encryption at rest.",
+      "tags": [
+        "kms",
+        "security",
+        "encryption"
+      ]
+    },
+    {
+      "id": "aws-prac-q15",
+      "type": "mcq",
+      "prompt": "What is a NAT Gateway and why is it needed?",
+      "choices": [
+        "Network Address Table — routes traffic between regions",
+        "Allows resources in PRIVATE subnets to make OUTBOUND internet connections (download packages, call APIs) without being reachable FROM the internet",
+        "A VPN endpoint",
+        "A firewall for public subnets"
+      ],
+      "answerIndex": 1,
+      "explanation": "Private subnet EC2s need to download OS updates, call third-party APIs — but should not have public IPs. NAT Gateway (in public subnet) receives their outbound traffic, routes it to internet with NAT Gateway's public IP. Internet sees NAT Gateway IP, not EC2.",
+      "tags": [
+        "nat",
+        "vpc",
+        "networking"
+      ]
+    },
+    {
+      "id": "aws-prac-q16",
+      "type": "mcq",
+      "prompt": "What is the difference between CloudWatch and CloudTrail?",
+      "choices": [
+        "They are the same",
+        "CloudWatch = performance monitoring (metrics, logs, alarms). CloudTrail = security audit log (who made what AWS API call, when, from where). Both are essential.",
+        "CloudTrail is newer",
+        "CloudWatch is for security only"
+      ],
+      "answerIndex": 1,
+      "explanation": "CloudWatch: your app's health (CPU, errors, latency). CloudTrail: your account's security audit (who changed IAM policy, who deleted the S3 bucket). Enable both. CloudTrail should log to a separate account so attackers cannot delete the evidence.",
+      "tags": [
+        "cloudwatch",
+        "cloudtrail",
         "monitoring"
       ]
     },
     {
-      "id": "aws-practitioner-q5",
+      "id": "aws-prac-q17",
       "type": "mcq",
-      "prompt": "Core concept 5: which statement best describes AWS Practitioner Fundamentals?",
+      "prompt": "What is Route 53?",
       "choices": [
-        "AWS Practitioner Fundamentals always requires dedicated hardware",
-        "AWS Practitioner Fundamentals trade-offs depend on requirements and scale",
-        "AWS Practitioner Fundamentals is only for large enterprises",
-        "AWS Practitioner Fundamentals eliminates all database needs"
+        "EC2 instance type",
+        "AWS's managed DNS service — translates domain names (myapp.com) to IP addresses. Also supports health checks and failover routing.",
+        "A load balancer",
+        "A CDN service"
       ],
       "answerIndex": 1,
-      "explanation": "AWS Practitioner Fundamentals is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Route 53 is AWS DNS. Register domains, create records (A, CNAME, ALIAS), configure routing policies: simple, weighted (A/B testing), latency-based (route to nearest region), failover (primary/standby). Integrates with CloudFront, ALB, S3.",
       "tags": [
-        "aws",
-        "fundamentals"
+        "route53",
+        "dns",
+        "networking"
       ]
     },
     {
-      "id": "aws-practitioner-q6",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Practitioner Fundamentals is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q7",
+      "id": "aws-prac-q18",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS Practitioner Fundamentals to a system?",
+      "prompt": "What is ElastiCache?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "A custom cache service you deploy on EC2",
+        "Managed Redis or Memcached — in-memory cache that sits in front of your database to serve frequent queries in microseconds instead of hitting the DB",
+        "AWS caching for Lambda only",
+        "CDN cache"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "ElastiCache Redis: sub-millisecond reads, data structures (sorted sets, pub/sub), persistence, atomic operations. ElastiCache Memcached: simpler, multi-threaded, pure cache. Use in front of RDS to handle read-heavy traffic without scaling the DB.",
       "tags": [
-        "aws",
-        "trade-offs"
+        "elasticache",
+        "redis",
+        "caching"
       ]
     },
     {
-      "id": "aws-practitioner-q8",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Practitioner Fundamentals system is healthy?",
+      "id": "aws-prac-q19",
+      "type": "multi",
+      "prompt": "Which AWS services are ALWAYS in a private subnet in a well-architected 3-tier web app? (Select all that apply)",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Application Load Balancer",
+        "EC2 application servers",
+        "RDS database",
+        "ElastiCache Redis"
+      ],
+      "answerIndexes": [
+        1,
+        2,
+        3
+      ],
+      "explanation": "ALB must be in a public subnet to receive internet traffic. App servers, databases, and caches have no reason to be publicly accessible — private subnet protects them from direct internet exposure. Only ALB (and NAT GW) go in public subnets.",
+      "tags": [
+        "vpc",
+        "architecture",
+        "security"
+      ]
+    },
+    {
+      "id": "aws-prac-q20",
+      "type": "mcq",
+      "prompt": "What is the AWS Free Tier?",
+      "choices": [
+        "All AWS services are free",
+        "Selected services are free up to defined usage limits — t2.micro EC2 for 12 months, Lambda 1M requests forever, S3 5GB forever, DynamoDB 25GB forever",
+        "Free tier applies only to new services",
+        "Free tier requires a credit card with no charge"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "AWS Free Tier has three categories: 12-month free (EC2 t2.micro, S3 5GB), always free (Lambda 1M/mo, DynamoDB 25GB, CloudWatch 10 metrics), and trials. A credit card is required but you are not charged if you stay within limits.",
       "tags": [
-        "aws",
-        "monitoring"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q9",
-      "type": "mcq",
-      "prompt": "Core concept 9: which statement best describes AWS Practitioner Fundamentals?",
-      "choices": [
-        "AWS Practitioner Fundamentals always requires dedicated hardware",
-        "AWS Practitioner Fundamentals trade-offs depend on requirements and scale",
-        "AWS Practitioner Fundamentals is only for large enterprises",
-        "AWS Practitioner Fundamentals eliminates all database needs"
-      ],
-      "answerIndex": 1,
-      "explanation": "AWS Practitioner Fundamentals is context-dependent. Trade-offs matter more than API memorisation.",
-      "tags": [
-        "aws",
-        "fundamentals"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q10",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Practitioner Fundamentals is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q11",
-      "type": "mcq",
-      "prompt": "When should you avoid adding AWS Practitioner Fundamentals to a system?",
-      "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
-      ],
-      "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q12",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Practitioner Fundamentals system is healthy?",
-      "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
-      ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
-      "tags": [
-        "aws",
-        "monitoring"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q13",
-      "type": "mcq",
-      "prompt": "Core concept 13: which statement best describes AWS Practitioner Fundamentals?",
-      "choices": [
-        "AWS Practitioner Fundamentals always requires dedicated hardware",
-        "AWS Practitioner Fundamentals trade-offs depend on requirements and scale",
-        "AWS Practitioner Fundamentals is only for large enterprises",
-        "AWS Practitioner Fundamentals eliminates all database needs"
-      ],
-      "answerIndex": 1,
-      "explanation": "AWS Practitioner Fundamentals is context-dependent. Trade-offs matter more than API memorisation.",
-      "tags": [
-        "aws",
-        "fundamentals"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q14",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Practitioner Fundamentals is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q15",
-      "type": "mcq",
-      "prompt": "When should you avoid adding AWS Practitioner Fundamentals to a system?",
-      "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
-      ],
-      "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q16",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Practitioner Fundamentals system is healthy?",
-      "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
-      ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
-      "tags": [
-        "aws",
-        "monitoring"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q17",
-      "type": "mcq",
-      "prompt": "Core concept 17: which statement best describes AWS Practitioner Fundamentals?",
-      "choices": [
-        "AWS Practitioner Fundamentals always requires dedicated hardware",
-        "AWS Practitioner Fundamentals trade-offs depend on requirements and scale",
-        "AWS Practitioner Fundamentals is only for large enterprises",
-        "AWS Practitioner Fundamentals eliminates all database needs"
-      ],
-      "answerIndex": 1,
-      "explanation": "AWS Practitioner Fundamentals is context-dependent. Trade-offs matter more than API memorisation.",
-      "tags": [
-        "aws",
-        "fundamentals"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q18",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS Practitioner Fundamentals is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q19",
-      "type": "mcq",
-      "prompt": "When should you avoid adding AWS Practitioner Fundamentals to a system?",
-      "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
-      ],
-      "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
-      "tags": [
-        "aws",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-practitioner-q20",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a AWS Practitioner Fundamentals system is healthy?",
-      "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
-      ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
-      "tags": [
-        "aws",
-        "monitoring"
+        "free-tier",
+        "pricing"
       ]
     }
   ],
   "flashcards": [
     {
-      "id": "aws-practitioner-fc1",
-      "front": "One-line definition of AWS Practitioner Fundamentals?",
-      "back": "[Complete after studying — self-generation improves retention]",
+      "id": "aws-prac-fc1",
+      "front": "EC2 vs Lambda vs Fargate choice",
+      "back": "EC2: full control, steady traffic, long-running, manage OS. Lambda: event-driven, sporadic, <15min, zero ops, pay per call. Fargate: containers, no EC2 mgmt, longer tasks. Default starting point: Lambda for new APIs if fits constraints.",
       "tags": [
-        "aws"
+        "compute",
+        "ec2",
+        "lambda"
       ]
     },
     {
-      "id": "aws-practitioner-fc2",
-      "front": "Core trade-off in AWS Practitioner Fundamentals?",
-      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
+      "id": "aws-prac-fc2",
+      "front": "S3 vs EBS vs EFS",
+      "back": "S3: object store (files), HTTP API access, infinite scale, cheap. EBS: block device attached to ONE EC2 (like a hard drive). EFS: shared POSIX filesystem mounted by MULTIPLE EC2s simultaneously. Each has distinct use cases.",
       "tags": [
-        "aws"
+        "storage",
+        "s3",
+        "ebs",
+        "efs"
       ]
     },
     {
-      "id": "aws-practitioner-fc3",
-      "front": "When to use AWS Practitioner Fundamentals?",
-      "back": "When the problem it solves is actively costing you at your scale.",
+      "id": "aws-prac-fc3",
+      "front": "IAM: User vs Group vs Role vs Policy",
+      "back": "User=human identity. Group=users sharing permissions. Role=identity for services/apps (temporary creds, no passwords). Policy=JSON permission document attached to any of the above. Roles > hardcoded access keys always.",
       "tags": [
-        "aws"
+        "iam",
+        "security"
       ]
     },
     {
-      "id": "aws-practitioner-fc4",
-      "front": "When NOT to use AWS Practitioner Fundamentals?",
-      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
+      "id": "aws-prac-fc4",
+      "front": "RDS Multi-AZ vs Read Replica",
+      "back": "Multi-AZ: standby replica in another AZ for HIGH AVAILABILITY. Auto-failover in 60s. NOT for read scaling. Read Replica: async copy for READ SCALING. No automatic failover. You promote manually.",
       "tags": [
-        "aws"
+        "rds",
+        "high-availability"
       ]
     },
     {
-      "id": "aws-practitioner-fc5",
-      "front": "Top 3 failure modes of AWS Practitioner Fundamentals?",
-      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
+      "id": "aws-prac-fc5",
+      "front": "CloudWatch vs CloudTrail",
+      "back": "CloudWatch: operational monitoring (metrics, logs, alarms). 'Is my app healthy?' CloudTrail: security audit ('who changed what in my AWS account?'). Both are mandatory. CloudTrail logs to isolated account so attackers can't delete evidence.",
       "tags": [
-        "aws"
+        "cloudwatch",
+        "cloudtrail",
+        "monitoring"
       ]
     },
     {
-      "id": "aws-practitioner-fc6",
-      "front": "How to monitor AWS Practitioner Fundamentals in production?",
-      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
+      "id": "aws-prac-fc6",
+      "front": "VPC public vs private subnet rule",
+      "back": "Public subnet: has internet gateway route, resources get public IPs. For: ALB, NAT Gateway, bastion hosts. Private subnet: no internet route, no public IPs. For: EC2 app servers, RDS, ElastiCache. Everything except the front door stays private.",
       "tags": [
-        "aws"
+        "vpc",
+        "networking",
+        "security"
       ]
     },
     {
-      "id": "aws-practitioner-fc7",
-      "front": "AWS Practitioner Fundamentals in one interview sentence?",
-      "back": "[Draft: what it is + what problem it solves + when to use it]",
+      "id": "aws-prac-fc7",
+      "front": "Well-Architected 5 pillars",
+      "back": "1.Operational Excellence (automate, IaC, small changes)  2.Security (least privilege, encrypt, trail)  3.Reliability (multi-AZ, backups, auto-recover)  4.Performance (right-size, CDN, cache)  5.Cost (reserved, spot, turn off idle)",
       "tags": [
-        "aws"
+        "well-architected"
       ]
     },
     {
-      "id": "aws-practitioner-fc8",
-      "front": "How does AWS Practitioner Fundamentals connect to caching?",
-      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "id": "aws-prac-fc8",
+      "front": "Top 3 AWS security mistakes",
+      "back": "1. Root account for daily work (create IAM user, enable MFA on root)  2. Hardcoded access keys in code (use IAM roles)  3. Public S3 bucket (enable Block Public Access everywhere). These three cause 90% of AWS security incidents.",
       "tags": [
-        "aws",
-        "caching"
+        "security",
+        "iam",
+        "s3"
       ]
     }
   ],

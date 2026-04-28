@@ -7,7 +7,7 @@
   "prereqs": [
     "websockets"
   ],
-  "guide": "# RPC \u2014 Remote Procedure Call\n\nRPC is a communication paradigm where a program calls a function on a **remote machine** as if it were a local function call. The network communication is abstracted away.\n\n## RPC Concept\n\n```\nWithout RPC:                        With RPC:\n  fetch('/api/users/123')              const user = userService.getUser(123);\n  .then(r => r.json())                 // Looks like a local function call\n  .then(user => ...)                   // Network call is hidden by stub\n\ngRPC Stub:\n  // Generated from .proto \u2014 looks local but makes HTTP/2 calls\n  const user = await userClient.GetUser({ id: 123 });\n```\n\n## gRPC \u2014 Modern RPC\n\ngRPC uses **Protocol Buffers** (protobuf) for serialization and **HTTP/2** for transport.\n\n```protobuf\n// user.proto\nsyntax = \"proto3\";\n\nservice UserService {\n  rpc GetUser (UserRequest) returns (User);\n  rpc ListUsers (ListUsersRequest) returns (stream User); // server streaming\n  rpc UpdateUser (stream UserUpdate) returns (UserSummary); // client streaming\n  rpc Chat (stream Message) returns (stream Message); // bidirectional\n}\n\nmessage UserRequest { int32 id = 1; }\nmessage User { int32 id = 1; string name = 2; string email = 3; }\n```\n\n```javascript\n// Client (Node.js)\nconst { UserServiceClient } = require('./user_grpc_pb');\nconst client = new UserServiceClient('localhost:50051', grpc.credentials.createInsecure());\n\n// Unary RPC\nconst request = new UserRequest();\nrequest.setId(123);\nclient.getUser(request, (err, response) => {\n  console.log(response.getName());\n});\n```\n\n## gRPC vs REST\n\n| Aspect | gRPC | REST/JSON |\n|---|---|---|\n| Protocol | HTTP/2 | HTTP/1.1 or HTTP/2 |\n| Serialization | Protobuf (binary, ~10x smaller) | JSON (text) |\n| Interface definition | Strict .proto contract | OpenAPI/Swagger (optional) |\n| Streaming | Bidirectional streaming | Limited (SSE for server push) |\n| Browser support | Limited (needs gRPC-web proxy) | Excellent |\n| Code generation | First-class | Optional |\n| Best for | Internal microservices | Public APIs, browsers |\n\n## Service Mesh and gRPC\n\nIn microservices, gRPC services communicate via a service mesh (Envoy/Istio):\n```\nServiceA \u2500\u2500gRPC\u2500\u2500\u2192 Envoy Sidecar \u2500\u2500gRPC\u2500\u2500\u2192 Envoy Sidecar \u2500\u2500\u2192 ServiceB\n                   (mTLS, tracing, lb)\n```\n\n## Common Pitfalls\n- **Browser usage** \u2014 gRPC uses HTTP/2 trailers which browsers don't support directly. Requires gRPC-web proxy (Envoy) to translate. REST is simpler for browser clients.\n- **Versioning** \u2014 protobuf field numbers must never change. Add new fields; never reuse or remove field numbers.\n- **Error propagation** \u2014 gRPC has its own status codes (OK, NOT_FOUND, UNAVAILABLE). Don't confuse with HTTP codes.\n",
+  "guide": "# RPC — Remote Procedure Call (gRPC vs REST)\n\n## What Is RPC? The Big Picture\n\nWhen function A in your code calls function B — that's a local procedure call.\nThe call is fast (nanoseconds), strongly typed, and the caller and callee share\nthe same process memory.\n\n**RPC (Remote Procedure Call)** makes calling code in ANOTHER computer (or service)\nfeel like a local function call. The network complexity is hidden from the developer.\n\n```\nLOCAL CALL:                         REMOTE CALL (RPC):\n  result = getUserById(123)           result = userService.getUserById(123)\n  |                                   |\n  | direct function call              | looks the same in code!\n  | nanoseconds                       | but actually:\n  | same process memory               |   serialize arguments\n                                      |   send over network (TCP/HTTP)\n                                      |   remote server deserializes\n                                      |   remote function executes\n                                      |   serialize result\n                                      |   send back over network\n                                      |   deserialize result\n                                      | 1-10ms (network latency)\n```\n\n**REST vs RPC mental model:**\n- REST: \"I want to GET the resource at /users/123\"\n- RPC: \"I want to CALL the function getUserById(123)\"\n\nREST is resource-oriented. RPC is action-oriented. gRPC is modern RPC.\n\n---\n\n## REST — The Dominant API Style\n\nREST (Representational State Transfer) uses HTTP methods to operate on resources\nidentified by URLs.\n\n```\nHTTP Method -> CRUD mapping:\n  GET    /users/123        -> Read user 123\n  POST   /users            -> Create new user (body contains user data)\n  PUT    /users/123        -> Replace user 123 entirely\n  PATCH  /users/123        -> Partially update user 123\n  DELETE /users/123        -> Delete user 123\n\nJSON over HTTP:\n  Request:\n    GET /users/123\n    Accept: application/json\n    Authorization: Bearer eyJhbGci...\n\n  Response:\n    HTTP/1.1 200 OK\n    Content-Type: application/json\n    {\n      \"id\": 123,\n      \"name\": \"Alice\",\n      \"email\": \"alice@example.com\",\n      \"createdAt\": \"2026-01-15T10:30:00Z\"\n    }\n\nHTTP Status Codes (must know):\n  200 OK            -> success\n  201 Created       -> resource created (after POST)\n  204 No Content    -> success, no body (after DELETE)\n  400 Bad Request   -> client sent bad data\n  401 Unauthorized  -> not authenticated\n  403 Forbidden     -> authenticated but not allowed\n  404 Not Found     -> resource doesn't exist\n  409 Conflict      -> duplicate (unique constraint violation)\n  422 Unprocessable -> validation failed\n  429 Too Many Req  -> rate limited\n  500 Internal Err  -> server bug\n  503 Unavailable   -> server overloaded / downstream down\n\nREST strengths:\n  Universal: every language, every client (browser, mobile, server) speaks HTTP\n  Human readable: JSON is inspectable, curl-able, logged clearly\n  Cacheable: GET responses cached by browsers, CDNs, proxies\n  Stateless: each request is self-contained\n  Tooling: Swagger/OpenAPI, Postman, every HTTP library ever\n\nREST weaknesses:\n  No contract enforcement (anyone can send wrong JSON shape)\n  HTTP/1.1: one request per TCP connection by default (HTTP/2 fixes this)\n  Over/under-fetching: endpoint returns too much or not enough\n  Not ideal for streaming or bidirectional communication\n```\n\n---\n\n## gRPC — Modern High-Performance RPC\n\ngRPC was developed by Google and is built on Protocol Buffers + HTTP/2.\n\n```\nHOW gRPC WORKS:\n\n1. Define service in .proto file:\n   service UserService {\n     rpc GetUser (GetUserRequest) returns (User);\n     rpc ListUsers (ListUsersRequest) returns (stream User);\n     rpc CreateUser (stream CreateUserRequest) returns (CreateUserResponse);\n     rpc Chat (stream ChatMessage) returns (stream ChatMessage);\n   }\n\n   message GetUserRequest { int64 user_id = 1; }\n   message User {\n     int64 id = 1;\n     string name = 2;\n     string email = 3;\n   }\n\n2. Run protoc compiler:\n   Generates strongly-typed client + server code in YOUR language.\n   Java, Python, Go, Node.js, C++, Kotlin, Swift, Rust, etc.\n\n3. Use generated client:\n   // Java client (generated stub)\n   UserServiceGrpc.UserServiceBlockingStub stub = ...;\n   User user = stub.getUser(GetUserRequest.newBuilder().setUserId(123).build());\n   System.out.println(user.getName()); // type-safe!\n\n4. Wire format: Protocol Buffers (binary, not JSON)\n   JSON \"id\": 123    -> 3+ bytes: 7 chars + quotes + colon + space\n   Proto field 1=123 -> 2 bytes: field tag + varint\n   ~5-10x smaller. 5-10x faster to serialize/deserialize.\n```\n\n---\n\n## gRPC vs REST Comparison\n\n```\n+------------------+---------------------------+---------------------------+\n| Feature          | gRPC                      | REST/JSON                 |\n+------------------+---------------------------+---------------------------+\n| Protocol         | HTTP/2                    | HTTP/1.1 or HTTP/2        |\n| Serialization    | Protocol Buffers (binary) | JSON (text)               |\n| Contract         | .proto file (strict)      | Optional (OpenAPI/Swagger)|\n| Code generation  | Built-in (protoc)         | Optional (openapi-gen)    |\n| Streaming        | Bidirectional streams     | HTTP/2 only               |\n| Browser support  | Limited (grpc-web needed) | Native                    |\n| Human readable   | No (binary wire format)   | Yes (JSON)                |\n| Performance      | ~5-10x faster             | Baseline                  |\n| Typed            | Strongly typed            | Weakly typed (JSON)       |\n| Use case         | Internal microservices    | Public APIs, browser      |\n+------------------+---------------------------+---------------------------+\n\nWHEN TO USE gRPC:\n  Internal microservice communication (service-to-service)\n  Performance-critical paths (thousands of calls per second)\n  Bidirectional streaming (chat, live updates, sensor data)\n  Polyglot services (generate client in each service's language)\n  Mobile clients (smaller payload = less data usage, faster on 4G)\n\nWHEN TO USE REST:\n  Public APIs that third parties and browsers must consume\n  Debugging/inspectability is important\n  Team unfamiliar with Protocol Buffers\n  Simple CRUD with no performance pressure\n  Webhooks and callbacks\n```\n\n---\n\n## Protocol Buffers Deep Dive\n\n```\n.proto file defines message structure and service:\n\nsyntax = \"proto3\";\npackage users;\n\nmessage User {\n  int64 id = 1;           // field number 1\n  string name = 2;        // field number 2\n  string email = 3;       // field number 3\n  bool active = 4;\n  repeated string tags = 5;  // repeated = array\n  UserStatus status = 6;\n}\n\nenum UserStatus {\n  ACTIVE = 0;\n  INACTIVE = 1;\n  SUSPENDED = 2;\n}\n\nmessage GetUserRequest {\n  int64 user_id = 1;\n}\n\nservice UserService {\n  rpc GetUser (GetUserRequest) returns (User);\n}\n\nWIRE FORMAT (binary, field number + type + value):\n  {id: 123, name: \"Alice\", email: \"a@b.com\"}\n  JSON:   38 bytes: {\"id\":123,\"name\":\"Alice\",\"email\":\"a@b.com\"}\n  Proto:  ~15 bytes: \b{\u0012\u0005Alice\u001a\u0007a@b.com\n\nBACKWARDS COMPATIBILITY:\n  Add new fields with new numbers: v1 clients ignore unknown fields.\n  NEVER change existing field numbers (breaks wire format).\n  NEVER remove required fields.\n  This is Proto's key advantage: schema evolution without breaking clients.\n```\n\n---\n\n## gRPC Streaming — Four Patterns\n\n```\n1. UNARY RPC (request-response, like REST):\n   client.getUser(request) -> single response\n   Use: standard queries\n\n2. SERVER STREAMING:\n   client.listUsers(request) -> stream of responses\n   Server sends multiple response messages as they become available.\n   Client reads stream until server closes.\n   Use: return large result sets without buffering, live logs\n\n3. CLIENT STREAMING:\n   client.uploadFile(stream of chunks) -> single response\n   Client sends multiple request messages before getting response.\n   Use: file upload, bulk insert\n\n4. BIDIRECTIONAL STREAMING:\n   Chat(stream of messages) -> stream of messages\n   Both client and server can send independently.\n   Use: real-time chat, collaborative editing, game state\n```\n\n---\n\n## GraphQL — Third Option for APIs\n\n```\nREST problem: over-fetching and under-fetching.\n  GET /users/123 -> returns ALL user fields even if you only need name\n  GET /users/123/orders -> separate request, N+1 for all users\n\nGraphQL solves this:\n  Client specifies EXACTLY what fields it needs in one query.\n\n  query {\n    user(id: 123) {\n      name\n      email\n      orders(last: 5) {\n        total\n        status\n      }\n    }\n  }\n\n  Returns: only name, email, last 5 orders with total and status.\n  One request. No over-fetching. No under-fetching. No N+1.\n\nGraphQL vs REST vs gRPC:\n  REST: simple CRUD, public APIs, browser-native\n  GraphQL: complex queries from frontend, mobile clients with data efficiency\n  gRPC: internal microservices, high performance, streaming\n\nNot a silver bullet: GraphQL has N+1 issues on server side (use DataLoader),\ncomplex schema management, no caching by default.\n```\n\n---\n\n## Mind Map\n\n```\nRPC / gRPC / REST\n|\n+-- REST\n|   +-- HTTP methods (GET/POST/PUT/PATCH/DELETE)\n|   +-- Resources identified by URL\n|   +-- JSON (human-readable)\n|   +-- Universal browser/client support\n|   +-- Status codes (200/404/500...)\n|\n+-- gRPC\n|   +-- Protocol Buffers (.proto IDL)\n|   +-- Binary wire format (5-10x smaller/faster)\n|   +-- HTTP/2 (multiplexing, server push)\n|   +-- Code generation (typed stubs)\n|   +-- 4 streaming modes\n|   +-- Internal microservices\n|\n+-- GraphQL\n|   +-- Client specifies exact fields needed\n|   +-- One endpoint (/graphql)\n|   +-- Solves over/under-fetching\n|   +-- Frontend-driven API\n|\n+-- WHEN TO USE\n    +-- REST: public API, browser, simplicity\n    +-- gRPC: internal services, performance, streaming\n    +-- GraphQL: complex frontend data requirements\n```\n\n---\n\n## References and Further Learning\n\n### Videos\n- **gRPC vs REST: Understanding gRPC, OpenAPI and REST** by Google:\n  https://www.youtube.com/watch?v=k5BU28dPTgY\n  - Official comparison with use case guidance.\n- **gRPC Crash Course** by Traversy Media:\n  https://www.youtube.com/watch?v=Yw4rkaTc0f8\n  - Hands-on gRPC with Node.js demo.\n\n### Articles\n- **Protocol Buffers encoding**: https://protobuf.dev/programming-guides/encoding/\n  - How binary encoding works under the hood.\n- **gRPC official docs**: https://grpc.io/docs/\n  - Language-specific quickstarts (Java, Python, Go, Node.js).\n\n### Practice\n- Build a gRPC service in Go or Python. Compare payload size with equivalent REST JSON.\n- **Buf Schema Registry**: https://buf.build — modern Proto toolchain\n",
   "questions": [
     {
       "id": "rpc-q1",
@@ -15,12 +15,12 @@
       "prompt": "Main performance advantage of gRPC over REST/JSON?",
       "choices": [
         "gRPC uses UDP",
-        "Protobuf binary serialization is ~10x smaller than JSON + HTTP/2 multiplexing eliminates head-of-line blocking \u2014 significantly faster for internal service communication",
+        "Protobuf binary serialization is ~10x smaller than JSON + HTTP/2 multiplexing eliminates head-of-line blocking — significantly faster for internal service communication",
         "gRPC has no overhead",
         "gRPC compresses JSON"
       ],
       "answerIndex": 1,
-      "explanation": "Two advantages: (1) Protobuf binary is far smaller than JSON text (no field names, binary encoding). (2) HTTP/2 allows request multiplexing \u2014 multiple concurrent RPC calls on a single connection without blocking.",
+      "explanation": "Two advantages: (1) Protobuf binary is far smaller than JSON text (no field names, binary encoding). (2) HTTP/2 allows request multiplexing — multiple concurrent RPC calls on a single connection without blocking.",
       "tags": [
         "gRPC",
         "protobuf",
@@ -33,7 +33,7 @@
       "prompt": "When should you prefer REST over gRPC?",
       "choices": [
         "Always prefer REST",
-        "For public APIs or browser clients \u2014 gRPC doesn't work natively in browsers (needs proxy), harder to explore (no curl/postman natively), and JSON is more human-readable for public consumption",
+        "For public APIs or browser clients — gRPC doesn't work natively in browsers (needs proxy), harder to explore (no curl/postman natively), and JSON is more human-readable for public consumption",
         "gRPC is deprecated",
         "REST has better streaming"
       ],
@@ -51,7 +51,7 @@
       "prompt": "In protobuf, what rule is critical for backward compatibility?",
       "choices": [
         "Field names must be unique",
-        "Field numbers must never be reused or removed \u2014 they identify fields in the binary format. Add new fields with new numbers; never recycle an old number",
+        "Field numbers must never be reused or removed — they identify fields in the binary format. Add new fields with new numbers; never recycle an old number",
         "Always use proto2",
         "Messages can't be nested"
       ],
@@ -61,6 +61,309 @@
         "gRPC",
         "protobuf",
         "versioning"
+      ]
+    },
+    {
+      "id": "rpc-q4",
+      "type": "mcq",
+      "prompt": "What is the core idea behind gRPC?",
+      "choices": [
+        "A REST API specification",
+        "Define services in .proto files, use Protocol Buffers for binary serialization over HTTP/2 — generates strongly-typed client/server code in any language",
+        "A JSON API standard",
+        "An HTTP/1.1 optimization"
+      ],
+      "answerIndex": 1,
+      "explanation": "gRPC: 1) Write .proto IDL (interface definition). 2) Run protoc to generate typed stubs for your language. 3) Use generated client — looks like local function calls. Wire: binary Protocol Buffers over HTTP/2. 5-10x faster/smaller than JSON/REST.",
+      "tags": [
+        "grpc",
+        "protocol-buffers"
+      ]
+    },
+    {
+      "id": "rpc-q5",
+      "type": "mcq",
+      "prompt": "What serialization format does gRPC use and why is it faster than JSON?",
+      "choices": [
+        "XML",
+        "YAML",
+        "Protocol Buffers — binary encoding with field numbers instead of field names. ~5-10x smaller payload, ~10x faster to serialize/deserialize vs JSON text parsing.",
+        "MessagePack"
+      ],
+      "answerIndex": 2,
+      "explanation": "JSON: 'name': 'Alice' = 14 chars (field name repeated every time). Proto field 2='Alice' = 7 bytes (field number + length + bytes). No field names on wire. Binary: no string parsing. Numbers as varints not ASCII digits. Also: proto-generated code avoids reflection.",
+      "tags": [
+        "grpc",
+        "protobuf",
+        "serialization"
+      ]
+    },
+    {
+      "id": "rpc-q6",
+      "type": "mcq",
+      "prompt": "What HTTP version does gRPC require and why?",
+      "choices": [
+        "HTTP/1.0",
+        "HTTP/1.1",
+        "HTTP/2 — provides multiplexing (multiple concurrent streams on one TCP connection), header compression, server push, used for all 4 gRPC streaming modes",
+        "HTTP/3 (QUIC)"
+      ],
+      "answerIndex": 2,
+      "explanation": "HTTP/2: single TCP connection, multiple streams. gRPC bidirectional streaming needs both sides to send anytime on same connection — impossible with HTTP/1.1's request-response model. HTTP/2 also: header compression (HPACK), binary protocol = less overhead.",
+      "tags": [
+        "grpc",
+        "http2"
+      ]
+    },
+    {
+      "id": "rpc-q7",
+      "type": "mcq",
+      "prompt": "What are the four gRPC streaming patterns?",
+      "choices": [
+        "Push, pull, batch, stream",
+        "Unary (1 request 1 response), server streaming (1 req many responses), client streaming (many reqs 1 response), bidirectional (many req many resp simultaneously)",
+        "Sync, async, batch, realtime",
+        "REST, GraphQL, WebSocket, Poll"
+      ],
+      "answerIndex": 1,
+      "explanation": "Unary: like REST call. Server streaming: client subscribes to server events (live logs). Client streaming: upload file in chunks. Bidirectional: real-time chat, collaborative editing, both sides send independently on same stream.",
+      "tags": [
+        "grpc",
+        "streaming"
+      ]
+    },
+    {
+      "id": "rpc-q8",
+      "type": "mcq",
+      "prompt": "Why can't gRPC be called directly from a browser?",
+      "choices": [
+        "Browsers don't support HTTP/2",
+        "Browsers cannot access HTTP/2 trailers needed by gRPC. Workaround: grpc-web (transcoding proxy) or use REST for browser-facing APIs and gRPC for service-to-service.",
+        "gRPC requires WebSockets",
+        "Browsers only support JSON"
+      ],
+      "answerIndex": 1,
+      "explanation": "gRPC uses HTTP/2 trailers (metadata after response body). Browser fetch API cannot access trailers. Solution: grpc-web protocol (with Envoy proxy) transcodes grpc-web to full gRPC. Or: use REST for public/browser APIs, gRPC for internal microservice communication only.",
+      "tags": [
+        "grpc",
+        "browser",
+        "limitations"
+      ]
+    },
+    {
+      "id": "rpc-q9",
+      "type": "mcq",
+      "prompt": "What is backward compatibility in Protocol Buffers?",
+      "choices": [
+        "New proto versions break old clients always",
+        "Add new fields with new field numbers — old clients ignore unknown fields (forward compatible). Never change existing field numbers or remove required fields.",
+        "Backward compat requires versioning",
+        "Proto is not backward compatible"
+      ],
+      "answerIndex": 1,
+      "explanation": "Proto3: add field 10: string phone = 10; Old clients (no field 10) receive message with phone field: they ignore it (proto skips unknown fields). Old client sends message without field 10: new server gets empty/default value. Safe schema evolution. NEVER reuse or change field numbers.",
+      "tags": [
+        "grpc",
+        "protobuf",
+        "backward-compat"
+      ]
+    },
+    {
+      "id": "rpc-q10",
+      "type": "mcq",
+      "prompt": "What HTTP status code should a REST API return when an authenticated user tries to access a resource they don't have permission for?",
+      "choices": [
+        "401 Unauthorized",
+        "404 Not Found",
+        "403 Forbidden — user is authenticated (401 would mean not authenticated) but lacks permission for this specific resource",
+        "400 Bad Request"
+      ],
+      "answerIndex": 2,
+      "explanation": "401: not authenticated (no valid token/session). 403: authenticated but not authorized (valid token, but user's role/permissions don't allow this action). Common mistake: returning 401 when 403 is correct. 404 sometimes used intentionally to hide resource existence from unauthorized users.",
+      "tags": [
+        "rest",
+        "http-status",
+        "auth"
+      ]
+    },
+    {
+      "id": "rpc-q11",
+      "type": "mcq",
+      "prompt": "What problem does GraphQL solve that REST doesn't?",
+      "choices": [
+        "GraphQL is faster than REST",
+        "Over-fetching (getting too many fields) and under-fetching (needing multiple requests for related data) — GraphQL lets client specify exactly what fields it needs in one request",
+        "GraphQL supports binary encoding",
+        "GraphQL has better authentication"
+      ],
+      "answerIndex": 1,
+      "explanation": "REST GET /users/123: returns ALL 50 fields even if mobile app needs 3. REST N+1: fetch users, then fetch orders for each user separately. GraphQL: one query specifies exactly {user { name orders { total } }} = one request, only requested fields.",
+      "tags": [
+        "graphql",
+        "rest",
+        "over-fetching"
+      ]
+    },
+    {
+      "id": "rpc-q12",
+      "type": "mcq",
+      "prompt": "What is idempotency in REST API design?",
+      "choices": [
+        "All REST calls must be fast",
+        "An operation that produces the same result whether called once or N times. GET, PUT, DELETE are idempotent. POST is NOT (calling POST /orders twice creates two orders).",
+        "Only GET is allowed in REST",
+        "Every request must return 200"
+      ],
+      "answerIndex": 1,
+      "explanation": "GET: no state change, idempotent obviously. PUT /users/123 {name: Alice}: sets name to Alice. Call 5 times: still name is Alice. Idempotent. POST /orders: creates new order each time. NOT idempotent. PATCH: depends on implementation. Clients can safely retry idempotent calls.",
+      "tags": [
+        "rest",
+        "idempotency",
+        "http-methods"
+      ]
+    },
+    {
+      "id": "rpc-q13",
+      "type": "mcq",
+      "prompt": "What is the difference between PUT and PATCH in REST?",
+      "choices": [
+        "They are identical",
+        "PUT: replace the ENTIRE resource (send all fields). PATCH: partial update (send only changed fields). PUT with missing field = field set to default/null.",
+        "PATCH is newer and deprecated PUT",
+        "PUT creates, PATCH updates"
+      ],
+      "answerIndex": 1,
+      "explanation": "PUT /users/123 {name: Alice}: replaces entire user. If you omit email, email becomes null. PATCH /users/123 {name: Alice}: only changes name, all other fields unchanged. Use PATCH for partial updates. Use PUT when you want to explicitly set the complete resource state.",
+      "tags": [
+        "rest",
+        "put",
+        "patch",
+        "http-methods"
+      ]
+    },
+    {
+      "id": "rpc-q14",
+      "type": "mcq",
+      "prompt": "What header does a REST API use to return rate limit information?",
+      "choices": [
+        "Authorization",
+        "Content-Type",
+        "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset (standard de-facto headers) and 429 status code when limit exceeded",
+        "Cache-Control"
+      ],
+      "answerIndex": 2,
+      "explanation": "Rate limit headers: X-RateLimit-Limit (max calls per window), X-RateLimit-Remaining (calls left), X-RateLimit-Reset (Unix timestamp when limit resets). HTTP 429 Too Many Requests body: {error: 'rate_limit_exceeded', retry_after: 60}. Used by GitHub, Twitter, Stripe APIs.",
+      "tags": [
+        "rest",
+        "rate-limiting",
+        "headers"
+      ]
+    },
+    {
+      "id": "rpc-q15",
+      "type": "mcq",
+      "prompt": "What is a .proto file in gRPC?",
+      "choices": [
+        "A protocol configuration file",
+        "Interface Definition Language (IDL) file specifying messages (data types) and services (RPC methods) — compiled by protoc to generate typed client/server code",
+        "A deployment configuration",
+        "A gRPC test file"
+      ],
+      "answerIndex": 1,
+      "explanation": ".proto = contract. Define: message User {int64 id = 1; string name = 2;}. Define: service UserService {rpc GetUser (GetUserRequest) returns (User);}. Run protoc: generates UserServiceGrpc.java, user_pb2.py, user.pb.go depending on language. All clients use same contract.",
+      "tags": [
+        "grpc",
+        "proto",
+        "idl"
+      ]
+    },
+    {
+      "id": "rpc-q16",
+      "type": "mcq",
+      "prompt": "What is HATEOAS in REST?",
+      "choices": [
+        "A REST security model",
+        "Hypermedia As The Engine Of Application State — responses include links to related actions. Client discovers API by following links, not hardcoding URLs.",
+        "HTTP Authentication standard",
+        "A caching strategy"
+      ],
+      "answerIndex": 1,
+      "explanation": "HATEOAS: GET /orders/123 response includes: {id:123, status:pending, _links:{pay:{href:/orders/123/pay},cancel:{href:/orders/123/cancel}}}. Client knows what it can DO with this resource from the response. URL structure can change without breaking clients. Rarely fully implemented but level 3 of Richardson REST maturity model.",
+      "tags": [
+        "rest",
+        "hateoas",
+        "design"
+      ]
+    },
+    {
+      "id": "rpc-q17",
+      "type": "mcq",
+      "prompt": "What is API versioning in REST and the most common approaches?",
+      "choices": [
+        "REST APIs don't need versioning",
+        "URL path versioning (/api/v1/users), header versioning (Accept: application/vnd.api+json;version=1), or query param (?version=1). URL path versioning is most common because it's visible and cacheable.",
+        "REST uses semantic versioning",
+        "Proto versioning handles this"
+      ],
+      "answerIndex": 1,
+      "explanation": "URL versioning: /api/v1/users vs /api/v2/users — clear, cacheable, easy to route. Header versioning: cleaner URLs but less visible. Breaking changes require new version. Non-breaking (adding fields): backwards compatible, no new version needed. Proto's field numbers handle versioning implicitly.",
+      "tags": [
+        "rest",
+        "versioning",
+        "api-design"
+      ]
+    },
+    {
+      "id": "rpc-q18",
+      "type": "mcq",
+      "prompt": "What is the main advantage of gRPC for internal microservices over REST?",
+      "choices": [
+        "gRPC supports more HTTP methods",
+        "Strongly-typed contracts prevent integration bugs, binary Protocol Buffers are 5-10x smaller/faster, HTTP/2 multiplexing reduces connections, code generation eliminates manual client code",
+        "gRPC works in browsers",
+        "gRPC is easier to debug"
+      ],
+      "answerIndex": 1,
+      "explanation": "Service-to-service: REST json has no contract (wrong field = runtime error). gRPC .proto = compile-time type checking. Binary: at 10K calls/sec, 5x smaller payload = significant bandwidth saving. HTTP/2 multiplexing: one connection for all calls (REST HTTP/1.1: one connection per request or connection pooling needed).",
+      "tags": [
+        "grpc",
+        "microservices",
+        "internal"
+      ]
+    },
+    {
+      "id": "rpc-q19",
+      "type": "mcq",
+      "prompt": "What is the gRPC status code equivalent to HTTP 404?",
+      "choices": [
+        "STATUS_NOT_FOUND is returned as gRPC status code 5",
+        "gRPC doesn't map to HTTP",
+        "gRPC uses HTTP 404",
+        "gRPC uses error messages"
+      ],
+      "answerIndex": 0,
+      "explanation": "gRPC has its own status codes: OK(0), CANCELLED(1), NOT_FOUND(5), ALREADY_EXISTS(6), PERMISSION_DENIED(7), UNAUTHENTICATED(16), RESOURCE_EXHAUSTED(8=rate limited), INTERNAL(13), UNAVAILABLE(14). Map to HTTP status for grpc-web proxies. NOT_FOUND is the gRPC equivalent of HTTP 404.",
+      "tags": [
+        "grpc",
+        "status-codes"
+      ]
+    },
+    {
+      "id": "rpc-q20",
+      "type": "mcq",
+      "prompt": "What is an OpenAPI (Swagger) specification?",
+      "choices": [
+        "A gRPC contract format",
+        "YAML/JSON file describing a REST API — endpoints, request/response schemas, auth method. Generates documentation, client SDKs, server stubs, test cases automatically.",
+        "A database schema format",
+        "A security standard"
+      ],
+      "answerIndex": 1,
+      "explanation": "OpenAPI: machine-readable REST API contract. openapi: 3.0. paths: /users/{id}: get: responses: 200: schema: $ref: User. Tools: Swagger UI (interactive docs), openapi-generator (client SDKs in 50+ languages), Postman import. The REST equivalent of gRPC's .proto files.",
+      "tags": [
+        "rest",
+        "openapi",
+        "swagger"
       ]
     }
   ],
@@ -76,7 +379,7 @@
     {
       "id": "rpc-fc2",
       "front": "gRPC streaming types",
-      "back": "Unary: 1 req \u2192 1 resp. Server streaming: 1 req \u2192 stream of responses. Client streaming: stream \u2192 1 resp. Bidirectional: stream \u2192 stream. Defined in .proto with stream keyword.",
+      "back": "Unary: 1 req → 1 resp. Server streaming: 1 req → stream of responses. Client streaming: stream → 1 resp. Bidirectional: stream → stream. Defined in .proto with stream keyword.",
       "tags": [
         "gRPC",
         "streaming"
@@ -89,6 +392,52 @@
       "tags": [
         "gRPC",
         "REST"
+      ]
+    },
+    {
+      "id": "rpc-fc4",
+      "front": "gRPC vs REST decision",
+      "back": "gRPC: internal microservices, high-perf, polyglot, streaming. REST: public APIs, browser clients, simplicity, human-readable. GraphQL: frontend-driven, exact field selection, complex queries. Most systems: REST for public, gRPC for internal.",
+      "tags": [
+        "grpc",
+        "rest",
+        "decision"
+      ]
+    },
+    {
+      "id": "rpc-fc5",
+      "front": "Protocol Buffers wire encoding",
+      "back": "Field number + wire type + value. No field names on wire. 5-10x smaller than JSON. Backwards compat: add fields with new numbers, old clients ignore them. NEVER change existing field numbers. Use proto3 for all new projects.",
+      "tags": [
+        "grpc",
+        "protobuf"
+      ]
+    },
+    {
+      "id": "rpc-fc6",
+      "front": "gRPC 4 streaming patterns",
+      "back": "Unary: 1 req -> 1 resp (like REST). Server stream: 1 req -> many resp (live logs, search results). Client stream: many req -> 1 resp (file upload). Bidirectional: many req + many resp simultaneously (real-time chat, collaboration).",
+      "tags": [
+        "grpc",
+        "streaming"
+      ]
+    },
+    {
+      "id": "rpc-fc7",
+      "front": "REST HTTP status cheatsheet",
+      "back": "2xx: success (200 OK, 201 Created, 204 No Content). 4xx: client error (400 Bad Request, 401 Unauthenticated, 403 Forbidden, 404 Not Found, 409 Conflict, 429 Rate Limited). 5xx: server error (500 Internal, 503 Unavailable).",
+      "tags": [
+        "rest",
+        "http-status"
+      ]
+    },
+    {
+      "id": "rpc-fc8",
+      "front": "REST idempotency by method",
+      "back": "Idempotent (safe to retry): GET, PUT, DELETE, HEAD. NOT idempotent: POST (creates new resource each call), PATCH (depends). Retry logic: only retry idempotent methods automatically. POST requires idempotency key if client needs to retry.",
+      "tags": [
+        "rest",
+        "idempotency"
       ]
     }
   ],

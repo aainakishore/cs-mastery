@@ -1,0 +1,466 @@
+{
+  "id": "sql-advanced",
+  "unit": 12,
+  "order": 113,
+  "title": "SQL Advanced",
+  "summary": "CTEs, window functions, EXPLAIN query plans, index optimisation, and transaction isolation levels for production databases.",
+  "prereqs": [
+    "relational-databases"
+  ],
+  "guide": "# SQL Advanced\n\n## Why Advanced SQL?\n\nBasic SQL (SELECT, WHERE, JOIN, GROUP BY) handles most queries.\nBut production databases run complex reporting, analytics, and hierarchical queries\nthat beginners solve with multiple queries + application code — when SQL itself\ncan do it in one optimised statement.\n\nAdvanced SQL = less code, less round-trips, better performance.\n\n---\n\n## CTEs — Common Table Expressions\n\n```sql\n-- CTE: a named temporary result set you can reference like a table\n-- Think of it as a named subquery at the top of your SQL statement\n\nWITH monthly_sales AS (\n  SELECT\n    DATE_TRUNC('month', order_date) AS month,\n    SUM(amount)                      AS total\n  FROM orders\n  GROUP BY 1\n),\nranked_months AS (\n  SELECT\n    month,\n    total,\n    RANK() OVER (ORDER BY total DESC) AS rank\n  FROM monthly_sales\n)\nSELECT * FROM ranked_months WHERE rank <= 3;\n-- Get top 3 revenue months\n\n-- CTE benefits:\n--   Readable: name each logical step\n--   Reusable: reference the same CTE multiple times\n--   Debuggable: test each CTE independently\n\n-- RECURSIVE CTE: self-referencing CTE for hierarchical data\nWITH RECURSIVE employee_tree AS (\n  -- Anchor: start with CEO (no manager)\n  SELECT id, name, manager_id, 0 AS level\n  FROM employees WHERE manager_id IS NULL\n\n  UNION ALL\n\n  -- Recursive: join employees to their managers\n  SELECT e.id, e.name, e.manager_id, et.level + 1\n  FROM employees e\n  JOIN employee_tree et ON e.manager_id = et.id\n)\nSELECT name, level FROM employee_tree ORDER BY level;\n-- Shows entire org chart with depth\n```\n\n---\n\n## Window Functions\n\n```\nWindow functions operate on a 'window' of rows related to the current row\nWITHOUT collapsing them (unlike GROUP BY which collapses rows into one).\n\nGROUP BY:   many rows → one row per group   (aggregates, loses detail)\nWindow fn:  every row kept + window computed value added beside it\n```\n\n```sql\nSELECT\n  salesperson,\n  region,\n  sales,\n  -- Rank within each region (restarts at 1 for each region)\n  RANK()        OVER (PARTITION BY region ORDER BY sales DESC) AS region_rank,\n  -- Row number (no ties)\n  ROW_NUMBER()  OVER (PARTITION BY region ORDER BY sales DESC) AS row_num,\n  -- Dense rank (no gaps: 1,2,2,3 not 1,2,2,4)\n  DENSE_RANK()  OVER (PARTITION BY region ORDER BY sales DESC) AS dense_rank,\n  -- Running total of sales within region\n  SUM(sales)    OVER (PARTITION BY region ORDER BY sales DESC\n                      ROWS UNBOUNDED PRECEDING)               AS running_total,\n  -- Previous row's sales value\n  LAG(sales, 1) OVER (PARTITION BY region ORDER BY sales DESC) AS prev_sales,\n  -- Next row's sales value\n  LEAD(sales, 1) OVER (PARTITION BY region ORDER BY sales DESC) AS next_sales\nFROM sales_data;\n\n-- Get only top earner per region:\nSELECT * FROM (\n  SELECT *,\n    RANK() OVER (PARTITION BY region ORDER BY sales DESC) AS rk\n  FROM sales_data\n) sub WHERE rk = 1;\n```\n\n```\nWindow function anatomy:\n\n  FUNCTION_NAME(expression)\n  OVER (\n    PARTITION BY column   -- like GROUP BY but doesn't collapse rows\n    ORDER BY column       -- sort order for window frame\n    ROWS/RANGE BETWEEN    -- how many rows back/forward to include\n  )\n\nCommon window functions:\n  ROW_NUMBER()  : unique sequential number (no ties)\n  RANK()        : rank with gaps on ties (1,2,2,4)\n  DENSE_RANK()  : rank without gaps (1,2,2,3)\n  LAG(col, n)   : value of col n rows before current\n  LEAD(col, n)  : value of col n rows after current\n  SUM/AVG/COUNT : running aggregate over window\n  FIRST_VALUE() : first value in window\n  LAST_VALUE()  : last value in window\n```\n\n---\n\n## EXPLAIN and Query Optimisation\n\n```sql\n-- Always EXPLAIN before trusting a slow query\nEXPLAIN SELECT * FROM orders WHERE user_id = 42;\n\n-- PostgreSQL: use EXPLAIN ANALYZE for actual run times\nEXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 42;\n\n-- Output to look for:\n--  Seq Scan   = full table scan (BAD for large tables if selective)\n--  Index Scan = using an index (GOOD)\n--  Nested Loop, Hash Join, Merge Join = different join strategies\n--  rows=1 (estimate) vs actual rows=100 → bad statistics (run ANALYZE)\n\nExample EXPLAIN output (PostgreSQL):\n  Index Scan using orders_user_id_idx on orders\n    (cost=0.43..8.45 rows=1 width=128)\n    (actual time=0.026..0.027 rows=1 loops=1)\n    Index Cond: (user_id = 42)\n  Planning Time: 0.1 ms\n  Execution Time: 0.05 ms\n```\n\n```sql\n-- Index design:\n-- Create index for high-cardinality WHERE and JOIN columns\nCREATE INDEX idx_orders_user_id ON orders(user_id);\nCREATE INDEX idx_orders_created_at ON orders(created_at DESC);\n\n-- Composite index: column ORDER matters!\n-- Query: WHERE status = 'shipped' AND created_at > '2024-01-01'\n-- Index: (status, created_at) is better than (created_at, status)\n-- because status is equality (more selective filter first)\nCREATE INDEX idx_orders_status_date ON orders(status, created_at);\n\n-- Covering index: index contains all columns query needs\n-- No heap lookup needed — index IS the answer\nCREATE INDEX idx_orders_covering ON orders(user_id) INCLUDE (amount, status);\n-- SELECT amount, status FROM orders WHERE user_id=42\n-- Never touches the actual table rows!\n```\n\n---\n\n## Transactions and Isolation Levels\n\n```sql\nBEGIN;\n  UPDATE accounts SET balance = balance - 100 WHERE id = 1;\n  UPDATE accounts SET balance = balance + 100 WHERE id = 2;\n  -- Both or neither — ACID guarantees\nCOMMIT;  -- or ROLLBACK;\n\n-- ISOLATION LEVELS (PostgreSQL):\nSET TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- default\n-- READ UNCOMMITTED: see uncommitted changes (dirty reads) — not used\n-- READ COMMITTED:   see only committed data. Default in PostgreSQL.\n-- REPEATABLE READ:  same query returns same rows within transaction\n-- SERIALIZABLE:     transactions behave as if run one at a time\n\n-- PHANTOM READS: a new row that matches your WHERE appears mid-transaction\n-- Transaction 1: SELECT COUNT(*) FROM orders WHERE amount > 1000 → 5\n-- Transaction 2: INSERT order with amount=1500, COMMIT\n-- Transaction 1: SELECT COUNT(*) FROM orders WHERE amount > 1000 → 6 (phantom!)\n-- Fix: use SERIALIZABLE isolation level\n```\n\n---\n\n## N+1 Problem and Lateral Joins\n\n```sql\n-- N+1: load 100 users, then for each user load their orders\n-- = 1 query + 100 queries = 101 DB round trips (TERRIBLE)\n\n-- Fix: eager load with JOIN\nSELECT u.id, u.name, o.id AS order_id, o.amount\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE u.id IN (1,2,3,...100);\n-- 1 query, returns all data\n\n-- LATERAL JOIN: like a correlated subquery that can reference outer table\n-- Get 3 most recent orders per user:\nSELECT u.name, recent.amount\nFROM users u\nCROSS JOIN LATERAL (\n  SELECT amount FROM orders\n  WHERE user_id = u.id\n  ORDER BY created_at DESC\n  LIMIT 3\n) AS recent;\n```\n\n---\n\n## Mind Map\n\n```\nSQL ADVANCED\n|\n+-- CTEs\n|   +-- WITH name AS (query) SELECT ... FROM name\n|   +-- Multiple CTEs chained\n|   +-- RECURSIVE CTE for trees/hierarchies\n|\n+-- WINDOW FUNCTIONS\n|   +-- OVER (PARTITION BY ... ORDER BY ...)\n|   +-- RANK / ROW_NUMBER / DENSE_RANK\n|   +-- LAG / LEAD (prev/next row)\n|   +-- Running SUM / AVG\n|\n+-- EXPLAIN / OPTIMISATION\n|   +-- Seq Scan = no index (investigate)\n|   +-- Index Scan = good\n|   +-- Create indexes on WHERE / JOIN columns\n|   +-- Composite index column order matters\n|\n+-- TRANSACTIONS\n    +-- BEGIN / COMMIT / ROLLBACK\n    +-- Isolation levels\n    +-- Phantom reads → SERIALIZABLE\n```\n\n---\n\n## References\n\n### Videos\n- **SQL Window Functions Tutorial** by techTFQ:\n  https://www.youtube.com/watch?v=Ww71knvhQ-s\n- **Advanced SQL** by Fireship:\n  https://www.youtube.com/watch?v=zsjvFFKOm3c\n\n### Practice\n- **Mode SQL Tutorial**: https://mode.com/sql-tutorial/sql-window-functions/\n- **LeetCode SQL**: https://leetcode.com/study-plan/sql/ — 50 practical SQL problems\n- **pgexercises**: https://pgexercises.com — PostgreSQL exercises from beginner to advanced",
+  "questions": [
+    {
+      "id": "sqladv-q1",
+      "type": "mcq",
+      "prompt": "What is a CTE and how is it different from a subquery?",
+      "choices": [
+        "CTE is faster than a subquery",
+        "CTE (WITH clause) is a named temporary result set — more readable, can be referenced multiple times, supports recursion. Subquery is embedded inline. Both often optimised similarly.",
+        "CTE is stored permanently",
+        "CTE must return one row"
+      ],
+      "answerIndex": 1,
+      "explanation": "CTE and subquery are often identical in execution (optimizer may inline them). CTE advantages: readable, reusable (reference same CTE twice), supports recursive queries. For complex queries with multiple steps, CTEs are much clearer.",
+      "tags": [
+        "cte",
+        "sql"
+      ]
+    },
+    {
+      "id": "sqladv-q2",
+      "type": "mcq",
+      "prompt": "What makes a RECURSIVE CTE different from a regular CTE?",
+      "choices": [
+        "Faster performance",
+        "It references itself — has an anchor member (base case) + recursive member (joins back to CTE). Used for hierarchical data: org charts, file systems, bill of materials.",
+        "It runs in parallel",
+        "Recursive CTEs use cursors"
+      ],
+      "answerIndex": 1,
+      "explanation": "Recursive CTE: anchor terminates recursion by finding base rows (e.g., root nodes). Recursive part joins employees to their manager found in previous iteration. PostgreSQL executes until no more rows added. Essential for tree/graph traversal in SQL.",
+      "tags": [
+        "cte",
+        "recursive"
+      ]
+    },
+    {
+      "id": "sqladv-q3",
+      "type": "mcq",
+      "prompt": "Window function vs GROUP BY — key difference?",
+      "choices": [
+        "Window functions are faster",
+        "GROUP BY collapses many rows into one per group (loses individual row detail). Window functions add a computed column to EVERY row without collapsing — all original rows preserved.",
+        "GROUP BY is deprecated",
+        "They are identical"
+      ],
+      "answerIndex": 1,
+      "explanation": "GROUP BY: 100 rows → 5 groups → 5 result rows. Window: 100 rows → still 100 rows, each with an extra column like rank_within_group. This lets you answer 'show me all employees AND their rank within their department' in one query.",
+      "tags": [
+        "window-functions",
+        "group-by"
+      ]
+    },
+    {
+      "id": "sqladv-q4",
+      "type": "mcq",
+      "prompt": "RANK() vs ROW_NUMBER() vs DENSE_RANK() with values [100, 90, 90, 80]:",
+      "choices": [
+        "All three give 1,2,3,4",
+        "ROW_NUMBER: 1,2,3,4 (unique). RANK: 1,2,2,4 (skip 3 for tie). DENSE_RANK: 1,2,2,3 (no skip).",
+        "ROW_NUMBER handles ties",
+        "RANK gives 1,1,1,1 for all ties"
+      ],
+      "answerIndex": 1,
+      "explanation": "ROW_NUMBER: always unique sequential number. RANK: same rank for ties, then skips (two 2nds = no 3rd). DENSE_RANK: same rank for ties, no skip. Use DENSE_RANK when gaps would be confusing (e.g., competition placement).",
+      "tags": [
+        "window-functions",
+        "ranking"
+      ]
+    },
+    {
+      "id": "sqladv-q5",
+      "type": "mcq",
+      "prompt": "LAG(sales, 1) OVER (ORDER BY month) — what does this compute?",
+      "choices": [
+        "Next month's sales",
+        "Previous month's sales — the value of the sales column from 1 row before the current row in the window order",
+        "Rolling average",
+        "Percent change"
+      ],
+      "answerIndex": 1,
+      "explanation": "LAG(col, n) looks n rows back. LAG(sales, 1) = last month's sales. Used for period-over-period comparison: current - LAG(sales,1) = month-over-month change. LEAD(col, n) looks n rows forward.",
+      "tags": [
+        "window-functions",
+        "lag-lead"
+      ]
+    },
+    {
+      "id": "sqladv-q6",
+      "type": "mcq",
+      "prompt": "EXPLAIN shows 'Seq Scan' on a large table. What does this mean?",
+      "choices": [
+        "The query is optimised",
+        "PostgreSQL is reading every row in the table linearly — no index is being used. For a 10M row table this could mean millions of disk reads instead of a targeted index lookup.",
+        "Sequential is always fast",
+        "Seq Scan means the table is sorted"
+      ],
+      "answerIndex": 1,
+      "explanation": "Seq Scan on a large table with a selective WHERE condition = missing index. Fix: CREATE INDEX on the WHERE column. Note: for small tables or queries that need most rows, Seq Scan is actually faster than index scan (no random I/O).",
+      "tags": [
+        "explain",
+        "indexes",
+        "performance"
+      ]
+    },
+    {
+      "id": "sqladv-q7",
+      "type": "mcq",
+      "prompt": "In a composite index (status, created_at), which query benefits?",
+      "choices": [
+        "WHERE created_at > '2024-01-01'",
+        "WHERE status = 'shipped' AND created_at > '2024-01-01'",
+        "WHERE created_at > '2024-01-01' AND status = 'shipped'",
+        "Both B and C benefit equally"
+      ],
+      "answerIndex": 3,
+      "explanation": "SQL optimizer can reorder your WHERE conditions. Both B and C use index (status, created_at) because the optimizer is smart enough to match regardless of write order. But index can't be used if you query only created_at without status (leftmost prefix rule).",
+      "tags": [
+        "indexes",
+        "composite-index"
+      ]
+    },
+    {
+      "id": "sqladv-q8",
+      "type": "mcq",
+      "prompt": "What is the N+1 query problem?",
+      "choices": [
+        "A query with N joins",
+        "Load a list of N records, then for EACH record make a separate query to load related data — results in 1+N database round trips instead of 1",
+        "A table with N+1 columns",
+        "Recursive query depth"
+      ],
+      "answerIndex": 1,
+      "explanation": "Classic ORM pitfall. Load 100 users (1 query). For each user, ORM lazily loads their orders (100 queries) = 101 total. Fix: use JOIN to load everything in 1 query, or ORM eager loading (JPA fetch = EAGER, or @EntityGraph).",
+      "tags": [
+        "n+1",
+        "performance",
+        "orm"
+      ]
+    },
+    {
+      "id": "sqladv-q9",
+      "type": "mcq",
+      "prompt": "What does PARTITION BY do in a window function?",
+      "choices": [
+        "Splits the table into physical partitions",
+        "Divides rows into groups for the window function to operate on independently — like GROUP BY but rows aren't collapsed. RANK() OVER (PARTITION BY dept ORDER BY salary) ranks within each department.",
+        "Partitions the disk",
+        "Creates a new table"
+      ],
+      "answerIndex": 1,
+      "explanation": "PARTITION BY = restart the window function calculation for each group. Without PARTITION BY, all rows are one window. With PARTITION BY region: rank restarts at 1 for each region. Different from GROUP BY: all rows still present.",
+      "tags": [
+        "window-functions",
+        "partition-by"
+      ]
+    },
+    {
+      "id": "sqladv-q10",
+      "type": "mcq",
+      "prompt": "EXPLAIN ANALYZE shows estimated rows=1 but actual rows=10000. What is the problem?",
+      "choices": [
+        "Query is wrong",
+        "Table statistics are stale — PostgreSQL estimated 1 row but found 10000 at runtime. This causes the planner to choose a suboptimal execution plan. Fix: ANALYZE tablename to refresh statistics.",
+        "Index is missing",
+        "The query timeout"
+      ],
+      "answerIndex": 1,
+      "explanation": "PostgreSQL planner uses statistics (column value histograms) to estimate rows. Stale statistics = wrong estimates = wrong plan choice (e.g., might choose nested loop instead of hash join). Run ANALYZE after large data loads.",
+      "tags": [
+        "explain",
+        "statistics",
+        "query-planning"
+      ]
+    },
+    {
+      "id": "sqladv-q11",
+      "type": "mcq",
+      "prompt": "What does a COVERING INDEX eliminate?",
+      "choices": [
+        "Need for ORDER BY",
+        "Heap lookup — all columns the query needs are in the index itself, so PostgreSQL never reads the actual table rows. Makes the query purely index-based.",
+        "Need for WHERE clause",
+        "UPDATE operations"
+      ],
+      "answerIndex": 1,
+      "explanation": "Normal index scan: find matching row IDs in index, then fetch full rows from heap (table). Covering index includes all needed columns, so heap fetch is skipped. CREATE INDEX ... INCLUDE (col1, col2). Can cut query time by 50-80% for read-heavy queries.",
+      "tags": [
+        "indexes",
+        "covering-index"
+      ]
+    },
+    {
+      "id": "sqladv-q12",
+      "type": "mcq",
+      "prompt": "READ COMMITTED vs REPEATABLE READ isolation level — key difference?",
+      "choices": [
+        "Speed",
+        "READ COMMITTED: each statement sees latest committed data (non-repeatable reads possible). REPEATABLE READ: a transaction sees the same snapshot of data throughout — same query returns same rows even if others commit between reads.",
+        "REPEATABLE READ prevents phantom reads in PostgreSQL",
+        "READ COMMITTED is deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "READ COMMITTED: running same SELECT twice in one transaction could return different results if someone commits between your reads. REPEATABLE READ: transaction gets a snapshot at start, queries always return same data. PostgreSQL REPEATABLE READ also prevents phantom reads.",
+      "tags": [
+        "transactions",
+        "isolation-levels"
+      ]
+    },
+    {
+      "id": "sqladv-q13",
+      "type": "multi",
+      "prompt": "Which query patterns benefit from window functions? (Select all)",
+      "choices": [
+        "Running total of sales per month",
+        "Top 3 products per category",
+        "Finding duplicate rows",
+        "Average of all rows"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Running totals: SUM() OVER (ORDER BY date ROWS UNBOUNDED PRECEDING). Top N per group: RANK() OVER (PARTITION BY category ORDER BY sales) then filter rank<=3. Duplicate detection: ROW_NUMBER() OVER (PARTITION BY key) > 1. Simple AVG() doesn't need window function.",
+      "tags": [
+        "window-functions",
+        "use-cases"
+      ]
+    },
+    {
+      "id": "sqladv-q14",
+      "type": "mcq",
+      "prompt": "How does LATERAL JOIN differ from a regular JOIN?",
+      "choices": [
+        "LATERAL runs in parallel",
+        "LATERAL subquery can reference columns from the outer table (left side) — enables per-row subqueries. e.g., for each user, get their last 3 orders (can't do this with regular JOIN without complex window function).",
+        "LATERAL is deprecated",
+        "Same as CROSS JOIN"
+      ],
+      "answerIndex": 1,
+      "explanation": "Regular JOIN: the right side is computed once, independently. LATERAL: right side is a correlated subquery that runs once per row of left side, able to use outer row's values. Essential for 'top N per group without window functions'.",
+      "tags": [
+        "lateral-join",
+        "sql"
+      ]
+    },
+    {
+      "id": "sqladv-q15",
+      "type": "mcq",
+      "prompt": "UNION vs UNION ALL in SQL:",
+      "choices": [
+        "Identical",
+        "UNION removes duplicate rows (sorts and deduplicates — slower). UNION ALL keeps all rows including duplicates (no sort — faster). Use UNION ALL unless you specifically need deduplication.",
+        "UNION ALL is deprecated",
+        "UNION is for different schemas"
+      ],
+      "answerIndex": 1,
+      "explanation": "UNION internally sorts results to find duplicates — O(n log n). UNION ALL just concatenates — O(n). If you know results won't have relevant duplicates (different filters, different tables) always use UNION ALL for better performance.",
+      "tags": [
+        "union",
+        "performance"
+      ]
+    },
+    {
+      "id": "sqladv-q16",
+      "type": "mcq",
+      "prompt": "What is a phantom read?",
+      "choices": [
+        "Reading a deleted row",
+        "Reading a row twice with different values",
+        "A transaction reads a set of rows matching a condition, another transaction inserts a matching row and commits, the first transaction re-runs the same query and sees the new (phantom) row",
+        "Hardware memory error"
+      ],
+      "answerIndex": 2,
+      "explanation": "Phantom read: your query returns N rows, someone inserts a matching row mid-transaction, re-running same query returns N+1 rows. Fix: SERIALIZABLE isolation. PostgreSQL REPEATABLE READ prevents phantoms too (unlike the SQL standard).",
+      "tags": [
+        "transactions",
+        "phantom-reads",
+        "isolation"
+      ]
+    },
+    {
+      "id": "sqladv-q17",
+      "type": "mcq",
+      "prompt": "What does EXPLAIN ANALYZE's 'actual time' vs 'cost' represent?",
+      "choices": [
+        "They are the same",
+        "cost = planner's estimate in abstract units (not ms). actual time = real measured execution time in ms. Compare both to find where planner estimates are wrong (large discrepancy = stale statistics or bad plan choice).",
+        "cost is in milliseconds",
+        "actual time is approximate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cost is a dimensionless unit used by the planner to compare plans (1.0 = reading one disk page sequential). Actual time is real wall-clock milliseconds measured during EXPLAIN ANALYZE execution. Large cost/time mismatch → investigate.",
+      "tags": [
+        "explain",
+        "query-planning"
+      ]
+    },
+    {
+      "id": "sqladv-q18",
+      "type": "mcq",
+      "prompt": "Index on (user_id, order_date DESC). Query: WHERE user_id = 42 ORDER BY order_date DESC LIMIT 10. What is the performance?",
+      "choices": [
+        "Full table scan",
+        "Seq scan then sort",
+        "Index-only fast path: uses index to find user 42's rows already in desc order, takes first 10 — O(log n + 10) with no sort step needed",
+        "Hash join required"
+      ],
+      "answerIndex": 2,
+      "explanation": "This is the 'index-accelerated ORDER BY' pattern. Index stores (user_id, order_date DESC) pre-sorted. Query walks index directly: find user_id=42 range, order_date already descending, grab first 10. No sort. Extremely fast.",
+      "tags": [
+        "indexes",
+        "order-by",
+        "performance"
+      ]
+    },
+    {
+      "id": "sqladv-q19",
+      "type": "mcq",
+      "prompt": "CTE WITH RECURSIVE: what prevents infinite recursion?",
+      "choices": [
+        "SQL has no infinite loop risk",
+        "The recursive member must eventually produce no new rows — typically by joining only on rows not yet seen. Also: CYCLE detection clause in PostgreSQL 14+ and maximum recursion depth settings.",
+        "A time limit",
+        "Number of rows limit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Recursive CTE stops when the recursive member returns 0 rows. If the recursive member always returns rows (e.g., a graph with cycles), infinite loop. Prevent: add cycle detection in WHERE clause, or use PostgreSQL 14 CYCLE keyword.",
+      "tags": [
+        "cte",
+        "recursive",
+        "infinite-loop"
+      ]
+    },
+    {
+      "id": "sqladv-q20",
+      "type": "codeOutput",
+      "prompt": "What does this window function compute?",
+      "code": "SELECT\n  month,\n  sales,\n  SUM(sales) OVER (ORDER BY month ROWS UNBOUNDED PRECEDING) AS cumulative\nFROM monthly_sales;",
+      "choices": [
+        "Average sales per month",
+        "Total sales for all months in every row",
+        "Cumulative running total of sales: each row shows all sales from the first month up to and including the current month",
+        "Previous month's sales"
+      ],
+      "answerIndex": 2,
+      "explanation": "ROWS UNBOUNDED PRECEDING means: include all rows from the start of the partition up to current row. SUM over this frame = running total. Month 3 row shows sum of months 1+2+3. Month 4 shows 1+2+3+4. Classic cumulative sum pattern.",
+      "tags": [
+        "window-functions",
+        "running-total"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "sqladv-fc1",
+      "front": "CTE syntax",
+      "back": "WITH name AS (SELECT ...) SELECT ... FROM name. Chain: WITH a AS (...), b AS (... FROM a) SELECT ... Multiple CTEs with commas. RECURSIVE: WITH RECURSIVE name AS (anchor UNION ALL recursive_part).",
+      "tags": [
+        "cte"
+      ]
+    },
+    {
+      "id": "sqladv-fc2",
+      "front": "Window function skeleton",
+      "back": "FUNC() OVER (PARTITION BY col ORDER BY col ROWS/RANGE BETWEEN ...). PARTITION BY = restart per group. ORDER BY = frame order. No PARTITION BY = one window = all rows.",
+      "tags": [
+        "window-functions"
+      ]
+    },
+    {
+      "id": "sqladv-fc3",
+      "front": "RANK vs DENSE_RANK vs ROW_NUMBER on [100,90,90,80]",
+      "back": "ROW_NUMBER: 1,2,3,4 (always unique). RANK: 1,2,2,4 (skips after tie). DENSE_RANK: 1,2,2,3 (no skip). Use ROW_NUMBER for dedup, RANK for competition, DENSE_RANK for reporting.",
+      "tags": [
+        "window-functions",
+        "ranking"
+      ]
+    },
+    {
+      "id": "sqladv-fc4",
+      "front": "Fix missing index — steps",
+      "back": "1. EXPLAIN ANALYZE query. 2. Find Seq Scan on large table with selective filter. 3. CREATE INDEX ON table(filter_col). 4. Re-run EXPLAIN — should show Index Scan. 5. ANALYZE if estimates still wrong.",
+      "tags": [
+        "indexes",
+        "explain"
+      ]
+    },
+    {
+      "id": "sqladv-fc5",
+      "front": "N+1 fix strategies",
+      "back": "1. Eager load (JOIN to fetch related data in one query). 2. ORM: @EntityGraph, fetchType=EAGER, or .findAll(EntityGraph). 3. DataLoader pattern (GraphQL). 4. Batch loading: WHERE id IN (...) instead of one query per ID.",
+      "tags": [
+        "n+1",
+        "performance"
+      ]
+    },
+    {
+      "id": "sqladv-fc6",
+      "front": "Composite index leftmost prefix rule",
+      "back": "Index (a, b, c): filters using a, (a,b), or (a,b,c) benefit. Filter on b alone = NO index. Filter on c alone = NO index. Filter on a and c = only a portion used. Design index with most selective + most common filter columns first.",
+      "tags": [
+        "indexes",
+        "composite"
+      ]
+    },
+    {
+      "id": "sqladv-fc7",
+      "front": "LAG / LEAD use case",
+      "back": "Period-over-period: LAG(revenue, 1) OVER (ORDER BY month). MoM change: revenue - LAG(revenue,1). YoY: LAG(revenue, 12). LEAD for 'what comes next'. Both return NULL for rows without enough preceding/following rows.",
+      "tags": [
+        "window-functions",
+        "lag-lead"
+      ]
+    },
+    {
+      "id": "sqladv-fc8",
+      "front": "EXPLAIN key terms",
+      "back": "Seq Scan = full table read. Index Scan = index then heap. Index Only Scan = purely index (best). Nested Loop = join small with small. Hash Join = join medium tables. Merge Join = join sorted tables. rows estimate vs actual = statistics quality.",
+      "tags": [
+        "explain",
+        "query-planning"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You have an e-commerce database: orders(id, user_id, amount, status, created_at), users(id, name, region). Write queries for: 1) Monthly revenue with MoM % change. 2) Top 3 customers per region by total spend. 3) Users who placed an order every month for the last 12 months (retention analysis). 4) EXPLAIN and optimise the retention query.",
+    "checklist": [
+      {
+        "id": "sql1",
+        "text": "MoM change: CTE monthly_totals, then window LAG(revenue,1) OVER (ORDER BY month) to compute delta/lag*100",
+        "weight": 25
+      },
+      {
+        "id": "sql2",
+        "text": "Top 3 per region: RANK() OVER (PARTITION BY region ORDER BY total_spend DESC), filter rank<=3 in outer query",
+        "weight": 25
+      },
+      {
+        "id": "sql3",
+        "text": "12-month retention: GROUP BY user_id, HAVING COUNT(DISTINCT DATE_TRUNC('month',created_at)) = 12",
+        "weight": 25
+      },
+      {
+        "id": "sql4",
+        "text": "EXPLAIN shows index on (user_id, created_at) reduces Seq Scan. Add covering index including amount.",
+        "weight": 25
+      }
+    ],
+    "hints": [
+      "DATE_TRUNC('month', created_at) normalises any date to first of month — group by this for monthly aggregation.",
+      "Retention query: filter WHERE created_at >= NOW() - INTERVAL '12 months', then HAVING COUNT(DISTINCT month) = 12.",
+      "Top N per group pattern: wrap ranking query in subquery/CTE and WHERE rank <= N in outer query."
+    ]
+  }
+}

@@ -1,0 +1,474 @@
+{
+  "id": "llm-ops",
+  "unit": 6,
+  "order": 121,
+  "title": "LLM Ops",
+  "summary": "LangSmith tracing, evaluation frameworks, A/B testing, cost optimisation, and production guardrails for LLM applications.",
+  "prereqs": [
+    "agents",
+    "rag"
+  ],
+  "guide": "# LLM Ops\n\n## What Is LLMOps?\n\nLLMOps = MLOps principles applied to LLM-powered applications.\nIt covers: observability, evaluation, versioning, A/B testing,\ncost management, and production monitoring of AI systems.\n\n```\nTraditional API:  request → code → response   (deterministic)\nLLM API:          prompt → LLM → response      (probabilistic, expensive, variable)\n\nNew problems LLMOps solves:\n  - Did the LLM hallucinate? (evaluation)\n  - Which prompt version performs better? (A/B testing)\n  - Why did this user get a bad response? (tracing)\n  - Are costs spiralling? (cost monitoring)\n  - Did a model update break our product? (regression testing)\n```\n\n---\n\n## LangSmith — Tracing and Evaluation\n\n```\nLangSmith (by LangChain) records every LLM call in your application.\n\nWhat gets recorded per call:\n  - Input messages (full prompt)\n  - Output response\n  - Model used, temperature, tokens\n  - Latency (time-to-first-token, total)\n  - Cost (input tokens × price + output tokens × price)\n  - Errors and retries\n  - Parent/child traces (for chains and agents)\n\nWhy this matters:\n  User reports 'the AI gave me wrong information'\n  Without LangSmith: 'we can't reproduce it, we don't know what happened'\n  With LangSmith: find the specific trace, see exact prompt + response,\n                  add it to eval dataset to prevent regression\n\nSetup (Python):\n  import os\n  os.environ['LANGCHAIN_TRACING_V2'] = 'true'\n  os.environ['LANGCHAIN_API_KEY'] = 'ls-...'\n  # All LangChain calls now auto-traced\n\n  # Manual annotation with LangSmith:\n  from langsmith import traceable\n\n  @traceable(name='classify_ticket')\n  def classify_ticket(ticket: str) -> str:\n      return llm.invoke(ticket)\n```\n\n---\n\n## Evaluation Framework\n\n```\nLLM evaluation types:\n\nAUTOMATED METRICS:\n  Exact match:   response == expected_answer (good for structured output)\n  Regex match:   does response contain required pattern?\n  LLM-as-judge:  use a second LLM to evaluate quality (scalable, nuanced)\n\nLLM-AS-JUDGE pattern:\n  prompt = f'''\n  Rate the following response on a scale 1-5 for accuracy:\n  Question: {question}\n  Expected: {ground_truth}\n  Response: {llm_response}\n  Return JSON: {{score: int, reason: str}}\n  '''\n  judge_response = gpt4.invoke(prompt)  # GPT-4 as judge for cheaper model\n\nLangSmith evaluators:\n  from langsmith.evaluation import evaluate\n\n  results = evaluate(\n      target=my_app,           # function to evaluate\n      data='my-eval-dataset',  # dataset in LangSmith\n      evaluators=[             # evaluation functions\n          exact_match,\n          llm_as_judge,\n      ],\n  )\n  print(results.aggregate_feedback)\n\nGOLDEN DATASET:\n  A curated set of question → expected answer pairs.\n  Run before every deployment: must score ≥ X% on golden set.\n  Add new failure cases to golden set as they're discovered.\n  Treat like a test suite.\n```\n\n---\n\n## Model Versioning and A/B Testing\n\n```\nPROBLEM: You want to switch from GPT-3.5 to GPT-4o-mini.\n  Will quality improve? Degrade for some users?\n  Can't tell without testing on real traffic.\n\nPROMPT VERSIONING:\n  Store prompts in version control (Git or LangSmith Hub).\n  Tag versions: v1.0, v1.1, v2.0\n  Each deployment uses a specific prompt version.\n  Rollback: deploy previous version if regression detected.\n\nA/B TESTING LLM responses:\n  Traffic split: 90% users get prompt_v1 + gpt-3.5\n                 10% users get prompt_v2 + gpt-4o-mini\n  Measure: user ratings, thumbs up/down, task completion\n  Statistical significance: need enough samples before concluding\n\nGradual rollout:\n  1% → 5% → 20% → 50% → 100%\n  Monitor metrics at each stage.\n  Rollback if: error rate increases, user ratings drop, cost spikes.\n\nCanary deployment for LLM:\n  New model version deployed to 5% of requests.\n  Auto-compare response quality with judge LLM.\n  Promote if quality ≥ baseline. Rollback if worse.\n```\n\n---\n\n## Cost Optimisation\n\n```\nLLM COST FORMULA:\n  cost = (input_tokens × price_in) + (output_tokens × price_out)\n\n  GPT-4o: $5 / 1M input tokens, $15 / 1M output tokens\n  GPT-4o-mini: $0.15 / 1M input, $0.60 / 1M output (33x cheaper!)\n  Claude 3.5 Sonnet: $3 / 1M input, $15 / 1M output\n\nCOST REDUCTION STRATEGIES:\n\n1. Right-size model:\n   Use GPT-4o only where quality difference is justified.\n   Classification/extraction → GPT-4o-mini (same quality, 30x cheaper)\n   Complex reasoning → GPT-4o\n\n2. Prompt compression:\n   LLMLingua: compress 10K token prompt to 2K tokens with minimal quality loss\n   Remove unnecessary examples, redundant instructions\n\n3. Caching:\n   Semantic cache: store (prompt_embedding → response)\n   Similar questions hit cache. Langchain GPTCache integration.\n   Especially effective for: FAQ bots, repeated similar queries\n\n4. Batch API:\n   OpenAI Batch API: 50% cost reduction, processes within 24 hours\n   Use for: async processing, embeddings, bulk classification\n\n5. Output length control:\n   max_tokens parameter: cap output to expected length\n   Instruct conciseness: 'respond in 2 sentences'\n   Output tokens are 3-5x more expensive than input tokens\n\n6. Context pruning:\n   Don't send entire chat history every time\n   Summarise old context, send only last 3 messages + summary\n```\n\n---\n\n## Arize Phoenix — Open-Source LLM Observability\n\n```\nArize Phoenix: free, open-source LLM tracing and evaluation.\n   Runs locally: no data sent to cloud.\n\n  import phoenix as px\n  from phoenix.otel import register\n\n  session = px.launch_app()  # starts local UI at http://localhost:6006\n  tracer = register()        # integrates with OpenTelemetry\n\n  # With OpenAI:\n  from openinference.instrumentation.openai import OpenAIInstrumentor\n  OpenAIInstrumentor().instrument()\n  # All OpenAI calls now traced in Phoenix UI\n\nWhat Phoenix shows:\n  - All LLM calls with inputs/outputs\n  - Token usage and estimated cost\n  - Latency distribution\n  - Evaluation scores on each response\n  - Root span and child spans for complex chains\n\nArize AI (cloud): enterprise version, real-time monitors for:\n  Drift: did input/output distribution change? (model update detection)\n  Guardrails: detect PII, toxicity, off-topic responses\n  User feedback: correlate ratings with traces\n```\n\n---\n\n## Production Guardrails\n\n```\nGUARDRAILS: checks that run before/after LLM calls to ensure safety and quality.\n\nINPUT guardrails:\n  - PII detection: don't send SSNs, credit cards to LLM API\n  - Prompt injection detection: flag suspicious inputs\n  - Topic restriction: 'is this on-topic for our use case?'\n  - Length limit: reject unusually long inputs\n\nOUTPUT guardrails:\n  - Toxicity detection: refuse to pass toxic responses to user\n  - Hallucination check: does response cite non-existent sources?\n  - Format validation: is it valid JSON if expected?\n  - Confidence check: does model express uncertainty? (flag for human review)\n\nTools: Guardrails AI, NVIDIA NeMo Guardrails, Llama Guard\n\nCost-effective guardrail pattern:\n  Fast cheap model (GPT-4o-mini or on-device) → classify input\n  If risky → block or route to human\n  If safe  → proceed to main model\n  Cost: tiny classifier call + main call (vs main call + post-hoc check)\n```\n\n---\n\n## Mind Map\n\n```\nLLMOPS\n|\n+-- TRACING\n|   +-- LangSmith: full trace per call\n|   +-- Arize Phoenix: open-source local\n|   +-- OpenTelemetry: OTel spans for LLM calls\n|\n+-- EVALUATION\n|   +-- Golden dataset (test suite)\n|   +-- LLM-as-judge\n|   +-- Automated metrics (exact match, regex)\n|\n+-- VERSIONING & A/B\n|   +-- Prompt versions in Git / LangSmith Hub\n|   +-- Traffic splitting by %, gradual rollout\n|   +-- Statistical significance before promoting\n|\n+-- COST\n    +-- Right-size model\n    +-- Semantic cache\n    +-- Batch API (50% discount)\n    +-- Context pruning + compression\n    +-- Track token usage per endpoint\n```\n\n---\n\n## References\n\n### Videos\n- **LangSmith Introduction** by LangChain: https://www.youtube.com/watch?v=tFXm5ijih98\n- **LLMOps Full Course** by DeepLearning.AI: https://www.deeplearning.ai/short-courses/llmops/\n\n### Articles\n- **Arize Phoenix docs**: https://docs.arize.com/phoenix\n- **LangSmith docs**: https://docs.smith.langchain.com/\n- **OpenAI Cost Calculator**: https://openai.com/api/pricing",
+  "questions": [
+    {
+      "id": "llops-q1",
+      "type": "mcq",
+      "prompt": "Why is tracing LLM calls more important than traditional API logging?",
+      "choices": [
+        "LLMs are more expensive",
+        "LLM outputs are probabilistic — same input can produce different outputs, quality varies, hallucinations happen silently. Tracing records exact prompt+response+tokens+cost per call, enabling: reproduce failures, debug regressions, build eval datasets.",
+        "LLM APIs don't have logs",
+        "Tracing is optional"
+      ],
+      "answerIndex": 1,
+      "explanation": "Traditional API: deterministic, test covers all cases. LLM: stochastic, can hallucinate, can degrade silently on model updates. Without traces: 'user reported bad response' is undebuggable. With traces: find exact call, reproduce, identify pattern, add to eval set.",
+      "tags": [
+        "llmops",
+        "tracing",
+        "observability"
+      ]
+    },
+    {
+      "id": "llops-q2",
+      "type": "mcq",
+      "prompt": "LLM-as-judge evaluation pattern — what are its advantages over manual evaluation?",
+      "choices": [
+        "LLM judges are always accurate",
+        "Scalable: evaluate thousands of responses per minute vs hours of human review. Nuanced: can assess quality, relevance, accuracy on rubric rather than exact match. Consistent: same rubric applied uniformly. 70-85% agreement with human judges.",
+        "LLM judges are free",
+        "LLM-as-judge replaces all human evaluation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Human evaluation: accurate but slow (hours per 100 examples) and expensive. LLM-as-judge: a capable model (GPT-4) evaluates cheaper model outputs with structured rubric. Meta-evaluations show 70-85% correlation with human judges. Use GPT-4 as judge for GPT-3.5/4o-mini application outputs.",
+      "tags": [
+        "evaluation",
+        "llm-as-judge"
+      ]
+    },
+    {
+      "id": "llops-q3",
+      "type": "mcq",
+      "prompt": "What is a 'golden dataset' in LLMOps?",
+      "choices": [
+        "Expensive benchmark",
+        "Curated set of question→expected answer pairs representing important/tricky cases. Run before every deployment. Must score ≥ threshold. New failure cases added as they occur. Treated as a regression test suite for the AI system.",
+        "All user conversations",
+        "LLM fine-tuning data"
+      ],
+      "answerIndex": 1,
+      "explanation": "Golden dataset = test suite for LLM features. Minimum: 50-100 examples covering happy paths + known edge cases. Eval run as CI/CD gate: if score <90%, deployment blocked. Grows over time as bugs are found — each bug becomes a test case preventing regression.",
+      "tags": [
+        "evaluation",
+        "golden-dataset"
+      ]
+    },
+    {
+      "id": "llops-q4",
+      "type": "mcq",
+      "prompt": "GPT-4o costs $5/1M input tokens. GPT-4o-mini costs $0.15/1M. For a classification task needing 500 tokens input: cost difference per 1000 requests?",
+      "choices": [
+        "$0.01 vs $5",
+        "GPT-4o: 1000 × 500 × ($5/1M) = $2.50. GPT-4o-mini: 1000 × 500 × ($0.15/1M) = $0.075. 33x cheaper. For classification tasks: mini quality is often on par with full GPT-4o.",
+        "No difference",
+        "GPT-4o-mini doesn't exist"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cost math matters at scale. 10M classification requests/month: GPT-4o = $25,000. GPT-4o-mini = $750. 33x difference. Quality for classification is nearly identical. Rule: use mini/cheaper models for structured tasks (classification, extraction), full model only where reasoning quality difference is measurable.",
+      "tags": [
+        "cost",
+        "model-selection"
+      ]
+    },
+    {
+      "id": "llops-q5",
+      "type": "mcq",
+      "prompt": "Semantic caching for LLM — how does it work?",
+      "choices": [
+        "Cache based on exact string match",
+        "Embed the prompt into a vector, check if any cached prompt has cosine similarity > threshold (e.g., 0.95). If yes: return cached response. Similar questions (not identical) hit the cache. Reduces API calls significantly for FAQ/repetitive use cases.",
+        "Time-based cache expiry",
+        "Per-user cache"
+      ],
+      "answerIndex": 1,
+      "explanation": "Exact match cache: 'What is Python?' and 'what is python?' are different keys. Semantic cache: both embed to similar vectors, similarity 0.99 > threshold, cache hit. GPTCache library implements this. Effective when: many users ask semantically similar questions (customer support, document Q&A).",
+      "tags": [
+        "caching",
+        "cost",
+        "semantic-cache"
+      ]
+    },
+    {
+      "id": "llops-q6",
+      "type": "mcq",
+      "prompt": "What is prompt drift and how do you detect it?",
+      "choices": [
+        "Prompt version changes",
+        "As user inputs change over time (seasonality, new topics, new vocabulary), the distribution of inputs shifts. What worked for original users may degrade for new ones. Detect: monitor evaluation scores over time, compare input embedding distributions.",
+        "LLM model updates",
+        "A security vulnerability"
+      ],
+      "answerIndex": 1,
+      "explanation": "Prompt drift: your prompt was optimised for batch A of users. Six months later, new users ask different things — prompt performs worse without any code changes. Detection: embed inputs weekly, compare distribution to baseline (KL divergence > threshold = drift). Response: re-evaluate and re-optimise prompts on new data.",
+      "tags": [
+        "drift",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "llops-q7",
+      "type": "mcq",
+      "prompt": "OpenAI Batch API — what is the trade-off for 50% cost reduction?",
+      "choices": [
+        "Lower quality responses",
+        "Requests processed asynchronously within 24 hours instead of real-time synchronous responses. 50% cheaper. Use for: bulk embeddings, async report generation, overnight processing, model evaluation runs. Cannot use for: real-time chat, user-facing latency-sensitive features.",
+        "Smaller context window",
+        "Different models"
+      ],
+      "answerIndex": 1,
+      "explanation": "Batch API: submit up to 50K requests, results available within 24h. 50% price vs synchronous. Ideal for: nightly processing, bulk document analysis, evaluation runs, content moderation queues. Not suitable for: anything a user is waiting for in real-time.",
+      "tags": [
+        "cost",
+        "batch-api"
+      ]
+    },
+    {
+      "id": "llops-q8",
+      "type": "mcq",
+      "prompt": "A/B testing LLM responses: why is statistical significance important?",
+      "choices": [
+        "Only needed for large models",
+        "Small sample early results are noisy. 10 responses: model B might win by luck. Without statistical significance testing, you might promote worse model. Need enough samples where p < 0.05 (95% confidence) to say difference is real.",
+        "A/B testing LLMs isn't possible",
+        "Statistical significance only matters for images"
+      ],
+      "answerIndex": 1,
+      "explanation": "LLM outputs are variable. 100 A/B pairs: model B might score higher by chance. Requires: 1000+ samples before results are meaningful. Use: two-proportion z-test or t-test on quality scores. Many LLMOps platforms calculate this automatically. Premature promotion = poor user experience.",
+      "tags": [
+        "ab-testing",
+        "statistics"
+      ]
+    },
+    {
+      "id": "llops-q9",
+      "type": "mcq",
+      "prompt": "Arize Phoenix vs LangSmith — key difference?",
+      "choices": [
+        "Phoenix is for images",
+        "Phoenix: open-source, runs locally (no data sent to cloud, free). LangSmith: managed cloud service (data goes to LangChain servers, paid beyond free tier). Both: traces, evaluations, prompt hub. Choice: self-hosted/privacy-sensitive → Phoenix. Managed/team collaboration → LangSmith.",
+        "LangSmith is open-source",
+        "Phoenix only works with Python"
+      ],
+      "answerIndex": 1,
+      "explanation": "Privacy consideration: LangSmith sends your prompts and responses to LangChain cloud servers. For sensitive data (healthcare, finance): Phoenix self-hosted keeps everything local. Both integrate with OpenTelemetry. Phoenix now also available hosted. LangSmith has better team collaboration and dataset management.",
+      "tags": [
+        "langsmith",
+        "arize-phoenix",
+        "tools"
+      ]
+    },
+    {
+      "id": "llops-q10",
+      "type": "mcq",
+      "prompt": "What is 'model drift' in the context of LLM applications?",
+      "choices": [
+        "The model file gets corrupted",
+        "When an LLM provider releases an updated model version (e.g., gpt-4-0613 → gpt-4-0314), the model's behaviour changes silently. Responses that worked before may change tone, length, format, or accuracy. Detect with eval suite before and after each model version.",
+        "User preference changes",
+        "Token limit changes"
+      ],
+      "answerIndex": 1,
+      "explanation": "OpenAI updates models: gpt-4-turbo-2024-04-09 behaves differently from gpt-4-turbo-2024-01-25. Changes: format, verbosity, instruction following, safety filters. Without eval suite: you won't know until users complain. Best practice: pin model version explicitly, run eval when upgrading, gradual rollout.",
+      "tags": [
+        "model-drift",
+        "versioning"
+      ]
+    },
+    {
+      "id": "llops-q11",
+      "type": "mcq",
+      "prompt": "Context pruning strategy — why does it reduce costs?",
+      "choices": [
+        "Removes images from context",
+        "Instead of sending full chat history (grows unboundedly), send only recent N messages + a summary of older context. Reduces input tokens per request. Conversational history is 90%+ of input cost for long sessions.",
+        "Reduces model size",
+        "Speeds up response generation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chat history: user has 50 exchanges, each sending all 50 in context = O(n²) token growth. Message 50: sends 49×avg_tokens of old history. Solution: summarise first 45 messages into one paragraph, send summary + last 5 messages. 70-90% token reduction without meaningful quality loss for most conversations.",
+      "tags": [
+        "cost",
+        "context-pruning"
+      ]
+    },
+    {
+      "id": "llops-q12",
+      "type": "mcq",
+      "prompt": "What is 'hallucination detection' in LLMOps and how is it implemented?",
+      "choices": [
+        "Checking for image generation errors",
+        "Detecting when LLM generates plausible-sounding but factually incorrect information. Methods: RAG-based check (is response grounded in retrieved docs?), citation verification (does referenced source exist and say this?), LLM-as-judge for factual accuracy against ground truth.",
+        "Model temperature monitoring",
+        "Prompt injection detection"
+      ],
+      "answerIndex": 1,
+      "explanation": "Hallucination: LLM confidently states wrong facts. Detection: for RAG systems — check if response statements can be traced back to retrieved chunks (faithfulness score). For factual systems — verify claims against knowledge base. Tools: RAGAS library (faithfulness, answer relevance metrics), LangSmith evaluators.",
+      "tags": [
+        "hallucination",
+        "evaluation"
+      ]
+    },
+    {
+      "id": "llops-q13",
+      "type": "mcq",
+      "prompt": "Why should you pin the model version in production (e.g., gpt-4o-2024-08-06 not just gpt-4o)?",
+      "choices": [
+        "For cost savings",
+        "gpt-4o (unversioned) automatically updates to latest version. Provider updates can change behaviour: different verbosity, format changes, safety filter changes. Pinning: reproducible behaviour, controlled updates via your release process, compare old vs new before switching.",
+        "Versioned models are faster",
+        "Required by OpenAI"
+      ],
+      "answerIndex": 1,
+      "explanation": "Model aliases (gpt-4o) are snapshots that roll forward. OpenAI deprecates old versions and moves aliases. Your carefully tuned prompts may work with 2024-08-06 but break with 2025-01-15 due to behaviour changes. Pin specific version: only update intentionally with eval gate.",
+      "tags": [
+        "versioning",
+        "model-pinning"
+      ]
+    },
+    {
+      "id": "llops-q14",
+      "type": "mcq",
+      "prompt": "PII detection guardrail — why is it critical for LLM applications?",
+      "choices": [
+        "For performance reasons",
+        "LLM APIs send data to external servers. If user inputs contain SSNs, credit card numbers, health data, or other PII — they may violate GDPR/HIPAA and be stored in provider's training data. Guardrail: detect and mask PII before sending to API.",
+        "Only required in US",
+        "Only for enterprise users"
+      ],
+      "answerIndex": 1,
+      "explanation": "GDPR Art. 25 (data minimisation): don't send more data than necessary. Sending health records to OpenAI: potential HIPAA violation unless BAA signed. MIT-licensed PII detectors (spaCy NER, Presidio) can detect names/emails/SSNs/cards. Mask before sending: 'John Smith' → 'PERSON_1'. Unmask after response if needed.",
+      "tags": [
+        "pii",
+        "guardrails",
+        "compliance"
+      ]
+    },
+    {
+      "id": "llops-q15",
+      "type": "mcq",
+      "prompt": "What monitoring metric indicates your LLM application is degrading in quality?",
+      "choices": [
+        "Server CPU usage",
+        "Combination: user feedback score trending down, LLM-as-judge scores decreasing, task completion rate falling, error/refusal rate increasing, response length deviating significantly from baseline. Any sustained change from baseline triggers investigation.",
+        "Token count constant",
+        "Response time only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Quality degradation signals: 1) User thumbs down rate increases. 2) Automatic eval scores decrease. 3) More refusals/safety blocks. 4) Response format violations increase (JSON parsing failures). 5) Task success rate falls. Set up monitoring: weekly eval runs, alert on >5% quality drop from baseline.",
+      "tags": [
+        "monitoring",
+        "quality",
+        "metrics"
+      ]
+    },
+    {
+      "id": "llops-q16",
+      "type": "mcq",
+      "prompt": "What is 'evals as CI/CD' in LLMOps?",
+      "choices": [
+        "Running tests in containers",
+        "Running automatic evaluation suite as part of the deployment pipeline. Before any prompt change, model upgrade, or application update: run eval on golden dataset. Block deployment if score drops below threshold. Treat LLM quality like test coverage.",
+        "Continuous log collection",
+        "Caching strategy"
+      ],
+      "answerIndex": 1,
+      "explanation": "Traditional CI/CD: run unit/integration tests → block deploy on failure. LLM CI/CD: run eval suite (golden dataset) → block deploy if quality/accuracy drops >5% from baseline. Also: run eval after model provider updates. This prevents silent degradation from reaching users.",
+      "tags": [
+        "cicd",
+        "evals",
+        "deployment"
+      ]
+    },
+    {
+      "id": "llops-q17",
+      "type": "mcq",
+      "prompt": "Cost allocation per feature — why does it matter?",
+      "choices": [
+        "For accounting only",
+        "Track which product feature uses how many tokens. Feature A: $2/1000 users. Feature B: $50/1000 users. Stops surprise cost spikes, enables: kill expensive features, optimise high-cost features, charge users proportionally, compare ROI of each AI feature.",
+        "LLM costs are always low",
+        "Only relevant for large companies"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without per-feature tracking: $10K LLM bill this month, no idea which feature caused growth. With tracking: Feature B jumped from $5K to $8K = investigate. Add LangSmith metadata tags per feature, or token counting middleware. Monthly cost × feature = ROI calculation per AI feature.",
+      "tags": [
+        "cost",
+        "monitoring",
+        "allocation"
+      ]
+    },
+    {
+      "id": "llops-q18",
+      "type": "mcq",
+      "prompt": "What does the 'thumbs up/down' feedback loop enable in LLMOps?",
+      "choices": [
+        "Direct model fine-tuning",
+        "Collect human preference data on specific LLM responses. Enables: 1) Identify worst responses for manual review. 2) Build human-preference eval dataset. 3) Correlate with automatic metrics to validate evals. 4) Fine-tune with RLHF if enough data collected.",
+        "Billing adjustment",
+        "Only visual feedback"
+      ],
+      "answerIndex": 1,
+      "explanation": "User feedback is ground truth. Thumbs down on a specific response: investigate that trace in LangSmith. Find pattern: 'questions about returns always get downvotes' → improve that prompt. Aggregate thumbs: correlate with prompt version, model version, time of day. Fine-tuning: 1000+ preference pairs → RLHF/DPO fine-tune.",
+      "tags": [
+        "feedback",
+        "human-preference",
+        "rlhf"
+      ]
+    },
+    {
+      "id": "llops-q19",
+      "type": "mcq",
+      "prompt": "Token counting before sending — why should you implement this?",
+      "choices": [
+        "Pure curiosity",
+        "Prevent context window exceeded errors (request fails silently or truncates), predict cost before sending, trigger summarisation when history is too long, alert on unusually large requests (possible injection or abuse).",
+        "Required by all LLM APIs",
+        "Only for enterprise"
+      ],
+      "answerIndex": 1,
+      "explanation": "tiktoken (OpenAI tokeniser) counts tokens client-side before API call. Use: if total_tokens > 0.9 × max_context → summarise history. if total_tokens > 100K → flag as unusual (possible injection). if daily_token_count > budget → alert ops. Prevents: 413 errors, runaway costs, silent context truncation.",
+      "tags": [
+        "tokens",
+        "cost",
+        "context-window"
+      ]
+    },
+    {
+      "id": "llops-q20",
+      "type": "mcq",
+      "prompt": "What is RAGAS and what does it measure?",
+      "choices": [
+        "A database optimization tool",
+        "Framework for evaluating RAG (Retrieval-Augmented Generation) pipelines. Metrics: faithfulness (is answer grounded in retrieved context?), answer relevance (does answer address the question?), context recall (did retrieval find relevant chunks?), context precision (are retrieved chunks relevant?).",
+        "A model architecture",
+        "A prompt engineering method"
+      ],
+      "answerIndex": 1,
+      "explanation": "RAGAS: RAG Assessment. Key metrics: Faithfulness = what fraction of answer claims are supported by retrieved context (hallucination detection). Answer relevance = does the answer address the question asked. Context recall = were all relevant docs retrieved? Use RAGAS in CI/CD to gate RAG system deployments.",
+      "tags": [
+        "ragas",
+        "rag",
+        "evaluation"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "llops-fc1",
+      "front": "LangSmith setup",
+      "back": "Set env vars: LANGCHAIN_TRACING_V2=true, LANGCHAIN_API_KEY=ls-.... All LangChain calls auto-traced. Non-LangChain: @traceable decorator or wrap_openai(client). View traces at smith.langchain.com. Free tier: 5K traces/month.",
+      "tags": [
+        "langsmith",
+        "tracing"
+      ]
+    },
+    {
+      "id": "llops-fc2",
+      "front": "LLM cost formula",
+      "back": "cost = (input_tokens × price_in) + (output_tokens × price_out). Output tokens 3-5x more expensive than input. GPT-4o-mini: $0.15/$0.60 per 1M. GPT-4o: $5/$15 per 1M. Use mini for classification/extraction. Full model for reasoning only where quality gap measurable.",
+      "tags": [
+        "cost",
+        "pricing"
+      ]
+    },
+    {
+      "id": "llops-fc3",
+      "front": "Golden dataset requirements",
+      "back": "Minimum 50-100 examples. Cover: happy path, known edge cases, failure modes found in production. Run as CI/CD gate: score must be >= threshold (e.g. 90%). Add new bugs as test cases. Version-controlled. Re-run after every prompt or model change.",
+      "tags": [
+        "evaluation",
+        "golden-dataset"
+      ]
+    },
+    {
+      "id": "llops-fc4",
+      "front": "Model version pinning",
+      "back": "Always pin: gpt-4o-2024-08-06 not gpt-4o. Providers update aliases silently. Pinned version: reproducible, controlled upgrades. Upgrade process: 1) pin new version in staging, 2) run eval suite, 3) gradual rollout if scores OK.",
+      "tags": [
+        "versioning",
+        "model-pinning"
+      ]
+    },
+    {
+      "id": "llops-fc5",
+      "front": "Guardrail pattern",
+      "back": "Input: PII detection (mask before sending), prompt injection detection, topic gating. Output: toxicity check, format validation, hallucination score. Implementation: cheap fast model as pre-filter → main model. Cost: 2 API calls vs 1 but first is 100x cheaper.",
+      "tags": [
+        "guardrails",
+        "safety"
+      ]
+    },
+    {
+      "id": "llops-fc6",
+      "front": "Cost reduction playbook",
+      "back": "1. Right-size model (mini for simple tasks). 2. Semantic cache (similar questions hit cache). 3. Batch API (50% off, async OK). 4. Prune context (summarise history). 5. Limit max_tokens. 6. Prompt compression (LLMLingua). 7. Track per-feature cost.",
+      "tags": [
+        "cost",
+        "optimization"
+      ]
+    },
+    {
+      "id": "llops-fc7",
+      "front": "A/B testing LLMs",
+      "back": "Split traffic: 90%/10% (new feature start). Measure: user feedback scores, task success, error rate, cost. Wait for statistical significance (p < 0.05, typically 1000+ samples). Promote if: quality >= baseline AND cost acceptable. Rollback trigger: quality drop > 5%.",
+      "tags": [
+        "ab-testing",
+        "deployment"
+      ]
+    },
+    {
+      "id": "llops-fc8",
+      "front": "RAGAS RAG evaluation",
+      "back": "Faithfulness: % of answer statements supported by retrieved context (0-1). Answer relevance: does answer address the question (cosine sim). Context precision: % of retrieved chunks relevant. Context recall: % of ground truth covered by retrieved chunks. Run in CI/CD before RAG deployments.",
+      "tags": [
+        "ragas",
+        "rag",
+        "evaluation"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You are building production LLM-powered customer support for an e-commerce company. 10,000 support tickets/day. Define: 1) Your observability setup (what to trace, what metrics), 2) Your evaluation strategy (what to evaluate, how, eval frequency), 3) Your cost management approach (current estimate + optimisation), 4) Your deployment process for prompt/model changes.",
+    "checklist": [
+      {
+        "id": "lo1",
+        "text": "Tracing: LangSmith/Phoenix traces every call with user_id, ticket_id, category metadata tags",
+        "weight": 20
+      },
+      {
+        "id": "lo2",
+        "text": "Eval: golden dataset of 200 tickets across categories, LLM-as-judge for quality, exact-match for structured fields, run on every PR",
+        "weight": 20
+      },
+      {
+        "id": "lo3",
+        "text": "Cost: GPT-4o-mini for classification (cheap), GPT-4o for complex resolutions only. Estimate: 10K × avg 1K tokens × $0.60/1M = $6/day",
+        "weight": 20
+      },
+      {
+        "id": "lo4",
+        "text": "Semantic cache for FAQ patterns (same issue type): 30-40% cache hit expected → 30-40% cost reduction",
+        "weight": 20
+      },
+      {
+        "id": "lo5",
+        "text": "Deployment: prompt changes require eval gate (>=95% golden score). Model updates: 5% canary → 24hr eval → full rollout",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Track: average quality score per ticket category per day — degradation in 'returns' category might be prompt issue, not model.",
+      "User feedback via thumbs up/down on each response feeds directly into LangSmith as annotation for future eval dataset.",
+      "PII guardrail: customer names/emails/order IDs go into prompts — ensure masked before logging, and check if it complies with your data retention policy."
+    ]
+  }
+}

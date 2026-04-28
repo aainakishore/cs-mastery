@@ -7,408 +7,439 @@
   "prereqs": [
     "rabbitmq"
   ],
-  "guide": "# AWS SQS\n\n> **Reading time:** ~15 min\n\n## What is AWS SQS?\n\nAWS SQS addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd AWS SQS when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nAWS SQS\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: sqs\n",
+  "guide": "# AWS SQS — Simple Queue Service\n\n## What Is a Message Queue? (Start From Zero)\n\nImagine a busy coffee shop. Customers walk in and place orders. If the barista had to\nserve each customer instantly with no waiting — one slow customer blocks everyone else.\nInstead: customers place orders at the register (a queue), the order ticket goes on a\nboard, and baristas pick up tickets when they are ready. The register does not wait\nfor the coffee to be made before taking the next order.\n\nA **message queue** does the same for software services.\n\n**Without a queue (tight coupling):**\n```\nUser clicks 'Place Order'\n    |\n    v\nOrder Service calls Payment Service directly\n    |\n    | (waits synchronously)\n    v\nPayment Service calls Email Service directly\n    |\n    | (waits synchronously)\n    v\nResponse returned to user\n\nProblem: if Email Service is slow or down, the user waits. If Payment Service is\noverwhelmed (Black Friday spike), Order Service fails too.\n```\n\n**With SQS (loose coupling):**\n```\nUser clicks 'Place Order'\n    |\n    v\nOrder Service puts message in SQS queue\n    |\n    v (immediate response to user: 'Order received!')\nUser gets response\n\nMeanwhile, asynchronously:\nSQS queue -> Payment Service picks up message, processes it\nSQS queue -> Email Service picks up message, sends confirmation\n\nIf Email Service crashes: message stays in queue, retried when it recovers.\nSpike of 10,000 orders: queue absorbs all of them, workers process at their pace.\n```\n\n---\n\n## SQS Core Concepts\n\n```\nPRODUCER:  Service that sends messages to the queue\n           (your Order Service)\n\nMESSAGE:   JSON payload, up to 256KB\n           {orderId: 'abc123', userId: 'u456', amount: 49.99}\n\nQUEUE:     Durable buffer storing messages until consumed\n           Messages can wait from seconds to 14 days\n\nCONSUMER:  Service that reads (polls) messages from the queue\n           (your Payment Service, Email Service)\n\nVISIBILITY TIMEOUT:\n   When consumer picks up a message, it becomes INVISIBLE to other consumers.\n   If consumer processes successfully: deletes the message (gone forever).\n   If consumer crashes (no delete): timeout expires, message reappears for retry.\n\nMessage lifecycle:\n  SENT -> [Queue] -> RECEIVED (invisible for 30s default) -> DELETED\n                                         |\n                              (crash, no delete)\n                                         v\n                              Reappears after visibility timeout\n                              Retried by another consumer\n```\n\n---\n\n## Standard Queue vs FIFO Queue\n\n```\n+------------------+----------------------------+----------------------------+\n| Feature          | Standard Queue             | FIFO Queue                 |\n+------------------+----------------------------+----------------------------+\n| Ordering         | Best-effort ordering       | Strict FIFO (guaranteed)   |\n| Delivery         | At-least-once (duplicates) | Exactly-once processing    |\n| Throughput       | Unlimited (~infinite)      | Up to 3000 msg/sec         |\n| Use case         | Most tasks (email, logs)   | Financial txns, ordering   |\n| Naming           | any-name                   | must end in .fifo          |\n+------------------+----------------------------+----------------------------+\n\nStandard: A message MIGHT be delivered twice (at-least-once).\n  Your consumer MUST be idempotent (safe to process twice).\n\nFIFO: Message delivered exactly once in the order sent.\n  Use for: bank transfers, inventory updates, anything where order matters.\n\nWhen to use which:\n  Standard: sending emails (duplicate = extra email, annoying but ok)\n  FIFO:     charging a credit card (duplicate = double charge, unacceptable)\n```\n\n---\n\n## Key SQS Settings\n\n```\nVISIBILITY TIMEOUT (default: 30 seconds):\n  Time a message is invisible after being received.\n  Set to > your max processing time.\n  If processing takes 2 min but timeout is 30s: message reappears, processed twice!\n  Rule: set visibility timeout = 6x your average processing time.\n\nMESSAGE RETENTION PERIOD (default: 4 days, max: 14 days):\n  How long unprocessed messages stay in the queue.\n  After this period, messages are automatically deleted.\n\nMESSAGE SIZE (max: 256KB):\n  For larger payloads: store data in S3, send only the S3 key in SQS.\n  SQS Extended Client Library (Java/Python) handles this pattern.\n\nDELIVERY DELAY (default: 0, max: 15 minutes):\n  Messages become invisible for N seconds after sent.\n  Use: delay an action (send invoice email 5 min after order).\n\nLONG POLLING vs SHORT POLLING:\n  Short polling: consumer calls ReceiveMessage, AWS checks a subset of servers.\n                 May return empty even if messages exist. More API calls = higher cost.\n  Long polling:  consumer waits up to 20 seconds for a message to arrive.\n                 Fewer empty responses. Lower cost. Use long polling (WaitTimeSeconds=20).\n```\n\n---\n\n## Dead Letter Queue (DLQ)\n\n```\nWHAT IS A DLQ?\n  A separate SQS queue for messages that fail processing repeatedly.\n  Instead of retrying forever, after N failures the message goes to the DLQ.\n\nWHY USE IT?\n  Without DLQ: a poison pill message (one your code cannot process) retries\n  forever, blocking other messages and generating noise in logs.\n  With DLQ: poison pill is isolated, other messages are unaffected.\n\nSETUP:\n  Create a separate SQS queue: my-queue-dlq\n  Set on main queue: Redrive Policy:\n    maxReceiveCount: 3   (fail 3 times -> move to DLQ)\n    deadLetterTargetArn: arn:...:my-queue-dlq\n\nWORKFLOW:\n  Message arrives -> Consumer processes -> FAILS\n  Message reappears (visibility timeout expires)\n  Consumer tries again -> FAILS (receive count = 2)\n  Consumer tries again -> FAILS (receive count = 3 = maxReceiveCount)\n  Message moves to DLQ -> alert fires -> engineer investigates\n\nWHAT TO DO WITH DLQ MESSAGES?\n  - Investigate root cause (bad data? bug in consumer?)\n  - Fix the bug\n  - Replay messages back to main queue\n  - AWS Console: DLQ Redrive feature does this automatically\n```\n\n---\n\n## Lambda + SQS — The Most Common Pattern\n\n```\nLambda can consume SQS messages as an event source mapping.\nLambda polls the queue automatically — you don't write polling code.\n\nArchitecture:\n  Producer -> SQS Queue -> Lambda (auto-scales with queue depth)\n\nEvent source mapping behaviour:\n  Lambda polls the queue in batches (default: 10 messages per invocation)\n  If Lambda succeeds: SQS deletes all messages in the batch\n  If Lambda fails: ALL messages in batch reappear (retry)\n\nBATCH SIZE:\n  Small batch (1): easy partial failure handling, more Lambda invocations\n  Large batch (10): fewer invocations (cheaper), harder partial failure\n\nPARTIAL BATCH FAILURE:\n  Lambda processes messages 1-10. Message 7 fails. Others succeed.\n  Without partial failure handling: all 10 retry (messages 1-6, 8-10 re-processed!)\n  With batchItemFailures response: return only failed message IDs to retry:\n\n  def handler(event, context):\n      failures = []\n      for record in event['Records']:\n          try:\n              process(record)\n          except Exception as e:\n              failures.append({'itemIdentifier': record['messageId']})\n      return {'batchItemFailures': failures}\n\nConcurrency:\n  Lambda scales one concurrent execution per active message group (FIFO)\n  or up to 1000 concurrency for standard queues.\n  Set Lambda reserved concurrency to cap downstream DB load.\n```\n\n---\n\n## SQS vs SNS vs EventBridge\n\n```\n+------------------+----------------------+------------------------+\n| Feature          | SQS                  | SNS                    |\n+------------------+----------------------+------------------------+\n| Model            | Queue (pull-based)   | Topic (push-based)     |\n| Consumers        | One consumer group   | Multiple subscribers   |\n| Persistence      | Messages wait        | Fire and forget        |\n| Retry            | Built-in (visibility)| No retry by default    |\n| Use case         | Work queue           | Fan-out notifications  |\n+------------------+----------------------+------------------------+\n\nCOMMON PATTERN: SNS + SQS fan-out:\n  OrderPlaced event -> SNS topic\n  SNS fans out to:\n    SQS queue 1 -> Email Lambda (send confirmation)\n    SQS queue 2 -> Inventory Lambda (reserve stock)\n    SQS queue 3 -> Analytics Lambda (record sale)\n  Each service gets its own queue, processes independently.\n  One service slow/down doesn't affect others.\n\nEventBridge vs SQS:\n  SQS: work queue, exact delivery, backpressure, retry, DLQ\n  EventBridge: event routing with rules, multiple targets, schema registry\n  Use SQS for work distribution, EventBridge for event-driven reactions\n```\n\n---\n\n## Mind Map\n\n```\nAWS SQS\n|\n+-- CORE CONCEPTS\n|   +-- Producer sends messages\n|   +-- Queue buffers messages\n|   +-- Consumer polls and deletes\n|   +-- Visibility timeout = processing lease\n|\n+-- QUEUE TYPES\n|   +-- Standard: high throughput, at-least-once, best-effort order\n|   +-- FIFO: strictly ordered, exactly-once, lower throughput\n|\n+-- KEY SETTINGS\n|   +-- Visibility timeout (>6x processing time)\n|   +-- Message retention (4 days default, 14 max)\n|   +-- Long polling (WaitTimeSeconds=20)\n|   +-- Delivery delay\n|\n+-- DLQ\n|   +-- maxReceiveCount retries then -> DLQ\n|   +-- Isolates poison pill messages\n|   +-- DLQ Redrive to replay fixed messages\n|\n+-- LAMBDA INTEGRATION\n|   +-- Event source mapping (auto-poll + scale)\n|   +-- Batch size (1-10000)\n|   +-- Partial batch failure response\n|\n+-- PATTERNS\n    +-- Work queue (producer -> SQS -> Lambda workers)\n    +-- Fan-out (SNS -> multiple SQS -> multiple Lambdas)\n    +-- Backpressure buffer (absorb traffic spikes)\n```\n\n---\n\n## How SQS Connects to Other Topics\n\n- **Lambda**: Lambda's event source mapping consumes SQS automatically.\n  Lambda + SQS is the most common async processing pattern in serverless.\n- **SNS**: SNS fan-out -> SQS queues = multiple independent consumers of same event.\n- **Serverless Patterns**: SQS absorbs traffic spikes, Lambda workers scale to drain queue.\n- **Kafka vs SQS**: Kafka retains messages for days and supports replay.\n  SQS is simpler (managed, no cluster), Kafka is more powerful for streaming.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Visibility timeout too short** — message reappears while still being processed -> double processing.\n2. **No DLQ** — poison pill messages retry forever, filling logs and blocking workers.\n3. **Not using long polling** — short polling wastes API calls and costs more.\n4. **FIFO when not needed** — FIFO has lower throughput limits. Use Standard unless order/deduplication is required.\n5. **Large messages in SQS** — 256KB limit. Store large payloads in S3, send S3 key in SQS.\n6. **Not handling partial batch failure** — one bad message in batch causes all messages to retry.\n7. **Assuming Standard queue deduplicates** — it does NOT. Your consumer must be idempotent.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Amazon SQS Tutorial** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=CyYZ3adwboc\n  - 45 minutes. SQS concepts, demo, Lambda integration.\n- **SQS vs SNS vs EventBridge** by Be A Better Dev:\n  https://www.youtube.com/watch?v=RoKAEzdcr7k\n  - Clear comparison of the three AWS messaging services.\n\n### Free Books and Articles\n- **AWS SQS Developer Guide**: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/\n- **Lambda + SQS event source mapping**: https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html\n\n### Diagrams\n- **SNS + SQS fan-out diagram**: search 'AWS SNS SQS fan-out diagram' on Google Images\n\n### Practice\n- **AWS Free Tier**: SQS is free for first million requests/month. Build and test locally.\n- **LocalStack**: https://localstack.cloud/ — run AWS services locally including SQS.",
   "questions": [
     {
-      "id": "aws-sqs-q1",
+      "id": "aws-sqs-q1-real",
       "type": "mcq",
-      "prompt": "Core concept 1: which statement best describes AWS SQS?",
+      "prompt": "What problem does SQS solve in a microservices architecture?",
       "choices": [
-        "AWS SQS always requires dedicated hardware",
-        "AWS SQS trade-offs depend on requirements and scale",
-        "AWS SQS is only for large enterprises",
-        "AWS SQS eliminates all database needs"
+        "Stores application code",
+        "Provides a managed message queue that decouples producers from consumers — producers send at their pace, consumers process at their pace, no direct dependency",
+        "Hosts Lambda functions",
+        "Manages IAM policies"
       ],
       "answerIndex": 1,
-      "explanation": "AWS SQS is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "SQS decouples services. Producer (Order Service) sends to queue and returns immediately. Consumer (Payment Service) processes when ready. If consumer is slow or down, messages wait in queue rather than failing the producer.",
       "tags": [
         "sqs",
-        "fundamentals"
+        "decoupling"
       ]
     },
     {
-      "id": "aws-sqs-q2",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS SQS is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "sqs",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-sqs-q3",
+      "id": "aws-sqs-q2-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS SQS to a system?",
+      "prompt": "What is the SQS visibility timeout?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "How long messages are retained in the queue",
+        "The time a received message is hidden from other consumers while being processed — prevents duplicate processing",
+        "The delay before a message is delivered",
+        "Maximum message size"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "When consumer A receives a message, it becomes invisible for the visibility timeout period. If A processes and deletes it before timeout: gone. If A crashes: timeout expires, message reappears for consumer B to retry.",
       "tags": [
         "sqs",
-        "trade-offs"
+        "visibility-timeout"
       ]
     },
     {
-      "id": "aws-sqs-q4",
+      "id": "aws-sqs-q3-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS SQS system is healthy?",
+      "prompt": "Standard SQS queue guarantees 'at-least-once delivery'. What does this mean for your consumer?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Messages are never delivered twice",
+        "Your consumer must be idempotent — the same message may be delivered more than once and processing it twice must produce the same result",
+        "Messages are guaranteed to arrive in order",
+        "You must acknowledge each message twice"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Standard SQS can deliver duplicates. A consumer processing 'charge user $10' twice would double-charge. Idempotent design: check if this requestId was already processed. If yes, skip. FIFO queues offer exactly-once delivery.",
       "tags": [
         "sqs",
-        "monitoring"
+        "at-least-once",
+        "idempotency"
       ]
     },
     {
-      "id": "aws-sqs-q5",
+      "id": "aws-sqs-q4-real",
       "type": "mcq",
-      "prompt": "Core concept 5: which statement best describes AWS SQS?",
+      "prompt": "When should you use a FIFO queue instead of a Standard queue?",
       "choices": [
-        "AWS SQS always requires dedicated hardware",
-        "AWS SQS trade-offs depend on requirements and scale",
-        "AWS SQS is only for large enterprises",
-        "AWS SQS eliminates all database needs"
+        "When you need maximum throughput",
+        "When message order and exactly-once delivery are required — financial transactions, ordered inventory updates",
+        "For large messages",
+        "FIFO is always better"
       ],
       "answerIndex": 1,
-      "explanation": "AWS SQS is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "FIFO queues guarantee ordering and exactly-once delivery but cap at 3000 msg/sec. Standard handles virtually unlimited throughput but may deliver out of order and duplicate. Choose FIFO only when order/dedup are business requirements.",
       "tags": [
         "sqs",
-        "fundamentals"
+        "fifo",
+        "standard"
       ]
     },
     {
-      "id": "aws-sqs-q6",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS SQS is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "sqs",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-sqs-q7",
+      "id": "aws-sqs-q5-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS SQS to a system?",
+      "prompt": "What is a Dead Letter Queue (DLQ)?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "A queue for low-priority messages",
+        "A queue that receives messages which have failed processing maxReceiveCount times — isolates poison pill messages and prevents infinite retry loops",
+        "A backup queue",
+        "Queue for deleted messages"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "DLQ catches messages that repeatedly fail. After maxReceiveCount retries, the message moves to DLQ instead of retrying forever. Engineers investigate, fix the bug, and replay messages from DLQ.",
       "tags": [
         "sqs",
-        "trade-offs"
+        "dlq"
       ]
     },
     {
-      "id": "aws-sqs-q8",
+      "id": "aws-sqs-q6-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS SQS system is healthy?",
+      "prompt": "Your SQS consumer takes 45 seconds to process a message. What visibility timeout should you set?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "30 seconds (default)",
+        "10 seconds",
+        "At least 270 seconds (6x processing time is the recommended minimum)",
+        "180 seconds exactly"
+      ],
+      "answerIndex": 2,
+      "explanation": "If visibility timeout < processing time, the message reappears before processing is done — another consumer picks it up = duplicate processing. Recommended: set to 6x average processing time. For 45s processing: 270s minimum.",
+      "tags": [
+        "sqs",
+        "visibility-timeout",
+        "configuration"
+      ]
+    },
+    {
+      "id": "aws-sqs-q7-real",
+      "type": "mcq",
+      "prompt": "What is long polling in SQS?",
+      "choices": [
+        "Waiting 24 hours for a message",
+        "Consumer waits up to 20 seconds for a message to arrive (WaitTimeSeconds=20) — reduces empty responses, fewer API calls, lower cost vs short polling",
+        "Sending very long messages",
+        "Polling from multiple regions"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Short polling returns immediately even if empty — many wasted API calls. Long polling waits up to 20 seconds before returning empty. Dramatically reduces costs for queues with low/intermittent traffic. Always use long polling.",
       "tags": [
         "sqs",
-        "monitoring"
+        "long-polling"
       ]
     },
     {
-      "id": "aws-sqs-q9",
+      "id": "aws-sqs-q8-real",
       "type": "mcq",
-      "prompt": "Core concept 9: which statement best describes AWS SQS?",
+      "prompt": "What happens to messages that exceed the SQS message retention period?",
       "choices": [
-        "AWS SQS always requires dedicated hardware",
-        "AWS SQS trade-offs depend on requirements and scale",
-        "AWS SQS is only for large enterprises",
-        "AWS SQS eliminates all database needs"
+        "They are moved to S3",
+        "They are moved to DLQ",
+        "They are permanently deleted from the queue automatically",
+        "They are archived"
+      ],
+      "answerIndex": 2,
+      "explanation": "Default retention: 4 days. Maximum: 14 days. After retention period expires, messages are deleted regardless of whether they were consumed. Monitor queue depth to ensure consumers process faster than retention expires.",
+      "tags": [
+        "sqs",
+        "retention"
+      ]
+    },
+    {
+      "id": "aws-sqs-q9-real",
+      "type": "mcq",
+      "prompt": "In the SNS + SQS fan-out pattern, what is the benefit of having one SQS queue per consumer?",
+      "choices": [
+        "Reduces costs",
+        "Each consumer processes at its own pace independently — a slow Email service doesn't delay the Inventory service, and failures are isolated per service",
+        "Increases message throughput",
+        "Required by AWS"
       ],
       "answerIndex": 1,
-      "explanation": "AWS SQS is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "SNS publishes to multiple SQS queues. Each queue serves one consumer service. Service A slow? Its queue backs up but doesn't affect Service B. Service B crashes? Its messages wait in queue until it recovers. Complete isolation.",
       "tags": [
         "sqs",
-        "fundamentals"
+        "sns",
+        "fan-out"
       ]
     },
     {
-      "id": "aws-sqs-q10",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS SQS is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "sqs",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-sqs-q11",
+      "id": "aws-sqs-q10-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS SQS to a system?",
+      "prompt": "What is the maximum message size in SQS?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "64KB",
+        "1MB",
+        "256KB",
+        "10MB"
+      ],
+      "answerIndex": 2,
+      "explanation": "SQS messages are limited to 256KB. For larger payloads (images, documents): store in S3, send only the S3 object key in the SQS message. The SQS Extended Client Library (Java/Python) handles this S3 offload pattern automatically.",
+      "tags": [
+        "sqs",
+        "limits"
+      ]
+    },
+    {
+      "id": "aws-sqs-q11-real",
+      "type": "mcq",
+      "prompt": "When Lambda is configured with SQS as an event source, what happens if Lambda fails to process a message batch?",
+      "choices": [
+        "Messages are deleted",
+        "Messages are immediately moved to DLQ",
+        "All messages in the batch return to the queue (visibility timeout expires) and become available for retry",
+        "Lambda retries automatically without returning messages to queue"
+      ],
+      "answerIndex": 2,
+      "explanation": "If Lambda throws an exception (or times out) while processing a batch, it does NOT delete the messages. After visibility timeout, all batch messages reappear. With partial batch failure response, only failed messages retry.",
+      "tags": [
+        "sqs",
+        "lambda",
+        "batch"
+      ]
+    },
+    {
+      "id": "aws-sqs-q12-real",
+      "type": "mcq",
+      "prompt": "What is the purpose of the SQS message deduplication ID in FIFO queues?",
+      "choices": [
+        "Authentication token",
+        "A unique ID for the message — within a 5-minute deduplication window, SQS ignores messages with the same ID, preventing duplicates",
+        "Message ordering key",
+        "Consumer ID"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "FIFO queues use MessageDeduplicationId to prevent duplicates. If you send two messages with the same dedup ID within 5 minutes, only the first is delivered. Use a hash of the message content or a UUID generated once and stored.",
       "tags": [
         "sqs",
-        "trade-offs"
+        "fifo",
+        "deduplication"
       ]
     },
     {
-      "id": "aws-sqs-q12",
+      "id": "aws-sqs-q13-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS SQS system is healthy?",
+      "prompt": "What is SQS message group ID used for in FIFO queues?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Authentication",
+        "Messages with the same group ID are processed in FIFO order with one consumer at a time — enables parallelism across groups while maintaining per-group ordering",
+        "Message deduplication",
+        "Consumer targeting"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "MessageGroupId controls ordering scope. Group ID 'customer-123' ensures that customer's messages are ordered. Group ID 'customer-456' is handled independently in parallel. Without group IDs, all messages share one sequence (single consumer).",
       "tags": [
         "sqs",
-        "monitoring"
+        "fifo",
+        "message-groups"
       ]
     },
     {
-      "id": "aws-sqs-q13",
+      "id": "aws-sqs-q14-real",
       "type": "mcq",
-      "prompt": "Core concept 13: which statement best describes AWS SQS?",
+      "prompt": "How does SQS help handle a traffic spike (e.g., Black Friday)?",
       "choices": [
-        "AWS SQS always requires dedicated hardware",
-        "AWS SQS trade-offs depend on requirements and scale",
-        "AWS SQS is only for large enterprises",
-        "AWS SQS eliminates all database needs"
+        "SQS rejects excess messages",
+        "SQS automatically scales the consumer service",
+        "SQS acts as a buffer — absorbs millions of messages instantly without dropping any, consumers drain the queue at their own rate rather than being overwhelmed",
+        "SQS charges extra for spikes"
+      ],
+      "answerIndex": 2,
+      "explanation": "SQS queue depth grows during a spike. Consumers process at their capacity. No messages lost, no consumer crashes from being overwhelmed. Lambda event source mapping also auto-scales consumers to drain the queue faster.",
+      "tags": [
+        "sqs",
+        "backpressure",
+        "scaling"
+      ]
+    },
+    {
+      "id": "aws-sqs-q15-real",
+      "type": "mcq",
+      "prompt": "What is the delivery delay feature in SQS?",
+      "choices": [
+        "How long it takes to deliver across regions",
+        "A configured delay (0-15 minutes) before a newly sent message becomes visible to consumers — useful for deferred processing",
+        "Message retention period",
+        "DLQ retry delay"
       ],
       "answerIndex": 1,
-      "explanation": "AWS SQS is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Delivery delay makes messages invisible for a specified time after they are sent. Use case: send order confirmation email 5 minutes after order placed, not immediately. Or: delay a retry after a known processing window.",
       "tags": [
         "sqs",
-        "fundamentals"
+        "delivery-delay"
       ]
     },
     {
-      "id": "aws-sqs-q14",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS SQS is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "sqs",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-sqs-q15",
+      "id": "aws-sqs-q16-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS SQS to a system?",
+      "prompt": "What is the difference between SQS and Kafka for message queuing?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "They are identical",
+        "SQS: fully managed, messages deleted after consumption, simpler ops. Kafka: self-managed cluster, messages retained for replay, supports multiple consumer groups reading same data independently",
+        "Kafka is always better",
+        "SQS handles more messages"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "SQS: AWS manages everything, messages consumed and gone, great for work queues. Kafka: you run the cluster, messages persist for days/weeks enabling replay and multiple independent consumers reading the same stream. Choose Kafka for event streaming, SQS for task queues.",
       "tags": [
         "sqs",
-        "trade-offs"
+        "kafka",
+        "comparison"
       ]
     },
     {
-      "id": "aws-sqs-q16",
+      "id": "aws-sqs-q17-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a AWS SQS system is healthy?",
+      "prompt": "What is partial batch failure response in Lambda + SQS?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Lambda rejecting the entire batch",
+        "Lambda returns a batchItemFailures list with only failed message IDs — SQS retries only those messages, successfully processed messages are deleted",
+        "Lambda deleting all messages in batch",
+        "Lambda sending failed messages to SNS"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Without partial failure: one bad message in a batch of 10 causes all 10 to retry — 9 messages re-processed unnecessarily. With batchItemFailures response: return only the failed messageId(s). SQS retries only those while deleting successful ones.",
       "tags": [
         "sqs",
-        "monitoring"
+        "lambda",
+        "partial-failure"
       ]
     },
     {
-      "id": "aws-sqs-q17",
+      "id": "aws-sqs-q18-real",
       "type": "mcq",
-      "prompt": "Core concept 17: which statement best describes AWS SQS?",
+      "prompt": "How does Lambda auto-scaling work with an SQS event source mapping?",
       "choices": [
-        "AWS SQS always requires dedicated hardware",
-        "AWS SQS trade-offs depend on requirements and scale",
-        "AWS SQS is only for large enterprises",
-        "AWS SQS eliminates all database needs"
+        "Lambda doesn't auto-scale with SQS",
+        "Lambda scales one instance per message",
+        "Lambda poller scales Lambda concurrency based on queue depth — more messages in queue = more concurrent Lambda executions (up to account concurrency limit)",
+        "You must manually configure auto-scaling"
+      ],
+      "answerIndex": 2,
+      "explanation": "SQS event source mapping automatically scales Lambda. As queue depth grows, Lambda concurrency scales up to drain messages faster. As queue empties, concurrency scales back down. Scales to zero when queue is empty.",
+      "tags": [
+        "sqs",
+        "lambda",
+        "scaling"
+      ]
+    },
+    {
+      "id": "aws-sqs-q19-real",
+      "type": "mcq",
+      "prompt": "What is the recommended way to monitor SQS queue health in production?",
+      "choices": [
+        "Check AWS Console manually",
+        "Configure CloudWatch alarm on ApproximateNumberOfMessagesNotVisible and ApproximateAgeOfOldestMessage — alert if queue backs up or messages age too long",
+        "Log every message",
+        "Use AWS X-Ray only"
       ],
       "answerIndex": 1,
-      "explanation": "AWS SQS is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Key SQS CloudWatch metrics: ApproximateNumberOfMessages (depth), ApproximateAgeOfOldestMessage (how stale is oldest unprocessed message). Stale messages = consumer is stuck or dead. Set alarms on both for production queues.",
       "tags": [
         "sqs",
-        "fundamentals"
+        "monitoring",
+        "cloudwatch"
       ]
     },
     {
-      "id": "aws-sqs-q18",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in AWS SQS is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "sqs",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-sqs-q19",
+      "id": "aws-sqs-q20-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding AWS SQS to a system?",
+      "prompt": "Why should you set Lambda reserved concurrency when using SQS as event source?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "To make Lambda run faster",
+        "Lambda can scale to account limits consuming SQS — without reserved concurrency, a spike could create thousands of Lambda executions that overwhelm downstream databases or APIs",
+        "Required by SQS FIFO",
+        "To reduce costs only"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "Unconstrained Lambda + SQS = Lambda scales to 1000+ concurrent executions during a spike. Your RDS database has 100 connection limit. Result: connection pool exhaustion, database crash. Set reserved concurrency = your downstream capacity.",
       "tags": [
         "sqs",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "aws-sqs-q20",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a AWS SQS system is healthy?",
-      "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
-      ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
-      "tags": [
-        "sqs",
-        "monitoring"
+        "lambda",
+        "concurrency",
+        "backpressure"
       ]
     }
   ],
   "flashcards": [
     {
-      "id": "aws-sqs-fc1",
-      "front": "One-line definition of AWS SQS?",
-      "back": "[Complete after studying — self-generation improves retention]",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc2",
-      "front": "Core trade-off in AWS SQS?",
-      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc3",
-      "front": "When to use AWS SQS?",
-      "back": "When the problem it solves is actively costing you at your scale.",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc4",
-      "front": "When NOT to use AWS SQS?",
-      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc5",
-      "front": "Top 3 failure modes of AWS SQS?",
-      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc6",
-      "front": "How to monitor AWS SQS in production?",
-      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc7",
-      "front": "AWS SQS in one interview sentence?",
-      "back": "[Draft: what it is + what problem it solves + when to use it]",
-      "tags": [
-        "sqs"
-      ]
-    },
-    {
-      "id": "aws-sqs-fc8",
-      "front": "How does AWS SQS connect to caching?",
-      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "id": "aws-sqs-fc1-real",
+      "front": "SQS visibility timeout rule",
+      "back": "Set to 6x your average processing time. Message in flight = invisible for this period. Too short = duplicate processing (message reappears while still being processed). Change during processing with ChangeMessageVisibility API.",
       "tags": [
         "sqs",
-        "caching"
+        "visibility-timeout"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc2-real",
+      "front": "Standard vs FIFO queue choice",
+      "back": "Standard: unlimited throughput, at-least-once (may duplicate), best-effort ordering. FIFO: 3000/sec limit, exactly-once, strict order. Use Standard unless order or dedup is a business requirement (financial transactions = FIFO).",
+      "tags": [
+        "sqs",
+        "fifo",
+        "standard"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc3-real",
+      "front": "DLQ configuration",
+      "back": "Set maxReceiveCount = 3-5 on main queue. Create separate SQS as DLQ. After maxReceiveCount failures, message moves to DLQ. Alert on DLQ depth. Fix bug. Use DLQ Redrive to replay messages back to main queue.",
+      "tags": [
+        "sqs",
+        "dlq"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc4-real",
+      "front": "SNS + SQS fan-out pattern",
+      "back": "SNS topic receives event, fans out to N SQS queues. Each queue serves one independent consumer. Benefits: each service scales independently, failures are isolated, slow consumer doesn't block others. Default pattern for event-driven microservices.",
+      "tags": [
+        "sqs",
+        "sns",
+        "fan-out"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc5-real",
+      "front": "Lambda partial batch failure",
+      "back": "Return {batchItemFailures: [{itemIdentifier: failedMessageId}]}. SQS retries ONLY failed messages and deletes successful ones. Without this: entire batch retries when one message fails = 9 re-processed unnecessarily.",
+      "tags": [
+        "sqs",
+        "lambda",
+        "batch"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc6-real",
+      "front": "SQS long polling — always use it",
+      "back": "WaitTimeSeconds=20 in ReceiveMessage call. Waits up to 20s for a message. Compared to short polling: 99% fewer empty receives, lower cost, same latency. Turn on in queue settings (ReceiveMessageWaitTimeSeconds=20).",
+      "tags": [
+        "sqs",
+        "long-polling"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc7-real",
+      "front": "SQS max message size workaround",
+      "back": "SQS limit = 256KB. For large payloads: store in S3, put S3 object key in SQS message. Consumer reads key, fetches from S3. SQS Extended Client Library (Java/Python) automates this pattern transparently.",
+      "tags": [
+        "sqs",
+        "limits",
+        "s3"
+      ]
+    },
+    {
+      "id": "aws-sqs-fc8-real",
+      "front": "SQS backpressure pattern",
+      "back": "Traffic spike: producer sends 100K messages faster than consumers can process. SQS absorbs all (no messages lost). Consumers drain at their pace. Lambda scales up to drain faster. Cap Lambda concurrency = protect downstream DB from connection storm.",
+      "tags": [
+        "sqs",
+        "backpressure",
+        "scaling"
       ]
     }
   ],

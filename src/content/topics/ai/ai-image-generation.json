@@ -1,0 +1,479 @@
+{
+  "id": "ai-image-generation",
+  "unit": 6,
+  "order": 119,
+  "title": "AI Image Generation",
+  "summary": "Stable Diffusion architecture, LoRA fine-tuning, ControlNet, SDXL, and FLUX — from theory to practical workflows.",
+  "prereqs": [
+    "llms"
+  ],
+  "guide": "# AI Image Generation\n\n## How Does AI Generate Images?\n\nAI image generators like Stable Diffusion don't 'draw' images from scratch.\nThey learn to DENOISE — to gradually remove random noise from an image\nuntil a coherent picture emerges, guided by a text description.\n\n```\nDIFFUSION PROCESS (training):\n\n  Real photo                               Pure noise\n  [clear dog]  →  [dog+noise]  →  ...  →  [noise only]\n                 (step 1)         (step 999)\n\n  The model learns: 'given noisy image + text, predict the noise to remove'\n\nGENERATION (inference):\n\n  Pure noise                               Generated image\n  [noise only]  →  [slight shape]  →  ...  →  [golden retriever]\n  + prompt: 'a golden retriever in a park'\n\n  At each step, model PREDICTS the noise and subtracts it.\n  After ~20-50 steps: coherent image emerges.\n```\n\n---\n\n## Key Components of Stable Diffusion\n\n```\nStable Diffusion (SD) architecture:\n\n  TEXT PROMPT\n       │\n       ▼\n  CLIP Text Encoder              ← converts text to embeddings (768 numbers)\n  'a golden retriever in a park'   that capture semantic meaning\n       │\n       ▼\n  U-Net (denoising model)        ← the main neural network\n  Takes: noisy image + text embeddings + timestep\n  Outputs: noise prediction (what noise to remove)\n  Runs 20-50 times (sampling steps)\n       │\n       ▼\n  VAE Decoder                    ← converts latent space → pixel space\n  Latent: 64×64×4 floats         Fast! SD works in compressed latent space\n  Output: 512×512×3 pixels\n       │\n       ▼\n  FINAL IMAGE\n\nWhy latent space?\n  Working on 512×512 pixels directly = 786,432 numbers per step\n  Working in 64×64 latents = 16,384 numbers per step (48x smaller)\n  VAE compresses image, model works on small latents, VAE decodes back\n```\n\n---\n\n## Samplers and Parameters\n\n```\nSAMPLING STEPS (default: 20-30):\n  More steps = better quality but slower\n  20 steps: fast, good enough\n  50 steps: higher quality\n  150 steps: diminishing returns\n\nCFG SCALE (Classifier-Free Guidance, default: 7):\n  How closely to follow the text prompt\n  Low (1-4):  creative, ignores prompt partially\n  Medium (7): balanced — good default\n  High (15+): very literal, may look over-saturated\n\nSEED:\n  Initial random noise pattern\n  Same seed + same prompt = same image\n  Change seed = different image\n  Use fixed seed to iterate on a composition\n\nNEGATIVE PROMPT:\n  Tell the model what NOT to generate\n  Common negative prompts:\n  'blurry, bad anatomy, extra fingers, watermark, text, low quality'\n\nSAMPLER ALGORITHMS:\n  DDIM:      fast, deterministic, good for video\n  DPM++ 2M:  high quality, fewer steps needed\n  Euler a:   popular, fast, slightly artistic\n  PNDM:      smooth results\n  Recommendation: DPM++ 2M Karras for quality, Euler a for speed\n```\n\n---\n\n## LoRA — Fine-tuning Without Full Retraining\n\n```\nPROBLEM: You want SD to always generate images in a specific art style\n         or always capture a specific person's likeness.\n         Training the full model takes weeks and huge GPU budget.\n\nLoRA (Low-Rank Adaptation):\n  Instead of modifying all of the model's 860M parameters,\n  train a tiny set of weight ADJUSTMENTS (rank 4-64 matrices)\n  that are ADDED to the original weights at inference time.\n\n  Full fine-tune: train 860M params → 3.4GB model\n  LoRA:           train ~4M params  → 30MB file!\n\nLoRA training data:\n  15-30 images of your subject with captions\n  Train for 2000-4000 steps\n  Takes 30 min on an RTX 3090\n\nUsing a LoRA:\n  In AUTOMATIC1111 or ComfyUI:\n  <lora:my_character_v1:0.8>  ← trigger word, weight 0.8\n  Prompt: 'my_character, smiling, sunset background <lora:my_character_v1:0.8>'\n\nMultiple LoRAs: stack them!\n  <lora:style_anime:0.6> <lora:my_character:0.8>\n  Art style + character likeness in one generation\n```\n\n---\n\n## ControlNet — Controlling Composition\n\n```\nPROBLEM: SD generates creative compositions but you can't control\n  exactly WHERE things appear, the pose of a person, or edge structure.\n\nControlNet: add a control signal (pose, depth, edges, sketch) to guide generation\n\nControlNet types:\n  Canny edges:  give a line drawing → generate image following those edges\n  OpenPose:     give a stick figure pose → character in that exact pose\n  Depth map:    give depth map → maintain 3D structure\n  Scribble:     rough sketch → detailed image following sketch\n  Inpaint:      replace part of image while keeping the rest\n  Tile:         upscale with consistent detail\n\nWorkflow example — posing a character:\n  1. Take reference photo or draw pose in OpenPose editor\n  2. ControlNet extracts pose skeleton\n  3. SD generates character in that exact pose\n  4. Change prompt to change character appearance while maintaining pose\n\nControlNet weight (0.0-2.0):\n  Higher: stronger adherence to control image\n  Lower: more creative freedom\n  Typical: 0.6-1.0\n```\n\n---\n\n## SDXL and Modern Models\n\n```\nSTABLE DIFFUSION XL (SDXL):\n  Released 2023. 2.6B params (vs SD 1.5's 860M)\n  Native 1024×1024 resolution\n  Two-stage: Base model + Refiner model\n  Better text rendering, more photorealistic, improved composition\n\nSDXL workflow:\n  Base model: generates 1024×1024 in ~20 steps\n  Refiner: takes noisy version of base output at step 0.8,\n           adds fine details in remaining steps\n  Result: 2x quality vs base alone\n\nFLUX (2024):\n  From Black Forest Labs (original SD creators)\n  12B params, transformer architecture (not U-Net)\n  Significantly better prompt following\n  FLUX.1-dev: open weights, research use\n  FLUX.1-schnell: fast distilled version\n\nSDXL vs FLUX comparison:\n  SDXL: faster, more LoRAs available, established ecosystem\n  FLUX:  better text, better realism, fewer LoRAs, higher VRAM\n\nRunning locally:\n  AUTOMATIC1111: https://github.com/AUTOMATIC1111/stable-diffusion-webui\n  ComfyUI: node-based workflow, more flexible\n  Fooocus: simplified SDXL interface (best for beginners)\n  Minimum VRAM: 6GB for SD 1.5, 8GB for SDXL, 12GB for FLUX\n```\n\n---\n\n## Mind Map\n\n```\nAI IMAGE GENERATION\n|\n+-- ARCHITECTURE\n|   +-- CLIP text encoder (text → embeddings)\n|   +-- U-Net denoiser (iterative denoising)\n|   +-- VAE (pixels ↔ latents)\n|   +-- Latent diffusion (48x faster than pixel diffusion)\n|\n+-- PARAMETERS\n|   +-- Steps (20-50 typical)\n|   +-- CFG Scale (7 = balanced)\n|   +-- Seed (reproducibility)\n|   +-- Negative prompt (avoid)\n|   +-- Sampler (DPM++ 2M Karras)\n|\n+-- CUSTOMISATION\n|   +-- LoRA (small adapter files, 15-30 training images)\n|   +-- ControlNet (pose/edges/depth control)\n|   +-- Textual Inversion (concept embedding)\n|\n+-- MODELS\n    +-- SD 1.5 (legacy, 512px, huge ecosystem)\n    +-- SDXL (1024px, better quality)\n    +-- FLUX (12B, best quality, high VRAM)\n```\n\n---\n\n## References\n\n### Videos\n- **How Stable Diffusion Works** by Computerphile: https://www.youtube.com/watch?v=1CIpzeNxIhU\n- **SDXL and LoRA Tutorial** by Sebastian Kamph: https://www.youtube.com/watch?v=SxBE1bMF5bQ\n\n### Articles\n- **Illustrated Stable Diffusion** by Jay Alammar: https://jalammar.github.io/illustrated-stable-diffusion/\n- **Civitai** (models, LoRAs): https://civitai.com\n- **Hugging Face Diffusers docs**: https://huggingface.co/docs/diffusers/",
+  "questions": [
+    {
+      "id": "img-q1",
+      "type": "mcq",
+      "prompt": "What is the core mechanism of diffusion models like Stable Diffusion?",
+      "choices": [
+        "Generate images from mathematical formulas",
+        "Learn to iteratively remove noise from a noisy image, guided by a text prompt — starting from pure random noise and gradually revealing a coherent image over 20-50 denoising steps",
+        "Copy and blend real images",
+        "Render 3D scenes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Diffusion models train on corrupted images (adding noise) and learn to reverse the process (removing noise). At inference: start with pure noise, the U-Net denoises step by step guided by text embeddings until a clean image emerges.",
+      "tags": [
+        "diffusion",
+        "architecture"
+      ]
+    },
+    {
+      "id": "img-q2",
+      "type": "mcq",
+      "prompt": "What is 'latent space' in Stable Diffusion and why does it matter?",
+      "choices": [
+        "The storage location of images",
+        "A compressed mathematical representation — the VAE compresses 512×512 pixels to 64×64 latents (48x smaller). SD's U-Net works on latents not pixels, making generation 48x faster than working directly in pixel space.",
+        "The random seed space",
+        "Color space"
+      ],
+      "answerIndex": 1,
+      "explanation": "Latent diffusion: instead of denoising 786,432 pixel values (512×512×3), work on 16,384 latent values (64×64×4). Same quality, 48x less computation. The VAE (Variational Autoencoder) encodes pixels→latents before denoising and decodes latents→pixels after.",
+      "tags": [
+        "latent-diffusion",
+        "vae",
+        "architecture"
+      ]
+    },
+    {
+      "id": "img-q3",
+      "type": "mcq",
+      "prompt": "CFG Scale of 15 vs 7 — what is the visual difference?",
+      "choices": [
+        "Higher CFG is always better",
+        "Higher CFG (15): model follows prompt very literally, can look over-saturated, over-detailed, or stylised. Lower CFG (7): balanced creative interpretation. Very low (1-3): nearly ignores prompt. Default 7 is usually best.",
+        "Lower CFG is always better",
+        "CFG only affects speed"
+      ],
+      "answerIndex": 1,
+      "explanation": "CFG (Classifier-Free Guidance) is a scale for how much the text guides vs free creativity. At CFG=1: unconditioned generation (ignores text). At CFG=30: hyper-literal, often over-contrasted. 7-9 is the sweet spot for most use cases. Portraits: 7. Concepts: 5-7. Very specific prompts: 9-12.",
+      "tags": [
+        "cfg",
+        "sampling"
+      ]
+    },
+    {
+      "id": "img-q4",
+      "type": "mcq",
+      "prompt": "What is LoRA and what problem does it solve for image generation?",
+      "choices": [
+        "A new diffusion architecture",
+        "Low-Rank Adaptation — small adapter files (5-50MB) that teach the model a new style, character, or concept. Solves: full fine-tuning is expensive (days of GPU time, huge storage). LoRA: train in 30 min, tiny file, stackable.",
+        "A sampling algorithm",
+        "A Stable Diffusion model"
+      ],
+      "answerIndex": 1,
+      "explanation": "LoRA trains rank-decomposed weight updates (B×A matrices) rather than all model weights. For SD's UNet: instead of updating 860M params, update ~4M LoRA params. Result: 30MB file that shifts model outputs toward new style/character when added at inference.",
+      "tags": [
+        "lora",
+        "fine-tuning"
+      ]
+    },
+    {
+      "id": "img-q5",
+      "type": "mcq",
+      "prompt": "What does the 'seed' parameter control in image generation?",
+      "choices": [
+        "The number of generation steps",
+        "The initial random noise pattern — same seed + same prompt + same settings = identical image. Changing seed explores different variations. Fix seed to iterate (change prompt while keeping composition).",
+        "Image resolution",
+        "Model temperature"
+      ],
+      "answerIndex": 1,
+      "explanation": "The diffusion process starts from a random noise sample. Seed = the random number generator state. Reproducibility: seed 42 always generates the same starting noise, producing the same final image with same settings. Iteration workflow: fix seed, vary only prompt to explore interpretations.",
+      "tags": [
+        "seed",
+        "reproducibility"
+      ]
+    },
+    {
+      "id": "img-q6",
+      "type": "mcq",
+      "prompt": "ControlNet with OpenPose — what does it enable?",
+      "choices": [
+        "Better text in images",
+        "Extract a pose skeleton from any reference image/photo, then generate a NEW character in that exact body pose with any appearance — without needing a real reference person.",
+        "Higher resolution",
+        "Faster generation"
+      ],
+      "answerIndex": 1,
+      "explanation": "OpenPose extracts 18 body keypoints from an image (shoulders, elbows, wrists, etc.). SD uses this pose map as a condition: 'generate a character in this exact pose.' You can change race, clothing, style, lighting while preserving body position precisely.",
+      "tags": [
+        "controlnet",
+        "openpose",
+        "pose"
+      ]
+    },
+    {
+      "id": "img-q7",
+      "type": "mcq",
+      "prompt": "SDXL improvement over SD 1.5 — what is the most significant?",
+      "choices": [
+        "10x faster generation",
+        "Native 1024×1024 resolution, 2.6B parameters (vs 860M), dramatically better prompt adherence, photorealism, and two-stage base+refiner pipeline for details. Better at complex scenes and text rendering.",
+        "Smaller file size",
+        "Open-source for first time"
+      ],
+      "answerIndex": 1,
+      "explanation": "SD 1.5: 512×512 native, 860M params, struggles with complex prompts. SDXL: 1024×1024 native, 2.6B params, much better text-to-image faithfulness. Two-stage pipeline: Base generates composition, Refiner adds fine detail. Image quality jump is substantial.",
+      "tags": [
+        "sdxl",
+        "models"
+      ]
+    },
+    {
+      "id": "img-q8",
+      "type": "mcq",
+      "prompt": "Negative prompts in Stable Diffusion — what do they do?",
+      "choices": [
+        "Delete parts of the image",
+        "Tell the model what to avoid generating. CFG guidance pushes image TOWARD positive prompt and AWAY from negative prompt. Common: 'blurry, bad anatomy, extra fingers, watermark' to improve quality.",
+        "Set minimum quality",
+        "Required for all generations"
+      ],
+      "answerIndex": 1,
+      "explanation": "CFG guidance: at each step move image toward text_embedding and away from negative_embedding. 'extra fingers, bad anatomy' common in negatives because SD often generates 6 fingers. 'watermark, text, logo' removes watermarks. Negatives are as important as positive prompt for quality.",
+      "tags": [
+        "negative-prompt",
+        "cfg"
+      ]
+    },
+    {
+      "id": "img-q9",
+      "type": "mcq",
+      "prompt": "What are the minimum VRAM requirements for running SDXL locally?",
+      "choices": [
+        "2GB",
+        "4GB",
+        "8GB minimum, 12GB+ recommended for good speed",
+        "Any GPU works"
+      ],
+      "answerIndex": 2,
+      "explanation": "SDXL base: ~6.5GB VRAM for fp16. With refiner: ~10GB. At 1024×1024 with reasonable batch: 8-12GB. SD 1.5: minimum 4GB (with --lowvram, 2GB degraded). FLUX: 12-16GB. GPU recommendations: RTX 3060 (12GB) for SDXL, RTX 3090/4090 for FLUX dev.",
+      "tags": [
+        "hardware",
+        "vram",
+        "sdxl"
+      ]
+    },
+    {
+      "id": "img-q10",
+      "type": "mcq",
+      "prompt": "Inpainting vs img2img in Stable Diffusion — difference?",
+      "choices": [
+        "No difference",
+        "img2img: take entire input image and redraw it with given prompt (denoises the whole image, strength controls how much changes). Inpainting: redraw only a MASKED region while keeping unmasked areas identical.",
+        "Inpainting is only for faces",
+        "img2img requires ControlNet"
+      ],
+      "answerIndex": 1,
+      "explanation": "img2img: adds noise to full input, denoises. Strength 0.1 = subtle change, 0.9 = completely redraw. Inpainting: mask a region (brush tool), only that region is regenerated, rest preserved. Use inpainting for: fixing bad hands, replacing backgrounds, adding/removing objects.",
+      "tags": [
+        "img2img",
+        "inpainting"
+      ]
+    },
+    {
+      "id": "img-q11",
+      "type": "mcq",
+      "prompt": "Textual Inversion vs LoRA — key difference?",
+      "choices": [
+        "Textual Inversion is faster",
+        "Textual Inversion trains a new token embedding (tiny, <10KB) that represents a concept. LoRA trains weight updates to the UNet layers (larger, stronger). Textual Inversion: subtle style/concept token. LoRA: stronger style/character adaptation.",
+        "LoRA requires more images",
+        "They are identical"
+      ],
+      "answerIndex": 1,
+      "explanation": "Textual Inversion: create a new word token (like *style) that captures a concept from 3-10 images. Very small file. Weaker than LoRA. LoRA: adjusts UNet weights directly, much stronger character/style capture. For consistent character across many images: LoRA wins. For subtle style token: Textual Inversion is simpler.",
+      "tags": [
+        "textual-inversion",
+        "lora",
+        "comparison"
+      ]
+    },
+    {
+      "id": "img-q12",
+      "type": "mcq",
+      "prompt": "DPM++ 2M Karras sampler — why is it recommended?",
+      "choices": [
+        "It's the default",
+        "Achieves high quality images with fewer steps (15-20) vs other samplers. Karras noise schedule improves quality further. Good balance of speed and quality for most use cases.",
+        "It's the only sampler",
+        "Only works with SDXL"
+      ],
+      "answerIndex": 1,
+      "explanation": "Samplers are the ODE/SDE numerical methods used to approximate the denoising process. DPM++ 2M: second-order method that converges faster. Karras: modified noise schedule that concentrates denoising at critical stages. Together: 20 steps produces quality similar to Euler at 50 steps.",
+      "tags": [
+        "sampler",
+        "dpmpp",
+        "efficiency"
+      ]
+    },
+    {
+      "id": "img-q13",
+      "type": "mcq",
+      "prompt": "How does ControlNet Canny work?",
+      "choices": [
+        "Detects faces",
+        "Extracts edges from the input image using Canny edge detection algorithm, then uses those edges as a structural guide so the generated image follows the same outline/composition",
+        "Adds color",
+        "Controls CFG"
+      ],
+      "answerIndex": 1,
+      "explanation": "Canny edge detection: find boundaries between regions (outlines of objects, architecture, faces). These edges are encoded as a black-and-white map. ControlNet conditions the UNet to generate images whose edges align with this map. Use case: maintain architecture of a building while changing its style.",
+      "tags": [
+        "controlnet",
+        "canny",
+        "edges"
+      ]
+    },
+    {
+      "id": "img-q14",
+      "type": "mcq",
+      "prompt": "FLUX model differs from Stable Diffusion in architecture by using:",
+      "choices": [
+        "Larger VAE",
+        "Transformer architecture (DiT — Diffusion Transformer) instead of U-Net. Removes U-Net's skip connections, uses full self-attention across the entire image. Significantly better prompt following and composition.",
+        "Different VAE",
+        "Different text encoder only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stable Diffusion (1.5 and XL): U-Net with skip connections (encoder-decoder hourglass). FLUX: Diffusion Transformer (based on ViT), processes image patches as tokens, uses full attention. Transformers generally scale better with size. FLUX's 12B params outperforms SDXL 2.6B significantly.",
+      "tags": [
+        "flux",
+        "architecture",
+        "transformer"
+      ]
+    },
+    {
+      "id": "img-q15",
+      "type": "mcq",
+      "prompt": "When using multiple LoRAs stacked together, what controls their relative influence?",
+      "choices": [
+        "Order in prompt",
+        "The weight value after the LoRA name: <lora:name:0.8>. Higher weight = stronger influence. Multiple LoRAs: weights should sum to approximately 1.0 to avoid over-saturation. Experiment: 0.6+0.6 often works, 1.0+1.0 usually breaks.",
+        "The seed",
+        "Number of steps"
+      ],
+      "answerIndex": 1,
+      "explanation": "LoRA weight (0.0-1.0, sometimes higher): 0 = LoRA disabled, 1.0 = full strength. Two LoRAs: <lora:style:0.6><lora:character:0.8>. Style at 0.6 for subtle influence, character at 0.8 for strong likeness. If both at 1.0: may conflict and produce artifacts.",
+      "tags": [
+        "lora",
+        "weight",
+        "stacking"
+      ]
+    },
+    {
+      "id": "img-q16",
+      "type": "mcq",
+      "prompt": "ComfyUI vs AUTOMATIC1111 — what is the main difference?",
+      "choices": [
+        "AUTOMATIC1111 is newer",
+        "ComfyUI: node-based workflow graph (connect nodes: Load Model→CLIP Encode→KSampler→VAE Decode→Save). Highly flexible, can implement any pipeline. AUTOMATIC1111: traditional form-based UI, easier for beginners but less flexible.",
+        "ComfyUI is slower",
+        "AUTOMATIC1111 supports FLUX, ComfyUI doesn't"
+      ],
+      "answerIndex": 1,
+      "explanation": "AUTOMATIC1111: web form with tabs (txt2img, img2img, inpaint, extras). Easy but limited pipeline customization. ComfyUI: each component is a node, connect them visually. Complex pipelines (base+refiner+upscale+face restore) easy to build. Steeper learning curve but unlimited flexibility. Both are free and open-source.",
+      "tags": [
+        "tools",
+        "auto1111",
+        "comfyui"
+      ]
+    },
+    {
+      "id": "img-q17",
+      "type": "mcq",
+      "prompt": "What is VAE in Stable Diffusion, and what happens if you use the wrong VAE?",
+      "choices": [
+        "Voice Activity Encoder",
+        "Variational Autoencoder — compresses images into latent space (used during generation) and decodes back to pixels. Wrong VAE for a model causes color shift, over-saturation, or washed-out colors. Each SD version has a matched VAE.",
+        "Video Asset Encoder",
+        "Not important for generation"
+      ],
+      "answerIndex": 1,
+      "explanation": "The VAE is the final step: latent → pixel. SDXL requires sdxl.vae. SD 1.5 has its own VAE. Using SDXL VAE with SD 1.5 model: broken colors. Baked VAE models have VAE included. External VAE (vae-ft-mse-840000.safetensors): reduces graininess in SD 1.5 outputs. Always match VAE to model version.",
+      "tags": [
+        "vae",
+        "architecture"
+      ]
+    },
+    {
+      "id": "img-q18",
+      "type": "mcq",
+      "prompt": "Hiresfix/upscaling — why is it needed for generating larger images?",
+      "choices": [
+        "Only for SDXL",
+        "Naive upscaling of a 512×512 image to 2048×2048 just stretches pixels. Hiresfix: upscale, then run img2img refinement pass to add detail at the new scale. Latent upscaler (R-ESRGAN, ESRGAN) understands image structure.",
+        "Images cannot be larger than 512px",
+        "Required for LoRA"
+      ],
+      "answerIndex": 1,
+      "explanation": "SD generates at native resolution (512 for 1.5, 1024 for SDXL). Generating at 2048px directly: AI tries to place multiple subjects, loses composition. Workflow: generate at 512px → upscale 4x with ESRGAN → img2img strength 0.4 for detail pass. Or: hiresfix does this in one button.",
+      "tags": [
+        "upscaling",
+        "hiresfix",
+        "resolution"
+      ]
+    },
+    {
+      "id": "img-q19",
+      "type": "multi",
+      "prompt": "Which are valid use cases for ControlNet? (Select all that apply)",
+      "choices": [
+        "Maintain exact human pose from reference photo",
+        "Convert sketch to detailed image",
+        "Generate consistent character across multiple images using pose control",
+        "Translate text in images"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "OpenPose: extract pose from photo → generate different character in same pose. Scribble: rough sketch → detailed image. Using pose ControlNet: keep same pose, vary prompt → consistent character across scenes. Text translation: not a ControlNet use case (requires OCR+inpainting pipeline).",
+      "tags": [
+        "controlnet",
+        "use-cases"
+      ]
+    },
+    {
+      "id": "img-q20",
+      "type": "mcq",
+      "prompt": "What is 'dreambooth' training and how does it differ from LoRA?",
+      "choices": [
+        "They are identical",
+        "DreamBooth: full fine-tune of the entire model on 3-30 subject images with a class preservation loss. Creates a model that 'knows' the subject deeply. LoRA: trains only small rank matrices. DreamBooth: larger output (full model), stronger but requires more VRAM and time. LoRA: pragmatic modern choice.",
+        "DreamBooth is a sampling method",
+        "DreamBooth requires 1000 images"
+      ],
+      "answerIndex": 1,
+      "explanation": "DreamBooth (2022): full fine-tune with class preservation (so model doesn't forget what 'dog' means while learning your specific dog). 5-10GB model output. LoRA (2023): smaller adapter, stackable, shareable. Current practice: train LoRA, not DreamBooth. Same quality, 200x smaller file.",
+      "tags": [
+        "dreambooth",
+        "lora",
+        "training"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "img-fc1",
+      "front": "Stable Diffusion key parameters",
+      "back": "Steps: 20-30 (more=quality, diminishing returns). CFG: 7 (balanced). Seed: fixed for iteration. Sampler: DPM++ 2M Karras. Negative prompt: 'blurry, bad anatomy, extra fingers, watermark'. Resolution: 512px SD1.5, 1024px SDXL.",
+      "tags": [
+        "parameters",
+        "sampling"
+      ]
+    },
+    {
+      "id": "img-fc2",
+      "front": "LoRA training requirements",
+      "back": "15-30 high-quality images with captions. Train 2000-4000 steps. 30 min on RTX 3090. Output: 5-50MB .safetensors file. Use: <lora:name:0.8> in prompt. Stack multiple: weights should sum ~1.0. Tools: kohya_ss, Civitai on-site trainer.",
+      "tags": [
+        "lora",
+        "training"
+      ]
+    },
+    {
+      "id": "img-fc3",
+      "front": "ControlNet types cheatsheet",
+      "back": "Canny: edges/outlines. OpenPose: body pose. Depth: 3D structure. Scribble: rough sketch. Inpaint: region replacement. Tile: upscale consistency. Normal map: surface normals. Weight 0.6-1.0 typical. Higher weight = stricter control.",
+      "tags": [
+        "controlnet",
+        "types"
+      ]
+    },
+    {
+      "id": "img-fc4",
+      "front": "SDXL vs FLUX choice",
+      "back": "SDXL: 8GB VRAM, established, huge LoRA library, good quality, fast. FLUX.1-dev: 12GB+ VRAM, state-of-art quality, better text, fewer LoRAs. For starting out: SDXL. For best results with good GPU: FLUX.",
+      "tags": [
+        "sdxl",
+        "flux",
+        "models"
+      ]
+    },
+    {
+      "id": "img-fc5",
+      "front": "img2img strength",
+      "back": "0.0: output = input unchanged. 0.3: subtle changes (lighting/color). 0.6: significant changes (style). 0.9: complete redraw following prompt. Typical: 0.4-0.6 for style transfer, 0.3 for enhancement. Inpainting: use 0.7-0.9 for replaced region.",
+      "tags": [
+        "img2img",
+        "strength"
+      ]
+    },
+    {
+      "id": "img-fc6",
+      "front": "UI tools comparison",
+      "back": "Fooocus: simplest, SDXL focused, auto settings. AUTOMATIC1111: most features, form-based, huge extension library. ComfyUI: node graph, most flexible, steeper learning. Forge: faster AUTOMATIC1111 fork. All free, local, no API keys.",
+      "tags": [
+        "tools",
+        "ui"
+      ]
+    },
+    {
+      "id": "img-fc7",
+      "front": "Latent diffusion why faster",
+      "back": "512×512 pixels = 786,432 numbers. 64×64×4 latents = 16,384 numbers. 48x fewer values to process at each denoising step. VAE encodes pixels→latents once before, decodes latents→pixels once after. UNet processes latents only.",
+      "tags": [
+        "architecture",
+        "latent",
+        "efficiency"
+      ]
+    },
+    {
+      "id": "img-fc8",
+      "front": "Prompt crafting hierarchy",
+      "back": "Subject + Style + Quality terms + Artist influence + Negative. Example: 'portrait of a warrior woman, cinematic lighting, highly detailed, by Greg Rutkowski, digital art' negative: 'blurry, bad anatomy, watermark'. Quality terms: highly detailed, sharp focus, 8k, masterpiece.",
+      "tags": [
+        "prompting",
+        "quality"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You want to create a consistent AI character (a futuristic astronaut) across 10 images in different scenes: spacewalk, laboratory, alien planet, portrait, action shot. Design your workflow: what base model, what customisation method (LoRA/ControlNet), what parameters, how to maintain character consistency across all images.",
+    "checklist": [
+      {
+        "id": "ai1",
+        "text": "Base model choice: SDXL for quality+speed, or FLUX.1-dev if VRAM allows",
+        "weight": 20
+      },
+      {
+        "id": "ai2",
+        "text": "Train character LoRA: 20 images of astronaut reference, trigger word 'astro_char', weight 0.8 in prompts",
+        "weight": 20
+      },
+      {
+        "id": "ai3",
+        "text": "Use OpenPose ControlNet (weight 0.7) to set body pose for each scene",
+        "weight": 20
+      },
+      {
+        "id": "ai4",
+        "text": "Fix scene_seed for composition iteration, vary pose_seed per scene",
+        "weight": 20
+      },
+      {
+        "id": "ai5",
+        "text": "Consistent negative prompt across all: 'blurry, bad anatomy, inconsistent lighting, watermark'",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "IP-Adapter (Image Prompt Adapter) is an alternative to LoRA for character consistency — feed reference image directly as visual guidance.",
+      "After generation: upscale with ESRGAN×4 + img2img strength 0.35 for detail pass. Improves sharpness without changing composition.",
+      "SDXL LoRA training: use kohya_ss or Civitai LoRA trainer. Tag images with your trigger word + scene description."
+    ]
+  }
+}

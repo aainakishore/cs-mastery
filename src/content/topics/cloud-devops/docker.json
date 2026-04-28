@@ -7,7 +7,7 @@
   "prereqs": [
     "cloud-fundamentals"
   ],
-  "guide": "# Docker\n\nDocker packages applications and their dependencies into **containers** \u2014 isolated, portable, reproducible environments that run consistently across any machine.\n\n## The Container vs VM Distinction\n\n```\nVM:                           Container:\n  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510        \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n  \u2502 App A  \u2502 App B     \u2502        \u2502 App A  \u2502 App B  App C \u2502\n  \u2502 OS A   \u2502 OS B      \u2502        \u2502 Lib A  \u2502 Lib B  Lib C \u2502\n  \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2502        \u2502\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2502\n  \u2502   Hypervisor       \u2502        \u2502   Container Runtime  \u2502\n  \u2502   Host OS          \u2502        \u2502   Host OS (shared)   \u2502\n  \u2502   Hardware         \u2502        \u2502   Hardware           \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518        \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n  Full OS per app                Shares host OS kernel\n  GBs of overhead                MBs of overhead\n  Seconds to start               Milliseconds to start\n```\n\n## Dockerfile\n\n```dockerfile\n# Multi-stage build \u2014 final image doesn't need build tools\nFROM node:20-alpine AS builder\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n\nFROM node:20-alpine AS runtime\nWORKDIR /app\nCOPY --from=builder /app/dist ./dist\nCOPY --from=builder /app/node_modules ./node_modules\nEXPOSE 3000\nUSER node                          # don't run as root!\nCMD [\"node\", \"dist/server.js\"]\n```\n\n## Essential Commands\n\n```bash\ndocker build -t myapp:1.0 .         # Build image from Dockerfile\ndocker run -p 3000:3000 myapp:1.0   # Run container (host:container port mapping)\ndocker run -d --name api myapp:1.0  # Run detached, named\ndocker exec -it api /bin/sh         # Shell into running container\ndocker logs -f api                  # Follow container logs\ndocker ps                           # List running containers\ndocker images                       # List local images\ndocker push registry/myapp:1.0      # Push to registry\ndocker stop api && docker rm api    # Stop and remove\n```\n\n## docker-compose \u2014 Multi-Container\n\n```yaml\n# docker-compose.yml\nversion: '3.9'\nservices:\n  api:\n    build: ./api\n    ports: [\"3000:3000\"]\n    environment:\n      DATABASE_URL: postgres://user:pass@db:5432/myapp\n    depends_on: [db]\n    restart: unless-stopped\n\n  db:\n    image: postgres:16\n    volumes: [\"pgdata:/var/lib/postgresql/data\"]\n    environment:\n      POSTGRES_DB: myapp\n      POSTGRES_USER: user\n      POSTGRES_PASSWORD: pass\n\nvolumes:\n  pgdata:\n```\n\n## Layer Caching\n\n```\nDockerfile layers cache from bottom of unchanged layer:\n  COPY package.json .   \u2190 if unchanged, next layer uses cache\n  RUN npm install       \u2190 expensive, skipped if package.json unchanged\n  COPY . .              \u2190 changes frequently, but install already cached\n\nBest practice: copy package.json BEFORE src to cache node_modules.\n```\n\n## Common Pitfalls\n- **Running as root** \u2014 adds `USER node` or `USER nobody` in Dockerfile. Root in container can be root on host with misconfigured kernel.\n- **Storing secrets in images** \u2014 secrets baked into layers persist forever in history. Use secrets management (Docker secrets, Vault, env vars at runtime).\n- **Large images** \u2014 use Alpine base images, multi-stage builds, `.dockerignore`. Smaller = faster pulls = smaller attack surface.\n- **Not using .dockerignore** \u2014 COPY . . copies `node_modules`, `.git`, `.env`. Always exclude these.\n",
+  "guide": "# Docker\n\n## What Is Docker? (Zero Assumptions)\n\nPicture this: you build a Java Spring Boot app on your MacBook. It works perfectly.\nYou deploy it to an Ubuntu server — it crashes. 'Works on my machine!' is the classic\ndeveloper nightmare. Different OS, different Java version, different library versions,\nmissing environment variables — anything can go wrong.\n\nDocker solves this by packaging your **app + everything it needs** into one unit called\na **container**. The container runs identically everywhere — your laptop, a colleague's\nWindows machine, an AWS server, a CI/CD pipeline. Same result, every time.\n\n**Analogy:** Think of a Docker container like a shipping container on a cargo ship.\nBefore shipping containers existed, cargo was loaded piece by piece — slow, inconsistent,\nerror-prone. Shipping containers standardised everything: same box, same crane interface,\nworks on any ship or truck. Docker does the same for software.\n\n```\nWithout Docker:                    With Docker:\n  Your laptop: Java 17              Container image packages:\n  Server:      Java 11              - Your app .jar\n  CI server:   Java 21              - Java 17 (exact version)\n  'It works on my machine!'         - All dependencies\n                                    - Config files\n                                    Runs IDENTICALLY everywhere\n```\n\n---\n\n## Virtual Machines vs Containers\n\nBoth give you an isolated environment, but they work very differently:\n\n```\nVIRTUAL MACHINE:                    CONTAINER:\n\n+---------------------------+        +---------------------------+\n| App A      | App B        |        | App A  | App B  | App C  |\n| (Node.js)  | (Java)       |        +--------+--------+--------+\n+------------+--------------+        | Container Runtime (runc) |\n| Guest OS A | Guest OS B   |        +---------------------------+\n| (Ubuntu)   | (Windows)    |        | Host OS Kernel (Linux)   |\n+------------+--------------+        +---------------------------+\n| Hypervisor (VMware/VBox)  |        | Physical Hardware         |\n+---------------------------+        +---------------------------+\n| Physical Hardware         |\n+---------------------------+\n\nVM:        Each app has its OWN full OS = heavy (GBs), slow to start (minutes)\nContainer: Apps SHARE the host OS kernel = light (MBs), starts in seconds\n```\n\n**Key differences:**\n| Feature | Virtual Machine | Container |\n| --- | --- | --- |\n| Startup time | 1-5 minutes | Under 1 second |\n| Size | 1-20 GB | 10-500 MB |\n| Isolation | Full OS isolation | Process isolation |\n| OS | Each VM has its own | Shares host kernel |\n| Use case | Full environment isolation | App packaging and deployment |\n\n---\n\n## Core Concepts: Image vs Container\n\nThis is the most important distinction to understand:\n\n```\nIMAGE                               CONTAINER\n(a blueprint / recipe)              (a running instance)\n\nLike a class in OOP                 Like an object (instance of the class)\nLike a cookie cutter                Like an actual cookie\nLike a CD-ROM with the OS           Like a running OS on your machine\n\nRead-only snapshot                  Running process with its own memory,\nstored on disk                      filesystem, network\n\nYou BUILD images                    You RUN containers FROM images\nYou PUSH images to registries       You can run many containers\nYou PULL images to machines         from the same image\n```\n\n**Docker Hub** is the public registry where images live:\n- `nginx` = official Nginx web server image\n- `postgres:15` = PostgreSQL version 15\n- `openjdk:17-slim` = lean Java 17 runtime\n- `yourusername/myapp:v1.2` = your own custom image\n\n---\n\n## Installing Docker and First Commands\n\n```bash\n# Install on Ubuntu\nsudo apt update\nsudo apt install docker.io\nsudo systemctl start docker\nsudo systemctl enable docker  # start on boot\n\n# Add yourself to docker group (avoid needing sudo every time)\nsudo usermod -aG docker $USER\n# Log out and back in for this to take effect\n\n# Verify installation\ndocker --version\ndocker run hello-world   # downloads and runs a test container\n```\n\n---\n\n## Essential Docker Commands\n\n```bash\n# IMAGES\ndocker images                    # list images on your machine\ndocker pull nginx                # download nginx image from Docker Hub\ndocker pull postgres:15          # specific version tag\ndocker rmi nginx                 # remove an image\ndocker image prune               # remove all unused images\n\n# RUNNING CONTAINERS\ndocker run nginx                 # start a container (foreground, blocks terminal)\ndocker run -d nginx              # -d = detached (background), returns container ID\ndocker run -d -p 8080:80 nginx   # -p host_port:container_port (port mapping)\n                                  # now http://localhost:8080 hits nginx inside container\ndocker run -d --name my-nginx nginx  # give container a name (easier to reference)\ndocker run --rm nginx            # --rm = auto-delete when container stops\n\n# VIEWING CONTAINERS\ndocker ps                        # list RUNNING containers\ndocker ps -a                     # list ALL containers (including stopped)\ndocker logs my-nginx             # see container output/logs\ndocker logs -f my-nginx          # follow logs live (like tail -f)\ndocker stats                     # live CPU/memory usage of all containers\n\n# MANAGING CONTAINERS\ndocker stop my-nginx             # graceful stop (SIGTERM, waits for cleanup)\ndocker kill my-nginx             # force stop (SIGKILL immediately)\ndocker start my-nginx            # restart a stopped container\ndocker rm my-nginx               # delete a stopped container\ndocker rm -f my-nginx            # force remove running container\n\n# GOING INSIDE A CONTAINER (like SSH)\ndocker exec -it my-nginx bash    # open interactive bash terminal inside container\ndocker exec -it my-nginx sh      # use sh if bash not available (Alpine images)\n# -i = interactive  -t = allocate a pseudo-TTY (needed for terminal)\n\n# COPYING FILES\ndocker cp my-nginx:/etc/nginx/nginx.conf ./   # copy FROM container to host\ndocker cp ./app.jar my-container:/app/        # copy FROM host TO container\n```\n\n**Port mapping explained:**\n```\ndocker run -d -p 8080:80 nginx\n                  |   |\n                  |   +-- container port (nginx listens on 80 inside)\n                  +------- host port (you access via localhost:8080)\n\nBrowser: http://localhost:8080\n                    |\n                    | Docker NAT\n                    v\n        Container port 80 (nginx)\n```\n\n---\n\n## The Dockerfile — Building Your Own Image\n\nA `Dockerfile` is a recipe that tells Docker how to build your image.\nEach instruction creates a new **layer** (cached).\n\n```dockerfile\n# Start FROM an existing base image\nFROM openjdk:17-slim\n\n# Set the working directory inside the container\nWORKDIR /app\n\n# COPY files from host into the image\n# Copy pom.xml FIRST (changes rarely) — layer cache trick\nCOPY pom.xml .\nCOPY src ./src\n\n# RUN a command during image BUILD (not at runtime)\nRUN ./mvnw package -DskipTests\n\n# Declare which port the app listens on (documentation only, does not publish)\nEXPOSE 8080\n\n# Set an environment variable\nENV SPRING_PROFILES_ACTIVE=production\n\n# CMD = default command when container STARTS (can be overridden)\nCMD [\"java\", \"-jar\", \"target/app.jar\"]\n\n# ENTRYPOINT = fixed command, CMD becomes its arguments\n# ENTRYPOINT [\"java\", \"-jar\", \"target/app.jar\"]\n```\n\n**Build and run your image:**\n```bash\ndocker build -t myapp:v1 .          # build image, tag as myapp:v1, use current dir\ndocker build -t myapp:v1 -f Dockerfile.prod .  # use specific Dockerfile\ndocker run -d -p 8080:8080 myapp:v1\n```\n\n---\n\n## Layer Caching — Why Order Matters\n\nDocker caches each layer. If a layer has not changed, it reuses the cache.\nThis makes rebuilds much faster. Order your Dockerfile to maximise cache hits.\n\n```\nBAD ORDER (slow rebuilds):\n  COPY . .              <- copies ALL source code (changes every edit)\n  RUN mvn install       <- runs every time because source changed\n\nGOOD ORDER (fast rebuilds):\n  COPY pom.xml .        <- pom.xml changes rarely -> layer cache usually HIT\n  RUN mvn dependency:go-offline  <- downloads deps once, cached\n  COPY src ./src        <- source changes often, but only this layer reruns\n  RUN mvn package       <- only reruns if src changed\n\nLayer cache logic:\n  If layer N changes -> ALL layers after N must rebuild\n  Put rarely-changing steps FIRST, frequently-changing steps LAST\n```\n\n---\n\n## Multi-Stage Builds — Smaller Production Images\n\nProblem: your build tools (Maven, npm) are only needed during build — not at runtime.\nMulti-stage builds let you build in one container and copy only the output to a lean image.\n\n```dockerfile\n# STAGE 1: build (has Maven, JDK, all build tools — big image)\nFROM maven:3.9-openjdk-17 AS builder\nWORKDIR /build\nCOPY pom.xml .\nRUN mvn dependency:go-offline\nCOPY src ./src\nRUN mvn package -DskipTests\n\n# STAGE 2: runtime (only JRE, no Maven, no source code — tiny image)\nFROM openjdk:17-slim AS runtime\nWORKDIR /app\nCOPY --from=builder /build/target/app.jar app.jar\nEXPOSE 8080\nCMD [\"java\", \"-jar\", \"app.jar\"]\n\n# Result: builder image = ~800MB, runtime image = ~180MB\n# Only the runtime stage is shipped to production\n```\n\n---\n\n## Docker Volumes — Persistent Data\n\nContainers are ephemeral — when you remove a container, all data inside is lost.\nVolumes let you persist data outside the container lifecycle.\n\n```bash\n# Named volume (Docker manages storage location)\ndocker volume create mydata\ndocker run -d -v mydata:/var/lib/postgresql/data postgres:15\n# Database data survives container removal\n\n# Bind mount (maps a host directory into the container)\ndocker run -d -v /home/alice/config:/app/config myapp\n# /home/alice/config on host IS /app/config inside container\n# Changes on either side are immediately visible to the other\n\n# List volumes\ndocker volume ls\ndocker volume inspect mydata\ndocker volume rm mydata       # delete (data gone!)\n```\n\n```\nVolume types:\n  Named volume:    Docker stores at /var/lib/docker/volumes/mydata/\n                   Good for databases, persistent state\n  Bind mount:      You choose the host directory\n                   Good for config files, development (live code reload)\n  tmpfs mount:     In-memory only, never written to disk\n                   Good for sensitive temp data\n```\n\n---\n\n## Docker Compose — Multi-Container Apps\n\nReal apps have multiple services: web server, database, cache, queue.\nDocker Compose lets you define and run them all with one file.\n\n```yaml\n# docker-compose.yml\nversion: '3.8'\n\nservices:\n  app:                          # your Spring Boot app\n    build: .                    # build from Dockerfile in current dir\n    ports:\n      - '8080:8080'\n    environment:\n      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/mydb\n      - SPRING_DATASOURCE_PASSWORD=secret\n    depends_on:\n      - db                      # wait for db service to start\n    networks:\n      - backend\n\n  db:                           # PostgreSQL database\n    image: postgres:15\n    environment:\n      - POSTGRES_DB=mydb\n      - POSTGRES_PASSWORD=secret\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n    networks:\n      - backend\n\n  redis:                        # Redis cache\n    image: redis:7-alpine\n    networks:\n      - backend\n\nvolumes:\n  pgdata:                       # named volume for database\n\nnetworks:\n  backend:                      # private network — services talk to each other by service name\n```\n\n```bash\ndocker compose up -d       # start all services in background\ndocker compose down        # stop and remove containers\ndocker compose down -v     # also delete volumes (wipes database!)\ndocker compose logs -f app # follow logs for 'app' service\ndocker compose ps          # status of all services\ndocker compose exec app bash  # shell into running 'app' container\ndocker compose build       # rebuild images\n```\n\n**How services find each other:** Inside a Compose network, services reach each other\nby their service name. Your app connects to `db:5432` — Docker DNS resolves `db`\nto the database container's IP automatically.\n\n---\n\n## Docker Networking\n\n```\nDefault networks:\n  bridge:  Default for standalone containers. Containers can communicate\n           via IP but not by name (use user-defined networks instead)\n  host:    Container shares host network stack (no isolation)\n           Use only when performance is critical\n  none:    No networking at all\n\nUser-defined bridge network (best practice):\n  docker network create mynet\n  docker run -d --network mynet --name app myapp\n  docker run -d --network mynet --name db postgres:15\n  Now 'app' can reach 'db' by hostname 'db' — automatic DNS resolution\n```\n\n---\n\n## Environment Variables and Secrets\n\n```bash\n# Pass env vars at runtime\ndocker run -e DB_PASSWORD=secret myapp\ndocker run --env-file .env myapp    # load from file\n\n# In docker-compose.yml\n# environment:\n#   - DB_PASSWORD=${DB_PASSWORD}    # reads from host environment\n\n# .env file (NEVER commit to git!)\n# DB_PASSWORD=supersecret\n# API_KEY=abc123\n```\n\n**Rule:** Never hardcode secrets in Dockerfiles or docker-compose.yml.\nUse environment variables loaded from a `.env` file (in `.gitignore`)\nor a secrets manager (AWS Secrets Manager, Vault).\n\n---\n\n## Mind Map\n\n```\nDOCKER\n|\n+-- CONCEPTS\n|   +-- Image  = blueprint (read-only)\n|   +-- Container = running instance\n|   +-- Registry = image storage (Docker Hub)\n|   +-- Layer = cached filesystem change\n|\n+-- DOCKERFILE\n|   +-- FROM (base image)\n|   +-- COPY (add files)\n|   +-- RUN  (build-time commands)\n|   +-- CMD  (runtime default command)\n|   +-- EXPOSE (document port)\n|   +-- Multi-stage (small prod images)\n|\n+-- COMMANDS\n|   +-- docker build -t name .\n|   +-- docker run -d -p host:container\n|   +-- docker exec -it name bash\n|   +-- docker logs -f name\n|   +-- docker ps / docker ps -a\n|\n+-- DATA\n|   +-- Volume (persistent, managed)\n|   +-- Bind mount (host directory)\n|\n+-- COMPOSE\n|   +-- docker-compose.yml\n|   +-- services, networks, volumes\n|   +-- docker compose up/down\n|\n+-- NETWORKING\n    +-- bridge (default)\n    +-- user-defined (DNS by name)\n    +-- host (no isolation)\n```\n\n---\n\n## How Docker Connects to Other Topics\n\n- **Kubernetes**: K8s orchestrates Docker containers at scale.\n  Every K8s pod runs container images built with Docker.\n- **CI/CD**: Pipelines build Docker images on every commit and push to a registry.\n- **Linux**: Containers ARE Linux processes. `docker exec -it` drops you into a\n  Linux shell. All Linux skills (permissions, processes, logs) apply inside containers.\n- **Microservices**: Docker enables each service to have its own isolated environment,\n  dependencies, and runtime — making microservice architectures practical.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Running as root inside container** — use `USER appuser` in Dockerfile for security.\n2. **Storing secrets in Dockerfile or image** — they become visible in `docker history`.\n3. **Using `latest` tag in production** — `nginx:latest` changes over time, breaking reproducibility. Always pin versions: `nginx:1.25.3`.\n4. **Huge images** — use slim/alpine base images, multi-stage builds, add `.dockerignore`.\n5. **No `.dockerignore`** — COPY . . copies node_modules, .git, logs. Add `.dockerignore` like `.gitignore`.\n6. **Data loss** — removing a container without volumes deletes all its data.\n7. **Port conflicts** — two containers cannot bind the same host port. Use different host ports.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Docker Tutorial for Beginners** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=3c-iBn73dDE\n  - 3 hours. Covers containers, images, Dockerfile, Compose, volumes. Best beginner course.\n- **Docker in 100 Seconds** by Fireship:\n  https://www.youtube.com/watch?v=Gjnup-PuquQ\n  - 2 minutes. Perfect high-level mental model before going deep.\n\n### Free Books and Articles\n- **Docker official docs - Get Started guide**: https://docs.docker.com/get-started/\n  - Official beginner tutorial. Do Parts 1-5.\n- **Play with Docker** (free browser-based Docker lab): https://labs.play-with-docker.com/\n  - No installation needed. Spin up Linux VMs with Docker in browser.\n\n### Diagrams and Cheatsheets\n- **Docker Cheatsheet by wsargent**: https://github.com/wsargent/docker-cheat-sheet\n  - Comprehensive command reference with explanations.\n- **Container vs VM diagram**: search 'Docker vs VM architecture diagram' on Google Images.\n\n### Practice\n- **KodeKloud Docker for Beginners** (free course with browser labs):\n  https://kodekloud.com/courses/docker-for-the-absolute-beginner/\n- **DockerLabs**: https://dockerlabs.collabnix.com/\n  - 100+ hands-on labs from beginner to advanced.",
   "questions": [
     {
       "id": "dkr-q1",
@@ -15,12 +15,12 @@
       "prompt": "Container vs VM: key performance difference?",
       "choices": [
         "Containers are safer",
-        "Containers share the host OS kernel \u2014 no guest OS per container. Start in milliseconds, use MBs of overhead vs GBs for VMs",
+        "Containers share the host OS kernel — no guest OS per container. Start in milliseconds, use MBs of overhead vs GBs for VMs",
         "VMs are always faster",
         "VMs share the kernel too"
       ],
       "answerIndex": 1,
-      "explanation": "Docker containers share the host OS kernel via Linux namespaces and cgroups. No full OS booting \u2192 near-instant startup, tiny memory footprint. Tradeoff: less isolation than VMs (same kernel).",
+      "explanation": "Docker containers share the host OS kernel via Linux namespaces and cgroups. No full OS booting → near-instant startup, tiny memory footprint. Tradeoff: less isolation than VMs (same kernel).",
       "tags": [
         "docker",
         "containers"
@@ -32,12 +32,12 @@
       "prompt": "Why use multi-stage Docker builds?",
       "choices": [
         "Required by Docker 20+",
-        "Separate build tools (compilers, test runners) from the final runtime image \u2014 production image only contains what's needed to run, not build. Dramatically reduces image size and attack surface",
+        "Separate build tools (compilers, test runners) from the final runtime image — production image only contains what's needed to run, not build. Dramatically reduces image size and attack surface",
         "Multi-stage is slower",
         "Only for compiled languages"
       ],
       "answerIndex": 1,
-      "explanation": "Build stage: includes compiler, dev dependencies, test tools. Runtime stage: copies only built artifacts. Node app: FROM node AS builder (npm install + build) \u2192 FROM node-alpine AS runtime (copy dist). Final image has no npm, no source code, no dev deps.",
+      "explanation": "Build stage: includes compiler, dev dependencies, test tools. Runtime stage: copies only built artifacts. Node app: FROM node AS builder (npm install + build) → FROM node-alpine AS runtime (copy dist). Final image has no npm, no source code, no dev deps.",
       "tags": [
         "docker",
         "multi-stage",
@@ -50,7 +50,7 @@
       "prompt": "Why order Dockerfile instructions with COPY package.json before COPY . .?",
       "choices": [
         "Syntax requirement",
-        "Docker caches each layer. package.json rarely changes \u2014 npm install (expensive) uses cache on most builds. Source code changes frequently, but the cached node_modules layer is reused",
+        "Docker caches each layer. package.json rarely changes — npm install (expensive) uses cache on most builds. Source code changes frequently, but the cached node_modules layer is reused",
         "Improves security",
         "Required for docker-compose"
       ],
@@ -59,6 +59,300 @@
       "tags": [
         "docker",
         "layer-caching"
+      ]
+    },
+    {
+      "id": "dkr-q4",
+      "type": "mcq",
+      "prompt": "What is the difference between a Docker image and a container?",
+      "choices": [
+        "They are the same thing",
+        "An image is a read-only blueprint; a container is a running instance of that image",
+        "A container is read-only; an image is running",
+        "Images run on VMs; containers run on bare metal"
+      ],
+      "answerIndex": 1,
+      "explanation": "Image = static blueprint stored on disk (like a class). Container = live running instance of that image (like an object). You can run many containers from one image.",
+      "tags": [
+        "docker-basics",
+        "image"
+      ]
+    },
+    {
+      "id": "dkr-q5",
+      "type": "mcq",
+      "prompt": "What does `docker run -d -p 8080:80 nginx` do?",
+      "choices": [
+        "Runs nginx in foreground on port 80",
+        "Runs nginx detached in background, maps host port 8080 to container port 80",
+        "Runs nginx on port 8080 inside the container",
+        "Downloads nginx without running it"
+      ],
+      "answerIndex": 1,
+      "explanation": "-d = detached (background). -p 8080:80 maps host port 8080 to container port 80. Accessing localhost:8080 on the host reaches nginx inside the container.",
+      "tags": [
+        "docker-run",
+        "ports"
+      ]
+    },
+    {
+      "id": "dkr-q6",
+      "type": "mcq",
+      "prompt": "Which Dockerfile instruction runs a command AT BUILD TIME (not at container start)?",
+      "choices": [
+        "CMD",
+        "ENTRYPOINT",
+        "RUN",
+        "EXEC"
+      ],
+      "answerIndex": 2,
+      "explanation": "RUN executes during image build (e.g. apt install, mvn package). CMD and ENTRYPOINT define what runs when the container starts. EXEC is not a Dockerfile instruction.",
+      "tags": [
+        "dockerfile",
+        "layers"
+      ]
+    },
+    {
+      "id": "dkr-q7",
+      "type": "mcq",
+      "prompt": "You want your Spring Boot container to persist database files after the container is removed. What should you use?",
+      "choices": [
+        "COPY instruction",
+        "docker exec",
+        "Docker volume",
+        "Multi-stage build"
+      ],
+      "answerIndex": 2,
+      "explanation": "Volumes persist data outside the container lifecycle. When the container is removed, the volume data survives. COPY, exec, and multi-stage are unrelated to data persistence.",
+      "tags": [
+        "volumes",
+        "persistence"
+      ]
+    },
+    {
+      "id": "dkr-q8",
+      "type": "mcq",
+      "prompt": "What does `docker exec -it myapp bash` do?",
+      "choices": [
+        "Builds the myapp image",
+        "Starts a new container from myapp",
+        "Opens an interactive bash shell INSIDE the running myapp container",
+        "Stops the myapp container"
+      ],
+      "answerIndex": 2,
+      "explanation": "exec runs a command inside an ALREADY RUNNING container. -it = interactive terminal. This is how you 'SSH into' a container to debug it.",
+      "tags": [
+        "docker-exec",
+        "debugging"
+      ]
+    },
+    {
+      "id": "dkr-q9",
+      "type": "mcq",
+      "prompt": "What is the primary benefit of Docker multi-stage builds?",
+      "choices": [
+        "Faster runtime performance",
+        "Smaller production images by excluding build tools and source code",
+        "Automatic scaling",
+        "Better networking"
+      ],
+      "answerIndex": 1,
+      "explanation": "Multi-stage builds let you compile in a large image (with Maven/npm etc.) and copy only the output artifact to a lean runtime image. Result: images shrink from ~800MB to ~180MB.",
+      "tags": [
+        "dockerfile",
+        "multi-stage"
+      ]
+    },
+    {
+      "id": "dkr-q10",
+      "type": "mcq",
+      "prompt": "Why should you add a `.dockerignore` file to your project?",
+      "choices": [
+        "It speeds up container networking",
+        "It prevents COPY . . from including node_modules, .git, logs in the image — keeping images small and secure",
+        "It's required for docker-compose",
+        "It sets environment variables"
+      ],
+      "answerIndex": 1,
+      "explanation": ".dockerignore works like .gitignore — it excludes files from the build context sent to Docker daemon. Without it, COPY . . includes node_modules (hundreds of MB), .git history, and local config files.",
+      "tags": [
+        "dockerfile",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "dkr-q11",
+      "type": "mcq",
+      "prompt": "In docker-compose, services in the same user-defined network reach each other by:",
+      "choices": [
+        "IP addresses only",
+        "Their service names (Docker DNS resolves them automatically)",
+        "Port numbers",
+        "Container IDs"
+      ],
+      "answerIndex": 1,
+      "explanation": "Docker Compose creates a network where services discover each other by service name. app can connect to db:5432 and Docker DNS resolves 'db' to the database container's IP.",
+      "tags": [
+        "compose",
+        "networking"
+      ]
+    },
+    {
+      "id": "dkr-q12",
+      "type": "mcq",
+      "prompt": "What happens to data inside a container when you run `docker rm mycontainer`?",
+      "choices": [
+        "Data is automatically backed up",
+        "Data persists in the image",
+        "Data is permanently lost unless stored in a volume or bind mount",
+        "Data moves to /tmp on the host"
+      ],
+      "answerIndex": 2,
+      "explanation": "Containers are ephemeral. Their writable layer is deleted with the container. Only data in volumes or bind mounts persists. This is why databases must use volumes.",
+      "tags": [
+        "volumes",
+        "containers"
+      ]
+    },
+    {
+      "id": "dkr-q13",
+      "type": "mcq",
+      "prompt": "Which base image choice results in the smallest production image?",
+      "choices": [
+        "ubuntu:22.04",
+        "openjdk:17",
+        "openjdk:17-slim or eclipse-temurin:17-alpine",
+        "debian:latest"
+      ],
+      "answerIndex": 2,
+      "explanation": "slim and alpine variants strip out non-essential packages. Alpine Linux is ~5MB vs ubuntu at ~70MB. openjdk:17-slim is ~250MB vs openjdk:17 at ~470MB.",
+      "tags": [
+        "dockerfile",
+        "image-size"
+      ]
+    },
+    {
+      "id": "dkr-q14",
+      "type": "codeOutput",
+      "prompt": "What does this command output?",
+      "code": "docker ps -a | grep Exited | wc -l",
+      "choices": [
+        "Number of running containers",
+        "Number of all containers",
+        "Number of stopped (Exited) containers",
+        "Error — invalid syntax"
+      ],
+      "answerIndex": 2,
+      "explanation": "docker ps -a lists all containers including stopped. grep Exited filters only stopped ones. wc -l counts matching lines. Result = count of stopped containers.",
+      "tags": [
+        "docker-commands",
+        "pipes"
+      ]
+    },
+    {
+      "id": "dkr-q15",
+      "type": "mcq",
+      "prompt": "You hardcode `ENV DB_PASSWORD=mypassword` in your Dockerfile. What is the security risk?",
+      "choices": [
+        "No risk — env vars are encrypted in images",
+        "The password is visible via `docker history` and to anyone who has the image",
+        "It causes a build error",
+        "The container cannot start"
+      ],
+      "answerIndex": 1,
+      "explanation": "docker history shows every layer including ENV instructions in plain text. Anyone with access to the image can read the password. Always pass secrets via -e flag or --env-file at runtime.",
+      "tags": [
+        "security",
+        "dockerfile"
+      ]
+    },
+    {
+      "id": "dkr-q16",
+      "type": "mcq",
+      "prompt": "What is the correct Dockerfile instruction order for maximum layer cache efficiency in a Java project?",
+      "choices": [
+        "COPY src -> RUN mvn install -> COPY pom.xml",
+        "COPY pom.xml -> RUN mvn dependency:go-offline -> COPY src -> RUN mvn package",
+        "COPY . . -> RUN mvn package",
+        "RUN mvn package -> COPY . ."
+      ],
+      "answerIndex": 1,
+      "explanation": "pom.xml changes rarely, so its layer is cached. Dependencies download once. Source code changes frequently, so it goes last. If only src changes, only the last two layers rebuild — much faster.",
+      "tags": [
+        "dockerfile",
+        "layer-cache"
+      ]
+    },
+    {
+      "id": "dkr-q17",
+      "type": "multi",
+      "prompt": "Which of these should you include in a `.dockerignore` file? (Select all that apply)",
+      "choices": [
+        "node_modules/",
+        ".git/",
+        ".env",
+        "src/main/java/"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "node_modules (huge), .git (exposes history), .env (contains secrets) should all be ignored. Source code (src/) must be included for the build to work.",
+      "tags": [
+        "dockerfile",
+        "security"
+      ]
+    },
+    {
+      "id": "dkr-q18",
+      "type": "mcq",
+      "prompt": "What does `docker compose down -v` do differently than `docker compose down`?",
+      "choices": [
+        "They are identical",
+        "down -v also removes named volumes defined in compose file — deletes persistent data",
+        "down -v removes all images",
+        "down -v is faster"
+      ],
+      "answerIndex": 1,
+      "explanation": "docker compose down stops and removes containers and networks. -v additionally removes named volumes. This deletes database data, uploaded files etc. Use with caution in production.",
+      "tags": [
+        "compose",
+        "volumes"
+      ]
+    },
+    {
+      "id": "dkr-q19",
+      "type": "mcq",
+      "prompt": "In a Dockerfile, what is the difference between CMD and ENTRYPOINT?",
+      "choices": [
+        "CMD runs at build time; ENTRYPOINT at runtime",
+        "ENTRYPOINT = fixed command (hard to override); CMD = default arguments (easy to override)",
+        "They are identical",
+        "ENTRYPOINT is for Linux only"
+      ],
+      "answerIndex": 1,
+      "explanation": "ENTRYPOINT sets the main executable — it runs every time. CMD provides default arguments to ENTRYPOINT, easily overridden. Together: ENTRYPOINT=[java -jar] CMD=[app.jar] allows: docker run myapp different.jar",
+      "tags": [
+        "dockerfile",
+        "cmd-entrypoint"
+      ]
+    },
+    {
+      "id": "dkr-q20",
+      "type": "mcq",
+      "prompt": "Why should you avoid using `image:latest` tag in production deployments?",
+      "choices": [
+        "latest is too large",
+        "latest is not cached",
+        "latest points to whatever the newest version is — it changes over time, making deployments non-reproducible and breaking things unexpectedly",
+        "latest requires internet access"
+      ],
+      "answerIndex": 2,
+      "explanation": "latest is a moving target. nginx:latest today might be 1.25, tomorrow 1.26 with breaking changes. Always pin: nginx:1.25.3. Your production config should be immutable and reproducible.",
+      "tags": [
+        "best-practices",
+        "tags"
       ]
     }
   ],
@@ -74,7 +368,7 @@
     {
       "id": "dkr-fc2",
       "front": "Multi-stage Dockerfile",
-      "back": "FROM heavy AS builder (compile). FROM alpine AS runtime. COPY --from=builder /app/dist ./. Final image contains only runtime artifacts \u2014 no compilers, dev deps, or source. Smaller and more secure.",
+      "back": "FROM heavy AS builder (compile). FROM alpine AS runtime. COPY --from=builder /app/dist ./. Final image contains only runtime artifacts — no compilers, dev deps, or source. Smaller and more secure.",
       "tags": [
         "docker",
         "multi-stage"
@@ -91,10 +385,45 @@
     {
       "id": "dkr-fc4",
       "front": "docker-compose",
-      "back": "Orchestrates multi-container apps locally. services, ports, volumes, environment, depends_on. Startup order but not readiness \u2014 use health checks for depends_on to respect DB ready.",
+      "back": "Orchestrates multi-container apps locally. services, ports, volumes, environment, depends_on. Startup order but not readiness — use health checks for depends_on to respect DB ready.",
       "tags": [
         "docker",
         "compose"
+      ]
+    },
+    {
+      "id": "dkr-fc5",
+      "front": "docker run flags: -d -p -v -e --name",
+      "back": "-d=detached(background)  -p host:container port mapping  -v volume/bind mount  -e environment variable  --name give container a name",
+      "tags": [
+        "docker-run"
+      ]
+    },
+    {
+      "id": "dkr-fc6",
+      "front": "Layer cache order rule",
+      "back": "Put rarely-changing steps first (COPY pom.xml, RUN mvn dependency:go-offline), frequently-changing steps last (COPY src, RUN mvn package). Any changed layer invalidates all subsequent layers.",
+      "tags": [
+        "dockerfile",
+        "performance"
+      ]
+    },
+    {
+      "id": "dkr-fc7",
+      "front": "Container data persistence rule",
+      "back": "Containers are ephemeral — data inside is gone on rm. Use named volumes for databases/state. Use bind mounts in development for live code. Never rely on container filesystem for important data.",
+      "tags": [
+        "volumes",
+        "data"
+      ]
+    },
+    {
+      "id": "dkr-fc8",
+      "front": "Secrets in Docker — the rule",
+      "back": "Never put secrets in Dockerfile ENV or image layers. Pass at runtime: docker run -e KEY=val or --env-file .env. Use Docker Secrets or AWS Secrets Manager in production. docker history reveals all image layers.",
+      "tags": [
+        "security",
+        "secrets"
       ]
     }
   ],

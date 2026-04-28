@@ -7,12 +7,12 @@
   "prereqs": [
     "firewalls"
   ],
-  "guide": "# Proxies \u2014 Forward and Reverse\n\nA **proxy** is a server that acts as an intermediary between clients and backend servers. Forward proxies sit in front of clients; reverse proxies sit in front of servers.\n\n## Forward Proxy vs Reverse Proxy\n\n```\nForward Proxy:\n  Client \u2192 Forward Proxy \u2192 Internet (servers)\n\n  Client knows about the proxy.\n  Server sees proxy's IP not client's.\n  Uses: bypass geo-restrictions, corporate filtering, anonymity, caching.\n\nReverse Proxy:\n  Internet (clients) \u2192 Reverse Proxy \u2192 Backend Servers\n\n  Client talks to proxy thinking it's the origin.\n  Client doesn't know about backend servers.\n  Uses: load balancing, SSL termination, caching, DDoS protection, WAF.\n```\n\n## What a Reverse Proxy Does\n\n```\nIncoming HTTPS request \u2192 Reverse Proxy:\n  \u2713 SSL termination (decrypt; re-encrypt to backend or use HTTP internally)\n  \u2713 Routing (/api/* to API servers, /* to static web server)\n  \u2713 Rate limiting and WAF rule enforcement\n  \u2713 Response caching (cache GET /products until TTL expires)\n  \u2713 Compression (gzip responses)\n  \u2713 Add security headers (HSTS, CSP, etc.)\n  \u2713 A/B testing (route 10% of traffic to a new version)\n  \u2713 Authentication offloading (JWT validation at proxy)\n```\n\n## NGINX as Reverse Proxy (Config Example)\n\n```nginx\nserver {\n  listen 443 ssl;\n  server_name api.example.com;\n\n  ssl_certificate /etc/ssl/cert.pem;\n  ssl_certificate_key /etc/ssl/key.pem;\n\n  location /api/ {\n    proxy_pass http://api-upstream;\n    proxy_set_header X-Real-IP $remote_addr;\n    proxy_set_header Host $host;\n  }\n\n  location /static/ {\n    root /var/www;\n    expires 30d;\n  }\n}\n\nupstream api-upstream {\n  least_conn;\n  server 10.0.0.1:8080;\n  server 10.0.0.2:8080;\n}\n```\n\n## Common Proxy Patterns\n\n| Pattern | Tool | Purpose |\n|---|---|---|\n| Edge proxy / CDN | Cloudflare, CloudFront | Global distribution, DDoS, caching |\n| API Gateway | Kong, AWS API GW | Auth, rate limiting, routing |\n| Service mesh sidecar | Envoy (Istio) | mTLS, observability, circuit breaking |\n| Forward proxy | Squid, corporate proxies | Content filtering, caching |\n\n## Common Pitfalls\n- **Losing the client IP** \u2014 reverse proxy rewrites the source IP. Use X-Forwarded-For or X-Real-IP headers. Configure the app to trust them.\n- **Double SSL** \u2014 terminating at proxy but not re-encrypting to backend leaks data on internal network if not trusted. Configure backend SSL or ensure private network.\n- **Proxy caching stale data** \u2014 aggressive caching can serve outdated responses. Set appropriate Cache-Control and vary headers.\n",
+  "guide": "# Proxies — Forward and Reverse\n\n## What Is a Proxy? Zero to Clear\n\nA proxy is a server that acts as an **intermediary** between a client and another server.\nThe client doesn't communicate directly with the destination — it talks to the proxy,\nand the proxy makes the request on the client's behalf.\n\n**Why use a proxy?**\n```\nDirect connection:\n  Client ──────────────────────────► Server\n  Client's IP exposed to server\n\nVia proxy:\n  Client ──► Proxy ──────────────► Server\n  Server sees proxy's IP, not client's IP\n  Proxy can: inspect, filter, cache, transform, log requests\n```\n\nTwo completely different types exist, and they're often confused:\n- **Forward Proxy** — on behalf of the CLIENT (client-side)\n- **Reverse Proxy** — on behalf of the SERVER (server-side)\n\n---\n\n## Forward Proxy — On Behalf of Clients\n\n```\nPOSITION: Client side (between clients and the internet)\n\nHOW IT WORKS:\n  Client is configured to send all requests to the proxy.\n  Proxy makes the actual request to the internet.\n  Server sees proxy's IP, not client's IP.\n\n  Employee's PC ──► Forward Proxy ──► Internet (google.com, facebook.com)\n  Employee's PC ──► Forward Proxy ──► BLOCKED (social media)\n\nUSE CASES:\n\n1. CORPORATE INTERNET FILTER:\n   All employee traffic routed through proxy.\n   Proxy enforces: block adult sites, social media, known malware sites.\n   Log all internet activity for compliance.\n   Companies: Zscaler, Bluecoat, Squid proxy.\n\n2. CONTENT CACHING:\n   Many employees watch the same YouTube training video.\n   Without cache: 100 employees = 100 requests to YouTube = 100x bandwidth.\n   Proxy caches the video. 100 employees = 1 request to YouTube.\n   Saves bandwidth, speeds up repeated access.\n\n3. ANONYMISATION:\n   VPN and Tor are types of forward proxies.\n   Your ISP sees traffic going to proxy, not to the destination site.\n   Destination site sees proxy's IP, not yours.\n   Bypasses geo-restrictions.\n\n4. EGRESS CONTROL:\n   All outbound traffic from servers goes through proxy.\n   Audit log of every external API call.\n   Block unexpected destinations (DLP - Data Loss Prevention).\n```\n\n---\n\n## Reverse Proxy — On Behalf of Servers\n\n```\nPOSITION: Server side (between the internet and backend servers)\n\nHOW IT WORKS:\n  Client thinks it's talking to the destination server.\n  Actually talking to the reverse proxy.\n  Proxy forwards to backend server(s).\n\n  Browser ──► Reverse Proxy ──► App Server 1\n  (thinks it's         │──────── App Server 2\n   talking to          └──────── App Server 3\n   myapp.com)\n\nTHE CLIENT NEVER KNOWS the backend server exists.\nThe backend server's IP/port is hidden.\n\nUSE CASES:\n\n1. LOAD BALANCING:\n   Reverse proxy distributes requests across multiple backend servers.\n   Algorithms: round-robin, least connections, IP hash.\n   nginx: upstream { server backend1; server backend2; server backend3; }\n\n2. TLS TERMINATION:\n   HTTPS from browser -> Reverse proxy (decrypt TLS) -> HTTP to backends\n   Backend servers: don't need TLS certificates or TLS overhead.\n   Single cert at edge. Central cert management.\n\n3. CACHING:\n   Proxy caches backend responses.\n   GET /api/products -> cached for 60s -> 1000 requests = 1 backend call.\n   Varnish, nginx cache, Cloudflare Edge are reverse proxy caches.\n\n4. COMPRESSION:\n   Proxy compresses responses before sending to client.\n   Backend returns uncompressed JSON, proxy compresses with gzip/brotli.\n   50-70% bandwidth savings.\n\n5. SECURITY / RATE LIMITING:\n   Proxy applies rate limits before requests reach backend.\n   DDoS: proxy absorbs/blocks attack traffic before it hits app servers.\n   IP blocking, WAF rules at proxy level.\n   Backend servers never exposed to internet (only proxy's IP is public).\n\n6. CANARY DEPLOYMENTS:\n   5% of traffic -> new version (Canary)\n   95% of traffic -> old stable version\n   Monitor canary for errors before full rollout.\n   All handled at proxy routing level.\n```\n\n---\n\n## Nginx — The Most Common Reverse Proxy\n\n```nginx\n# nginx as reverse proxy with load balancing\n\nupstream backend_servers {\n    server 10.0.1.10:8080;\n    server 10.0.1.11:8080;\n    server 10.0.1.12:8080;\n    # least_conn;  # least-connections algorithm\n}\n\nserver {\n    listen 443 ssl;\n    server_name myapp.com;\n\n    ssl_certificate /etc/ssl/myapp.crt;   # TLS termination here\n    ssl_certificate_key /etc/ssl/myapp.key;\n\n    # Rate limiting zone\n    limit_req_zone $binary_remote_addr zone=api:10m rate=100r/m;\n\n    location /api/ {\n        limit_req zone=api;                # apply rate limit\n        proxy_pass http://backend_servers; # forward to backends\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;   # pass client IP\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n    }\n\n    location /static/ {\n        root /var/www;                # serve static files directly\n        expires 1y;                   # cache-control header\n        add_header Cache-Control \"public, immutable\";\n    }\n}\n```\n\n---\n\n## Forward Proxy vs Reverse Proxy — Side by Side\n\n```\n+------------------+----------------------+----------------------+\n| Aspect           | Forward Proxy        | Reverse Proxy        |\n+------------------+----------------------+----------------------+\n| Position         | Client side          | Server side          |\n| Configured by    | Client/network admin | Server/DevOps        |\n| Client awareness | Client is configured | Client unaware       |\n|                  | to use it            | (thinks it's server) |\n| Server awareness | Server unaware       | Server unaware       |\n|                  | (sees proxy IP)      | (sees proxy, not client)|\n| Primary uses     | Content filter,      | Load balancing,      |\n|                  | caching, anonymity,  | TLS termination,     |\n|                  | access control       | caching, WAF         |\n| Examples         | Squid, Zscaler, VPN  | Nginx, HAProxy,      |\n|                  |                      | Cloudflare, AWS ALB  |\n+------------------+----------------------+----------------------+\n\nMEMORY TRICK:\n  Forward proxy: client's FRIEND (helps client reach internet)\n  Reverse proxy: server's FRIEND (helps server handle client requests)\n```\n\n---\n\n## Service Mesh — Modern Microservices Proxy\n\n```\nIn microservices, every service-to-service call can benefit from a proxy.\nService Mesh adds a sidecar proxy to every pod/container.\n\n  Service A ──► Sidecar A ──── [network] ──── Sidecar B ──► Service B\n\nSidecar handles:\n  mTLS (mutual TLS between services, zero-trust networking)\n  Retries (with exponential backoff)\n  Circuit breakers (stop calling downstream if it's failing)\n  Load balancing (between service instances)\n  Observability (metrics, traces for every service call)\n\nThe services themselves don't know about TLS, retries, or load balancing.\nThe mesh handles it transparently.\n\nExamples: Istio, Linkerd, Consul Connect, AWS App Mesh\n\nTRADE-OFF: added complexity, latency overhead of extra proxy hop.\nBest for: large microservices with 50+ services where cross-cutting\nconcerns (mTLS, observability, retries) are painful to implement everywhere.\n```\n\n---\n\n## Mind Map\n\n```\nPROXIES\n|\n+-- FORWARD PROXY (client-side)\n|   +-- Client configured to route through proxy\n|   +-- Server sees proxy IP not client\n|   +-- Uses: content filter, caching, VPN/anonymity, egress control\n|   +-- Examples: Squid, Zscaler, VPN\n|\n+-- REVERSE PROXY (server-side)\n|   +-- Client unaware (thinks it's talking to backend)\n|   +-- Uses: load balancing, TLS termination, caching, rate limiting\n|   +-- Canary deployments, WAF\n|   +-- Examples: Nginx, HAProxy, Cloudflare, AWS ALB\n|\n+-- SERVICE MESH\n    +-- Sidecar proxy per service\n    +-- mTLS, retries, circuit breakers, observability\n    +-- Istio, Linkerd\n```\n\n---\n\n## References\n\n### Videos\n- **Proxy vs Reverse Proxy Explained** by ByteByteGo:\n  https://www.youtube.com/watch?v=SqqrOspasag\n  - Visual animation of both types with real examples.\n- **Nginx Tutorial for Beginners** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=iInUBOVeBCc\n  - nginx as reverse proxy, load balancer, TLS termination.\n\n### Articles\n- **Nginx reverse proxy guide**: https://nginx.org/en/docs/http/ngx_http_proxy_module.html\n- **HAProxy documentation**: https://www.haproxy.com/documentation/\n",
   "questions": [
     {
       "id": "px-q1",
       "type": "mcq",
-      "prompt": "Forward proxy vs reverse proxy \u2014 where each sits in the architecture?",
+      "prompt": "Forward proxy vs reverse proxy — where each sits in the architecture?",
       "choices": [
         "Same location",
         "Forward: in front of CLIENTS (client knows about it). Reverse: in front of SERVERS (client is unaware, thinks it's talking to origin)",
@@ -20,7 +20,7 @@
         "Reverse is for UDP only"
       ],
       "answerIndex": 1,
-      "explanation": "Forward proxy represents the client to the internet (anonymity, filtering). Reverse proxy represents the server to the internet (load balancing, SSL, routing) \u2014 fundamental architectural difference.",
+      "explanation": "Forward proxy represents the client to the internet (anonymity, filtering). Reverse proxy represents the server to the internet (load balancing, SSL, routing) — fundamental architectural difference.",
       "tags": [
         "proxies",
         "architecture"
@@ -54,11 +54,311 @@
         "Clients connect with HTTP"
       ],
       "answerIndex": 1,
-      "explanation": "Centralized SSL termination: one certificate to renew, all traffic encrypted externally, backends handle HTTP. For stricter security, re-encrypt proxy\u2192backend (mTLS). Common in AWS ALB + ECS architectures.",
+      "explanation": "Centralized SSL termination: one certificate to renew, all traffic encrypted externally, backends handle HTTP. For stricter security, re-encrypt proxy→backend (mTLS). Common in AWS ALB + ECS architectures.",
       "tags": [
         "proxies",
         "SSL",
         "termination"
+      ]
+    },
+    {
+      "id": "proxy-q4",
+      "type": "mcq",
+      "prompt": "What does a forward proxy do?",
+      "choices": [
+        "Routes traffic from servers to clients",
+        "Acts on behalf of CLIENTS — client routes requests through proxy, server sees proxy IP not client IP. Used for: content filtering, caching, VPN/anonymity",
+        "Balances load across servers",
+        "Terminates TLS"
+      ],
+      "answerIndex": 1,
+      "explanation": "Forward proxy: intercepts client outbound requests. Corporate: all employees route through proxy -> company can filter sites, cache content, log all requests. VPN: your traffic goes to VPN server (forward proxy) -> destination sees VPN IP. Client must be configured to use it.",
+      "tags": [
+        "proxies",
+        "forward-proxy"
+      ]
+    },
+    {
+      "id": "proxy-q5",
+      "type": "mcq",
+      "prompt": "What does a reverse proxy do?",
+      "choices": [
+        "Routes traffic back to clients",
+        "Acts on behalf of SERVERS — sits in front of backends, clients think they're talking directly to the destination. Used for: load balancing, TLS termination, caching",
+        "Encrypts client requests",
+        "DNS resolution"
+      ],
+      "answerIndex": 1,
+      "explanation": "Reverse proxy: client sends request to myapp.com. Actually hits nginx (reverse proxy). Nginx forwards to one of 3 backend servers. Client never knows about backends. Server team controls proxy, not clients. Backend IP/port completely hidden from internet.",
+      "tags": [
+        "proxies",
+        "reverse-proxy"
+      ]
+    },
+    {
+      "id": "proxy-q6",
+      "type": "mcq",
+      "prompt": "What is TLS termination at a reverse proxy?",
+      "choices": [
+        "Blocking TLS connections",
+        "Reverse proxy handles the HTTPS encryption/decryption. Browser speaks HTTPS to proxy. Proxy decrypts, sends plain HTTP to backends. Backends don't need TLS certificates.",
+        "A VPN protocol",
+        "TLS compression"
+      ],
+      "answerIndex": 1,
+      "explanation": "TLS termination: HTTPS to proxy -> proxy decrypts -> HTTP to backends. Benefits: single cert management (proxy), no TLS overhead on app servers (CPU-intensive), backends use faster plain HTTP internally. Backend still in private subnet so plain HTTP is safe.",
+      "tags": [
+        "proxies",
+        "tls",
+        "reverse-proxy"
+      ]
+    },
+    {
+      "id": "proxy-q7",
+      "type": "mcq",
+      "prompt": "What is the X-Forwarded-For header and why is it needed with reverse proxies?",
+      "choices": [
+        "Security authentication header",
+        "Reverse proxy adds original client IP to this header — without it, backend servers see only proxy IP, losing the real client IP for logging/rate limiting",
+        "Cache control header",
+        "Load balancer routing header"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backend sees traffic from proxy IP (10.0.0.1) not client. X-Forwarded-For: 203.0.113.45 = original client IP forwarded by proxy. Backend reads this for: audit logs ('user from IP 203.x clicked...'), rate limiting by real IP, geo-IP lookup, abuse detection.",
+      "tags": [
+        "proxies",
+        "x-forwarded-for",
+        "headers"
+      ]
+    },
+    {
+      "id": "proxy-q8",
+      "type": "mcq",
+      "prompt": "What is the key difference between a forward and reverse proxy?",
+      "choices": [
+        "Forward is faster",
+        "Forward proxy: client-side, client configured to use it, hides client from server. Reverse proxy: server-side, client unaware, hides server from client.",
+        "They are identical",
+        "Reverse proxy is newer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Memory trick: Forward = client's friend (helps client reach internet). Reverse = server's friend (helps server handle clients). Forward: client knows about proxy. Reverse: client thinks proxy IS the server. Both sit in the middle, but from different perspectives.",
+      "tags": [
+        "proxies",
+        "comparison"
+      ]
+    },
+    {
+      "id": "proxy-q9",
+      "type": "mcq",
+      "prompt": "What is a canary deployment using a reverse proxy?",
+      "choices": [
+        "Testing with canary bird metaphor",
+        "Route a small percentage (e.g., 5%) of traffic to new version, 95% to stable. If new version has high errors: stop rollout. If clean: gradually increase.",
+        "Blue-green deployment",
+        "A/B testing for UI"
+      ],
+      "answerIndex": 1,
+      "explanation": "Canary: nginx upstream weight=5 for new version, weight=95 for old. 5 out of 100 requests hit new version. Monitor: error rate, latency, business metrics. If metrics look good: increase to 20%, 50%, 100%. Roll back instantly (update nginx config) if problems. Zero downtime.",
+      "tags": [
+        "proxies",
+        "canary",
+        "deployment"
+      ]
+    },
+    {
+      "id": "proxy-q10",
+      "type": "mcq",
+      "prompt": "What role does Cloudflare play as a proxy?",
+      "choices": [
+        "DNS registrar only",
+        "Reverse proxy and CDN at scale — traffic to myapp.com hits Cloudflare edge first. Cloudflare: DDoS protection, WAF, TLS, caching, load balancing, performance optimization",
+        "A forward proxy",
+        "A VPN service"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cloudflare: when you proxy DNS through Cloudflare, ALL traffic hits Cloudflare edge first. Cloudflare: absorbs DDoS (up to Tbps), applies WAF rules, caches static assets, terminates TLS. Origin server (your server) never exposed to raw internet attacks. Origin IP hidden.",
+      "tags": [
+        "proxies",
+        "cloudflare",
+        "cdn"
+      ]
+    },
+    {
+      "id": "proxy-q11",
+      "type": "mcq",
+      "prompt": "What is a service mesh sidecar proxy?",
+      "choices": [
+        "A proxy running alongside the main process in each pod — handles mTLS, retries, circuit breaking, observability without modifying application code",
+        "A proxy for database connections",
+        "A hardware load balancer",
+        "A database connection pool"
+      ],
+      "answerIndex": 0,
+      "explanation": "Service mesh: inject Envoy/Linkerd proxy as sidecar in every pod. App calls localhost:8080 -> sidecar intercepts, applies mTLS + retries + circuit breaker + traces -> forwards to destination sidecar. App code: zero changes. Cross-cutting concerns handled by mesh.",
+      "tags": [
+        "proxies",
+        "service-mesh",
+        "microservices"
+      ]
+    },
+    {
+      "id": "proxy-q12",
+      "type": "mcq",
+      "prompt": "What is a transparent proxy?",
+      "choices": [
+        "A proxy that is invisible to traffic",
+        "A proxy that intercepts network traffic WITHOUT requiring client configuration — network routes traffic through proxy automatically (common in ISPs and corporate networks)",
+        "A proxy with no caching",
+        "A proxy that doesn't modify requests"
+      ],
+      "answerIndex": 1,
+      "explanation": "Transparent (intercepting) proxy: at network level (NAT rules or BGP), traffic is redirected to proxy. Client: no configuration needed. Proxy: gets traffic it didn't explicitly receive. Used by: ISPs (traffic caching), corporate networks (content filtering without per-machine config), CDNs.",
+      "tags": [
+        "proxies",
+        "transparent"
+      ]
+    },
+    {
+      "id": "proxy-q13",
+      "type": "mcq",
+      "prompt": "HAProxy vs Nginx — when to use each as a reverse proxy?",
+      "choices": [
+        "Always use nginx",
+        "HAProxy: Layer 4 (TCP) and Layer 7 load balancing, extreme performance, wire-speed. Nginx: HTTP reverse proxy, serving static files, SSL termination, flexible config. Both excellent for HTTP.",
+        "HAProxy is deprecated",
+        "Nginx only for static files"
+      ],
+      "answerIndex": 1,
+      "explanation": "HAProxy: pure load balancer/proxy, extremely fast, Layer 4 (non-HTTP protocols like PostgreSQL, Redis proxying), extensive health checking. Nginx: web server + reverse proxy + cache + static files. For HTTP load balancing: both are excellent. HAProxy often marginally faster for pure proxying.",
+      "tags": [
+        "proxies",
+        "nginx",
+        "haproxy"
+      ]
+    },
+    {
+      "id": "proxy-q14",
+      "type": "mcq",
+      "prompt": "What does proxy caching do for API responses?",
+      "choices": [
+        "Caches client-side only",
+        "Reverse proxy stores API response for a TTL. Identical requests within TTL served from cache without hitting backend — 1000 identical API calls = 1 backend call.",
+        "Caches database queries",
+        "Proxy caching requires Redis"
+      ],
+      "answerIndex": 1,
+      "explanation": "nginx proxy_cache: GET /api/products -> response stored for 60s. Next 999 identical requests: served from nginx cache. Backend receives only 1 request per 60s. Massively reduces backend load for read-heavy public APIs (product listings, leaderboards). Only cache: identical, public, GET requests.",
+      "tags": [
+        "proxies",
+        "caching"
+      ]
+    },
+    {
+      "id": "proxy-q15",
+      "type": "mcq",
+      "prompt": "What is connection pooling in a reverse proxy database proxy?",
+      "choices": [
+        "Storing database backups",
+        "Proxy maintains a pool of persistent DB connections. App servers connect to proxy (thousands of connections). Proxy multiplexes onto fewer real DB connections (DB has connection limit).",
+        "Caching query results",
+        "Encrypting DB connections"
+      ],
+      "answerIndex": 1,
+      "explanation": "PgBouncer (PostgreSQL proxy): DB handles 100 connections max. 10 app servers * 100 threads = 1000 DB connections needed. PgBouncer: 1000 app connections -> pool of 50 real DB connections (multiplexed). App servers connect to PgBouncer as if it's PostgreSQL. DB stays healthy.",
+      "tags": [
+        "proxies",
+        "connection-pool",
+        "database"
+      ]
+    },
+    {
+      "id": "proxy-q16",
+      "type": "mcq",
+      "prompt": "What is Envoy proxy and where is it commonly used?",
+      "choices": [
+        "A VPN client",
+        "High-performance proxy/sidecar developed by Lyft — used as the data plane in Istio service mesh, AWS App Mesh. Handles L4/L7 proxying, mTLS, circuit breaking, distributed tracing",
+        "A CDN",
+        "A database proxy"
+      ],
+      "answerIndex": 1,
+      "explanation": "Envoy: C++ proxy, ~1ms overhead per call. Istio uses Envoy sidecars: one per pod. Envoy handles: load balancing, TLS termination, connection pooling, retries, circuit breaking, observability (xDS API). Configured by Istio control plane. The de facto sidecar proxy standard.",
+      "tags": [
+        "proxies",
+        "envoy",
+        "service-mesh"
+      ]
+    },
+    {
+      "id": "proxy-q17",
+      "type": "mcq",
+      "prompt": "What is an API Gateway vs a reverse proxy?",
+      "choices": [
+        "They are identical",
+        "API Gateway: reverse proxy with additional features — authentication, authorization, rate limiting, API key management, request/response transformation, developer portal. Reverse proxy: simpler forwarding.",
+        "API Gateway is client-side",
+        "Reverse proxy does authentication"
+      ],
+      "answerIndex": 1,
+      "explanation": "Reverse proxy: forward request to backend. API Gateway (Kong, AWS API Gateway, nginx + plugins): authenticate JWT, check API keys, rate limit by user/plan, transform request (add headers, modify body), route to microservices, provide developer docs. Purpose-built for API management.",
+      "tags": [
+        "proxies",
+        "api-gateway"
+      ]
+    },
+    {
+      "id": "proxy-q18",
+      "type": "mcq",
+      "prompt": "What is the security benefit of a reverse proxy for backend servers?",
+      "choices": [
+        "Backend servers become faster",
+        "Backend server IP and port never exposed to internet. Only proxy IP is public. Attacker cannot directly connect to backend. DDoS hits proxy (which can absorb it), not the application server.",
+        "Reverse proxy adds authentication",
+        "Removes need for firewall"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backend in private subnet + reverse proxy in public subnet: attacker knows myapp.com IP = proxy IP. Backend IP: unknown, unreachable. Direct attack on DB port: impossible (proxy doesn't forward to DB). DDoS the app: absorbed by proxy/CDN/WAF. Backend handles only valid forwarded traffic.",
+      "tags": [
+        "proxies",
+        "security",
+        "backend"
+      ]
+    },
+    {
+      "id": "proxy-q19",
+      "type": "mcq",
+      "prompt": "What is CONNECT method in HTTP and how is it related to forward proxies?",
+      "choices": [
+        "A REST API method",
+        "HTTP CONNECT: client asks forward proxy to establish a TCP tunnel to a destination. Used for HTTPS through HTTP proxy — proxy tunnels encrypted traffic without decrypting it.",
+        "A WebSocket handshake",
+        "A gRPC method"
+      ],
+      "answerIndex": 1,
+      "explanation": "CONNECT example: client sends 'CONNECT google.com:443 HTTP/1.1' to proxy. Proxy opens TCP to google.com:443, sends '200 Connection established'. Now client speaks directly to Google through the TCP tunnel (encrypted). Proxy can't inspect HTTPS content via CONNECT (just tunneling bytes).",
+      "tags": [
+        "proxies",
+        "http-connect",
+        "tunnel"
+      ]
+    },
+    {
+      "id": "proxy-q20",
+      "type": "mcq",
+      "prompt": "What is mTLS (mutual TLS) in a service mesh context?",
+      "choices": [
+        "A faster version of TLS",
+        "Both sides authenticate with certificates — service A proves to service B that it is who it claims (not just server proving identity to client). Zero-trust networking between microservices.",
+        "Multiple TLS certificates",
+        "Load balancing with TLS"
+      ],
+      "answerIndex": 1,
+      "explanation": "Standard TLS: server proves identity (certificate), client trusts. mTLS: BOTH prove identity. Service A has cert issued by internal CA. Service B has cert. On connection: both verify each other's cert. Sidecar proxy automated cert rotation. Even if internal network is compromised: only verified services can talk to each other.",
+      "tags": [
+        "proxies",
+        "mtls",
+        "zero-trust"
       ]
     }
   ],
@@ -86,6 +386,51 @@
       "tags": [
         "proxies",
         "headers"
+      ]
+    },
+    {
+      "id": "proxy-fc4",
+      "front": "Forward vs reverse proxy memory trick",
+      "back": "Forward proxy: CLIENT's friend. Client configured to use it. Hides client from server. Use: content filter, VPN, anonymous browsing. Reverse proxy: SERVER's friend. Client unaware. Hides server from client. Use: load balancing, TLS, caching, WAF.",
+      "tags": [
+        "proxies",
+        "comparison"
+      ]
+    },
+    {
+      "id": "proxy-fc5",
+      "front": "Reverse proxy capabilities",
+      "back": "Load balancing (round-robin/least-conn). TLS termination (cert at proxy, plain HTTP to backends). Response caching. Compression. Rate limiting. WAF/security rules. Canary routing (% traffic to new version). Single entry point hides all backends.",
+      "tags": [
+        "proxies",
+        "reverse-proxy"
+      ]
+    },
+    {
+      "id": "proxy-fc6",
+      "front": "X-Forwarded-For header",
+      "back": "Without: backend sees proxy IP for all requests (can't log real users, can't rate-limit by real IP). With X-Forwarded-For: proxy adds client real IP in header. Backend reads header for logging, geolocation, rate limiting. Also: X-Real-IP, Forwarded (RFC 7239 standard).",
+      "tags": [
+        "proxies",
+        "x-forwarded-for"
+      ]
+    },
+    {
+      "id": "proxy-fc7",
+      "front": "Service mesh vs reverse proxy",
+      "back": "Reverse proxy: external traffic to backend. Service mesh: service-to-service internal traffic. Sidecar per pod. Auto mTLS, retries, circuit breaking, distributed tracing. Istio/Linkerd. Use for 50+ microservices where cross-cutting concerns need consistency.",
+      "tags": [
+        "proxies",
+        "service-mesh"
+      ]
+    },
+    {
+      "id": "proxy-fc8",
+      "front": "Nginx reverse proxy config pattern",
+      "back": "upstream block: list backend servers. location block: proxy_pass to upstream. proxy_set_header X-Real-IP, X-Forwarded-For. limit_req for rate limiting. ssl_certificate for TLS termination. Static files served directly (no proxy). Cache with proxy_cache.",
+      "tags": [
+        "proxies",
+        "nginx"
       ]
     }
   ],

@@ -8,12 +8,12 @@
     "git-fundamentals",
     "docker"
   ],
-  "guide": "# CI/CD Pipelines\n\nCI/CD (Continuous Integration / Continuous Delivery/Deployment) automates the process of building, testing, and deploying software.\n\n## CI vs CD vs CD\n\n```\nContinuous Integration:\n  Every commit \u2192 automated build + test\n  Goal: catch bugs early, merge frequently, never have broken main branch\n\nContinuous Delivery:\n  Every passing commit \u2192 packaged, ready to deploy at any time\n  Deployment triggered manually by team\n\nContinuous Deployment:\n  Every passing commit \u2192 automatically deployed to production\n  No human gate \u2014 requires high test coverage and feature flags\n```\n\n## A Typical Pipeline\n\n```\nPush to feature branch:\n  \u251c\u2500\u2500 Install dependencies\n  \u251c\u2500\u2500 Lint (ESLint, Prettier)\n  \u251c\u2500\u2500 Unit tests (Jest, JUnit)\n  \u251c\u2500\u2500 Integration tests\n  \u2514\u2500\u2500 Build artifact / Docker image\n\nMerge to main:\n  \u251c\u2500\u2500 All above +\n  \u251c\u2500\u2500 Security scan (Snyk, Trivy)\n  \u251c\u2500\u2500 Docker build + push to registry\n  \u251c\u2500\u2500 Deploy to staging\n  \u2514\u2500\u2500 E2E tests on staging\n\nTag / release:\n  \u2514\u2500\u2500 Deploy to production (auto or manual gate)\n```\n\n## GitHub Actions Example\n\n```yaml\n# .github/workflows/ci.yml\nname: CI/CD\non:\n  push:\n    branches: [main, 'feature/**']\n  pull_request:\n    branches: [main]\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with: { node-version: '20' }\n      - run: npm ci\n      - run: npm run lint\n      - run: npm test -- --coverage\n      - uses: codecov/codecov-action@v4\n\n  build-and-push:\n    needs: test\n    runs-on: ubuntu-latest\n    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v4\n      - uses: docker/login-action@v3\n        with:\n          registry: ghcr.io\n          username: ${{ github.actor }}\n          password: ${{ secrets.GITHUB_TOKEN }}\n      - uses: docker/build-push-action@v5\n        with:\n          push: true\n          tags: ghcr.io/myorg/myapp:${{ github.sha }}\n\n  deploy-staging:\n    needs: build-and-push\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          kubectl set image deployment/api api=ghcr.io/myorg/myapp:${{ github.sha }}\n```\n\n## Feature Flags and Progressive Delivery\n\n```\nFeature flags decouple deployment from release:\n  Deploy code \u2192 feature off by default\n  Turn on for 1% of users \u2192 10% \u2192 50% \u2192 100%\n\nTools: LaunchDarkly, Unleash, OpenFeature\n\nProgressive delivery:\n  Canary: new version for 5% of traffic \u2192 monitor error rate \u2192 promote\n  Blue/Green: two environments, switch DNS \u2192 instant rollback\n  Shadow: copy of traffic to new version but discard responses \u2192 validate\n```\n\n## Common Pitfalls\n- **Slow pipelines** \u2014 slow CI kills developer flow. Target < 10 min for PR validation. Parallelize, cache dependencies.\n- **No test gates** \u2014 deploying without tests defeats CI. Minimum: unit tests, lint, security scan.\n- **Secrets in code** \u2014 never commit secrets. Use secrets management (GitHub Secrets, Vault, AWS SM). Rotate on exposure.\n- **No rollback strategy** \u2014 always define how to roll back. For K8s: `kubectl rollout undo deployment/api`.\n",
+  "guide": "# CI/CD Pipelines\n\n## What Is CI/CD? (Start From Zero)\n\nImagine baking a cake. The old way: bake the whole thing, put it in the oven for an hour,\ndiscover you forgot sugar — throw it away and start over. The new way: taste the batter\nat every step, catch mistakes early, ship a perfect cake every time.\n\nCI/CD does that for software. Without it, developers work in isolation for weeks,\nmerge everything at once, and spend days fixing conflicts and broken builds.\nWith CI/CD, every small change is automatically built, tested, and deployed —\ncatching problems within minutes, not weeks.\n\n**CI = Continuous Integration**\nEvery time a developer pushes code, an automated system:\n1. Pulls the latest code\n2. Builds it (compiles, packages)\n3. Runs all tests\n4. Reports pass/fail back to the developer in minutes\n\n**CD = Continuous Delivery / Continuous Deployment**\n- **Continuous Delivery**: code is ALWAYS in a deployable state. Deploy to production is a manual button click.\n- **Continuous Deployment**: every passing commit is AUTOMATICALLY deployed to production. No human click needed.\n\n```\nDeveloper pushes code\n        |\n        v\n  CI Server picks it up\n        |\n        v\n  Build (compile, package)\n        |\n        v\n  Run Tests (unit, integration, security scan)\n        |\n   Pass? |  Fail?\n        |         \\\n        v          v\n  Deploy to      Notify developer\n  Staging env    (email/Slack)\n        |\n        v\n  Run smoke tests\n        |\n        v\n  Deploy to Production\n  (auto or manual click)\n```\n\n---\n\n## CI vs CD vs CD — Clarified\n\n```\n+---------------------+---------------------------------------------------+\n| Term                | What it means                                     |\n+---------------------+---------------------------------------------------+\n| Continuous          | Merge small changes often (not once a month).     |\n| Integration (CI)    | Every merge triggers build + tests automatically. |\n+---------------------+---------------------------------------------------+\n| Continuous          | The pipeline always produces a deployable         |\n| Delivery (CD)       | artifact. Deployment to prod = manual trigger.    |\n+---------------------+---------------------------------------------------+\n| Continuous          | Every passing build is deployed to production     |\n| Deployment (CD)     | automatically. No human in the loop.              |\n+---------------------+---------------------------------------------------+\n\nMost companies use Continuous Delivery (manual prod deploy).\nHigh-trust orgs (Netflix, Amazon) use Continuous Deployment.\n```\n\n---\n\n## The Pipeline — Stage by Stage\n\nA pipeline is a series of automated stages. Each stage must pass before the next runs.\n\n```\nSTAGE 1: SOURCE\n  Developer pushes to feature/my-feature branch\n  Opens Pull Request -> pipeline triggers\n\nSTAGE 2: BUILD\n  Pull source code\n  Run: mvn package / npm run build / gradle build\n  Output: .jar / .war / Docker image\n  Fail here? -> build error (typo, missing import)\n\nSTAGE 3: UNIT TESTS\n  Run: mvn test / npm test\n  Fast: thousands of tests in seconds\n  Fail here? -> logic bug, regression\n\nSTAGE 4: STATIC ANALYSIS\n  Run: SonarQube / ESLint / Checkstyle\n  Checks: code quality, security vulnerabilities, style\n  Fail here? -> code smell, known CVE in dependency\n\nSTAGE 5: BUILD DOCKER IMAGE\n  docker build -t myapp:${GIT_SHA} .\n  docker push registry/myapp:${GIT_SHA}\n  Tag with git commit SHA for traceability\n\nSTAGE 6: DEPLOY TO STAGING\n  kubectl set image deployment/myapp myapp=registry/myapp:${GIT_SHA}\n  Wait for rollout to complete\n\nSTAGE 7: INTEGRATION / E2E TESTS\n  Run against staging environment\n  Slower: tests real API calls, DB operations\n  Fail here? -> service interaction bug\n\nSTAGE 8: DEPLOY TO PRODUCTION\n  Auto (Continuous Deployment) or manual approve button (Continuous Delivery)\n  Deployment strategy: rolling / blue-green / canary\n\nSTAGE 9: POST-DEPLOY VERIFICATION\n  Smoke tests, health checks, error rate monitoring\n  Automatic rollback if error rate spikes\n```\n\n---\n\n## Popular CI/CD Tools\n\n```\n+------------------+--------------------------------------------------+\n| Tool             | What it is                                       |\n+------------------+--------------------------------------------------+\n| GitHub Actions   | Built into GitHub. YAML files in .github/        |\n|                  | workflows/. Free for public repos.               |\n+------------------+--------------------------------------------------+\n| GitLab CI/CD     | Built into GitLab. .gitlab-ci.yml in root.       |\n|                  | Powerful for self-hosted setups.                 |\n+------------------+--------------------------------------------------+\n| Jenkins          | Open-source, self-hosted. Very flexible,         |\n|                  | needs lots of config. Older but widely used.     |\n+------------------+--------------------------------------------------+\n| CircleCI         | Cloud-based. Fast parallel jobs.                 |\n+------------------+--------------------------------------------------+\n| AWS CodePipeline | Managed by AWS. Integrates with ECR, ECS, EKS.  |\n+------------------+--------------------------------------------------+\n| ArgoCD           | GitOps tool for Kubernetes. Watches git repo,    |\n|                  | auto-syncs K8s cluster state.                    |\n+------------------+--------------------------------------------------+\n```\n\n---\n\n## GitHub Actions — A Real Example\n\nGitHub Actions is the most common starting point. Pipelines are YAML files\nstored in `.github/workflows/` in your repo.\n\n```yaml\n# .github/workflows/ci.yml\nname: CI/CD Pipeline\n\non:\n  push:\n    branches: [main, 'feature/**']  # trigger on push to main or feature branches\n  pull_request:\n    branches: [main]                # trigger on PRs to main\n\njobs:\n  build-and-test:\n    runs-on: ubuntu-latest           # fresh Linux VM for each run\n\n    steps:\n      - name: Checkout code\n        uses: actions/checkout@v4    # clone the repo\n\n      - name: Set up Java 17\n        uses: actions/setup-java@v4\n        with:\n          java-version: '17'\n          distribution: 'temurin'\n\n      - name: Build with Maven\n        run: mvn -B package -DskipTests\n\n      - name: Run tests\n        run: mvn -B test\n\n      - name: Build Docker image\n        run: |\n          docker build -t myapp:${{ github.sha }} .\n          echo \"IMAGE_TAG=${{ github.sha }}\" >> $GITHUB_ENV\n\n  deploy-staging:\n    runs-on: ubuntu-latest\n    needs: build-and-test           # only runs if build-and-test passes\n    if: github.ref == 'refs/heads/main'  # only on main branch\n\n    steps:\n      - name: Deploy to staging\n        run: |\n          kubectl set image deployment/myapp \\\n            myapp=registry/myapp:${{ github.sha }}\n\n  deploy-production:\n    runs-on: ubuntu-latest\n    needs: deploy-staging\n    environment: production         # requires manual approval in GitHub UI\n\n    steps:\n      - name: Deploy to production\n        run: |\n          kubectl set image deployment/myapp \\\n            myapp=registry/myapp:${{ github.sha }}\n```\n\n**Key concepts in the YAML:**\n- `on:` — what triggers the pipeline (push, PR, schedule, manual)\n- `jobs:` — parallel or sequential units of work\n- `steps:` — individual commands within a job\n- `needs:` — job dependency (deploy only if build passed)\n- `environment: production` — requires manual approval gate\n- `github.sha` — the git commit hash, used to tag Docker images for traceability\n\n---\n\n## Deployment Strategies\n\nHow you deploy new versions matters. Different strategies trade off risk vs speed.\n\n```\nROLLING DEPLOYMENT (default in Kubernetes):\n  Replace old pods one by one with new ones.\n  At any moment, mix of old and new running.\n  Zero downtime. Rollback = kubectl rollout undo.\n\n  v1 v1 v1  ->  v1 v1 v2  ->  v1 v2 v2  ->  v2 v2 v2\n\nBLUE-GREEN DEPLOYMENT:\n  Run two identical environments: Blue (current) and Green (new).\n  Deploy new version to Green. Run full tests.\n  Switch load balancer from Blue to Green instantly.\n  Instant rollback: flip load balancer back to Blue.\n\n  Load Balancer ---> Blue (v1) [active]\n                 --> Green (v2) [idle, being tested]\n  Switch:\n  Load Balancer ---> Green (v2) [now active]\n                 --> Blue (v1) [idle, ready as rollback]\n\nCANARY DEPLOYMENT:\n  Send small % of traffic to new version. Observe metrics.\n  Gradually increase if healthy. Roll back if errors spike.\n\n  All users ---> v1  (95% traffic)\n            +--> v2  (5% traffic = 'canary')\n  If v2 metrics OK after 30 min:\n  All users ---> v1  (50%)\n            +--> v2  (50%)\n  ...continue until 100%\n\nRECREATE (simplest, has downtime):\n  Stop all v1 pods. Start all v2 pods.\n  Downtime = time between stop and start.\n  Only for non-critical, off-hours deployments.\n```\n\n---\n\n## Feature Flags\n\nFeature flags let you deploy code to production but keep it hidden behind a toggle.\nDeploy the code first, then enable the feature when ready — no new deployment needed.\n\n```\n// Code with feature flag\nif (featureFlags.isEnabled('new-checkout-flow', userId)) {\n    renderNewCheckout();\n} else {\n    renderOldCheckout();\n}\n\nBenefits:\n  - Deploy code without releasing features (decouple deploy from release)\n  - Enable for 1% of users first (like canary, but at code level)\n  - Instant kill switch: turn off broken feature in seconds\n  - A/B test: enable for group A, keep old for group B\n  - Enable for internal users first, then gradual rollout\n\nTools: LaunchDarkly, AWS AppConfig, Unleash (open-source)\n```\n\n---\n\n## Artifacts and Image Registries\n\n```\nArtifact = the output of a build stage\n  Java: .jar or .war file\n  Node: bundled JS files\n  Docker: container image\n\nImage Registry = storage for Docker images\n  Docker Hub:     public registry (free for public images)\n  AWS ECR:        Amazon's private registry\n  GitHub CR:      ghcr.io — integrated with GitHub\n  GitLab Registry: built into GitLab\n\nBest practice: tag images with git commit SHA\n  myapp:latest              <- BAD: always moving, non-reproducible\n  myapp:a1b2c3d             <- GOOD: exact commit, reproducible\n  myapp:v1.2.3              <- GOOD: semantic version\n  myapp:main-20260428-a1b2  <- GOOD: branch + date + SHA\n\nWhy SHA tag? You can trace any running container back to\nthe exact git commit that produced it.\n```\n\n---\n\n## Secrets in CI/CD\n\nPipelines need secrets: Docker registry credentials, K8s tokens, AWS keys.\nNEVER hardcode them in YAML files.\n\n```\nGitHub Actions: store in Settings -> Secrets and Variables -> Actions\n  Access in YAML: ${{ secrets.DOCKER_PASSWORD }}\n\nGitLab CI: Settings -> CI/CD -> Variables\n  Access in YAML: $DOCKER_PASSWORD\n\nJenkins: Credentials Manager plugin\n  Reference in Jenkinsfile: credentials('my-docker-creds')\n\nRule: secrets should NEVER appear in pipeline logs.\nCI tools auto-mask registered secrets.\nUse separate credentials per environment (staging creds != prod creds).\n```\n\n---\n\n## GitOps — The Modern Approach\n\n```\nTraditional CI/CD:                 GitOps:\n  Pipeline runs kubectl apply        Git repo = source of truth\n  Pipeline has cluster access        ArgoCD/Flux watches the repo\n  Manual cloud credentials           Detects drift, auto-syncs\n  Hard to audit changes              Every change = git commit\n                                     Full audit trail\n                                     Rollback = git revert\n\nGitOps flow:\n  Developer merges PR\n       |\n       v\n  CI pipeline builds + pushes image\n       |\n       v\n  Updates image tag in k8s manifests repo (separate git repo)\n       |\n       v\n  ArgoCD detects git change\n       |\n       v\n  ArgoCD syncs cluster to match git state\n```\n\n---\n\n## Mind Map\n\n```\nCI/CD PIPELINES\n|\n+-- CONCEPTS\n|   +-- CI = build + test on every push\n|   +-- Continuous Delivery = always deployable, manual prod\n|   +-- Continuous Deployment = auto deploy to prod\n|\n+-- PIPELINE STAGES\n|   +-- Source (git trigger)\n|   +-- Build (compile/package)\n|   +-- Test (unit -> integration -> E2E)\n|   +-- Security scan\n|   +-- Build Docker image\n|   +-- Deploy staging\n|   +-- Deploy production\n|\n+-- DEPLOYMENT STRATEGIES\n|   +-- Rolling (gradual, default K8s)\n|   +-- Blue-Green (instant switch, easy rollback)\n|   +-- Canary (% traffic to new version)\n|   +-- Recreate (downtime, avoid in prod)\n|\n+-- TOOLS\n|   +-- GitHub Actions (.github/workflows/*.yml)\n|   +-- GitLab CI (.gitlab-ci.yml)\n|   +-- Jenkins (Jenkinsfile)\n|   +-- ArgoCD (GitOps for K8s)\n|\n+-- BEST PRACTICES\n    +-- Tag images with git SHA\n    +-- Secrets via vault/CI secrets, never in YAML\n    +-- Fail fast: put fastest tests first\n    +-- Feature flags for safe rollouts\n```\n\n---\n\n## How CI/CD Connects to Other Topics\n\n- **Git**: Every pipeline is triggered by a git event (push, merge). Your branching\n  strategy (GitHub Flow) directly shapes your pipeline design.\n- **Docker**: Pipelines build Docker images and push them to registries.\n- **Kubernetes**: Pipelines deploy to K8s clusters via kubectl or ArgoCD.\n- **Linux**: Pipeline steps run bash scripts on Linux runners.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Secrets in YAML files** — anyone who reads the pipeline file sees your AWS key.\n2. **Too many manual steps** — the value of CI/CD comes from automation. Manual = slow.\n3. **No staging environment** — deploying untested code straight to production.\n4. **Monolithic pipeline** — one giant job. Split into parallel jobs for speed.\n5. **Not pinning Action versions** — `uses: actions/checkout@main` can change unexpectedly. Pin: `@v4`.\n6. **Slow tests blocking pipeline** — run unit tests first (fast), integration tests last (slow). Fail fast.\n7. **Using `latest` image tag** — makes deployments non-reproducible. Use git SHA.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **GitHub Actions Tutorial - Basic Concepts and CI/CD Pipeline** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=R8_veQiYBjI\n  - 32 minutes. Clear GitHub Actions walkthrough from scratch.\n- **CI/CD Explained in 100 Seconds** by Fireship:\n  https://www.youtube.com/watch?v=scEDHsr3APg\n  - 2 minutes. Perfect high-level overview.\n\n### Free Books and Articles\n- **GitHub Actions official docs**: https://docs.github.com/en/actions\n  - 'Quickstart for GitHub Actions' is the best starting point.\n- **Google's DevOps Research (DORA metrics)**: https://dora.dev/\n  - The research behind why CI/CD matters. Understand deploy frequency and lead time.\n\n### Diagrams and Cheatsheets\n- **GitHub Actions Cheatsheet**: https://github.github.io/actions-cheat-sheet/actions-cheat-sheet.html\n- **Blue-Green vs Canary diagram**: search 'deployment strategies comparison diagram'\n\n### Practice\n- **GitHub Actions Starter Workflows**: https://github.com/actions/starter-workflows\n  - Official templates for Java, Node, Docker, K8s — start from a working example.\n- **KodeKloud CI/CD with GitHub Actions** (free tier):\n  https://kodekloud.com/courses/github-actions/",
   "questions": [
     {
       "id": "cicd-q1",
       "type": "mcq",
-      "prompt": "Continuous Deployment vs Continuous Delivery \u2014 key difference?",
+      "prompt": "Continuous Deployment vs Continuous Delivery — key difference?",
       "choices": [
         "Same term",
         "Continuous Delivery: pipeline produces ready-to-deploy artifact, deployment is MANUAL decision. Continuous Deployment: passing pipeline automatically deploys to production with no human gate",
@@ -34,12 +34,12 @@
       "prompt": "Feature flags decouple what from what in CI/CD?",
       "choices": [
         "Build from test",
-        "Deployment from release \u2014 code can be merged and deployed with the feature disabled, then gradually enabled for subsets of users. This allows safe continuous deployment without feature risk",
+        "Deployment from release — code can be merged and deployed with the feature disabled, then gradually enabled for subsets of users. This allows safe continuous deployment without feature risk",
         "Docker from Kubernetes",
         "Test from build"
       ],
       "answerIndex": 1,
-      "explanation": "Deploy dark (feature off) \u2192 enable for 1% \u2192 measure error rate \u2192 10% \u2192 100%. If issues: turn off flag instantly without rollback. Features ship to production unfinished; flags control activation.",
+      "explanation": "Deploy dark (feature off) → enable for 1% → measure error rate → 10% → 100%. If issues: turn off flag instantly without rollback. Features ship to production unfinished; flags control activation.",
       "tags": [
         "CI/CD",
         "feature-flags"
@@ -51,7 +51,7 @@
       "prompt": "A canary deployment routes 5% of traffic to the new version. What must you monitor?",
       "choices": [
         "Build time",
-        "Error rate and latency for the canary vs baseline. If canary has higher error rate or latency \u2192 stop rollout automatically. Only if metrics match do you promote to 100%",
+        "Error rate and latency for the canary vs baseline. If canary has higher error rate or latency → stop rollout automatically. Only if metrics match do you promote to 100%",
         "Memory usage of CI runner",
         "Test coverage"
       ],
@@ -62,13 +62,307 @@
         "canary",
         "deployment"
       ]
+    },
+    {
+      "id": "cicd-q4",
+      "type": "mcq",
+      "prompt": "What is the primary purpose of Continuous Integration (CI)?",
+      "choices": [
+        "Automatically deploy to production",
+        "Merge and test code changes automatically on every push, catching bugs early",
+        "Monitor production systems",
+        "Manage cloud infrastructure"
+      ],
+      "answerIndex": 1,
+      "explanation": "CI ensures every code push triggers an automated build and test run. Bugs are caught within minutes of introduction, not discovered weeks later during a big merge.",
+      "tags": [
+        "ci",
+        "pipeline"
+      ]
+    },
+    {
+      "id": "cicd-q5",
+      "type": "mcq",
+      "prompt": "In a GitHub Actions workflow, what does `needs: build-and-test` do on a deploy job?",
+      "choices": [
+        "Runs the deploy job in parallel with build-and-test",
+        "Runs build-and-test after deploy",
+        "Prevents deploy from running unless build-and-test job passed",
+        "Skips build-and-test"
+      ],
+      "answerIndex": 2,
+      "explanation": "needs creates a dependency. The deploy job waits for build-and-test to complete successfully. If build-and-test fails, deploy is skipped entirely.",
+      "tags": [
+        "github-actions",
+        "pipeline"
+      ]
+    },
+    {
+      "id": "cicd-q6",
+      "type": "mcq",
+      "prompt": "What deployment strategy allows instant rollback by switching a load balancer?",
+      "choices": [
+        "Rolling deployment",
+        "Recreate deployment",
+        "Blue-Green deployment",
+        "Canary deployment"
+      ],
+      "answerIndex": 2,
+      "explanation": "Blue-Green keeps two identical environments. Rollback is instant — just flip the load balancer back to the old (Blue) environment. No pod restarts, no downtime.",
+      "tags": [
+        "deployment-strategies",
+        "blue-green"
+      ]
+    },
+    {
+      "id": "cicd-q7",
+      "type": "mcq",
+      "prompt": "A canary deployment sends 5% of traffic to the new version. Why not 100% immediately?",
+      "choices": [
+        "The registry can only handle 5%",
+        "To limit blast radius — if the new version has bugs, only 5% of users are affected while you monitor metrics before full rollout",
+        "Kubernetes requires this",
+        "It is cheaper"
+      ],
+      "answerIndex": 1,
+      "explanation": "Canary limits risk. You observe error rates, latency, and business metrics on the 5% canary. If metrics stay healthy, gradually increase. If they spike, roll back — only 5% of users experienced the bug.",
+      "tags": [
+        "deployment-strategies",
+        "canary"
+      ]
+    },
+    {
+      "id": "cicd-q8",
+      "type": "mcq",
+      "prompt": "Why should Docker images be tagged with the git commit SHA rather than `latest`?",
+      "choices": [
+        "SHA tags are smaller",
+        "latest is not valid in CI",
+        "SHA creates a permanent, traceable link between a running container and the exact code commit that produced it — enabling reproducibility and rollback",
+        "SHA tags deploy faster"
+      ],
+      "answerIndex": 2,
+      "explanation": "myapp:latest changes over time. myapp:a1b2c3d is permanent. You can trace a production issue to the exact commit, reproduce the exact environment, and roll back to a specific previous SHA.",
+      "tags": [
+        "artifacts",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "cicd-q9",
+      "type": "mcq",
+      "prompt": "What is the key difference between Continuous Delivery and Continuous Deployment?",
+      "choices": [
+        "They are the same",
+        "Continuous Delivery deploys automatically; Continuous Deployment requires manual approval",
+        "Continuous Delivery requires manual approval for production; Continuous Deployment deploys automatically on every passing build",
+        "Continuous Deployment only works with Kubernetes"
+      ],
+      "answerIndex": 2,
+      "explanation": "Continuous Delivery: pipeline produces a deployable artifact. Deployment to production needs a human to click approve. Continuous Deployment: no human — every passing build goes straight to production.",
+      "tags": [
+        "cd",
+        "pipeline"
+      ]
+    },
+    {
+      "id": "cicd-q10",
+      "type": "mcq",
+      "prompt": "Where should CI/CD pipeline secrets (Docker credentials, AWS keys) be stored?",
+      "choices": [
+        "In the .yml workflow file (base64 encoded)",
+        "In a .env file committed to git",
+        "In the CI platform's secret store (GitHub Secrets, GitLab Variables, Jenkins Credentials)",
+        "In a README comment"
+      ],
+      "answerIndex": 2,
+      "explanation": "CI platforms have built-in encrypted secret stores. Secrets are injected as environment variables at runtime — never visible in logs or source code. Never commit secrets to git.",
+      "tags": [
+        "security",
+        "secrets"
+      ]
+    },
+    {
+      "id": "cicd-q11",
+      "type": "mcq",
+      "prompt": "What does a feature flag let you do that a standard deployment does not?",
+      "choices": [
+        "Deploy faster",
+        "Deploy code to production without activating the feature — and enable it for specific users/% without redeploying",
+        "Skip testing",
+        "Deploy multiple services at once"
+      ],
+      "answerIndex": 1,
+      "explanation": "Feature flags decouple deploy from release. Code is deployed but hidden. You can enable for 1% of users, monitor, then roll out gradually. Instant kill switch: just toggle off. No new deployment needed.",
+      "tags": [
+        "feature-flags",
+        "deployment"
+      ]
+    },
+    {
+      "id": "cicd-q12",
+      "type": "mcq",
+      "prompt": "In a pipeline, why should unit tests run BEFORE integration tests?",
+      "choices": [
+        "Unit tests are more important",
+        "Unit tests are fast (seconds) and catch logic bugs early — fail fast principle. Integration tests are slow (minutes). No point running slow tests if fast ones already failed.",
+        "Integration tests require unit tests to pass first",
+        "It is a GitLab requirement"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fail fast: run cheapest, fastest checks first. Unit tests run in seconds. If a unit test fails, skip the 10-minute integration test suite. This gives developers faster feedback and saves CI compute time.",
+      "tags": [
+        "pipeline",
+        "testing"
+      ]
+    },
+    {
+      "id": "cicd-q13",
+      "type": "mcq",
+      "prompt": "What is GitOps?",
+      "choices": [
+        "Using git for code reviews only",
+        "A git branching strategy",
+        "A practice where git is the single source of truth for infrastructure state — tools like ArgoCD watch git and auto-sync the cluster to match",
+        "A type of deployment strategy"
+      ],
+      "answerIndex": 2,
+      "explanation": "GitOps: every change to infrastructure goes through a git commit. ArgoCD watches the git repo and makes Kubernetes match it. Full audit trail, rollback = git revert, no manual kubectl from pipelines.",
+      "tags": [
+        "gitops",
+        "kubernetes"
+      ]
+    },
+    {
+      "id": "cicd-q14",
+      "type": "mcq",
+      "prompt": "A rolling deployment and a recreate deployment both deploy a new version. Key difference?",
+      "choices": [
+        "Rolling is faster",
+        "Recreate works only on Kubernetes",
+        "Rolling replaces pods gradually (zero downtime); Recreate stops all old pods then starts new ones (has downtime)",
+        "They are identical"
+      ],
+      "answerIndex": 2,
+      "explanation": "Rolling: at every step some pods serve traffic — no downtime. Recreate: all old pods stop, then new pods start — gap = downtime. Use rolling or blue-green in production.",
+      "tags": [
+        "deployment-strategies",
+        "rolling"
+      ]
+    },
+    {
+      "id": "cicd-q15",
+      "type": "mcq",
+      "prompt": "What is the `environment: production` key in GitHub Actions used for?",
+      "choices": [
+        "Sets environment variables",
+        "Specifies which OS to use",
+        "Creates a manual approval gate — the job waits for a reviewer to approve before running",
+        "Points to a production .env file"
+      ],
+      "answerIndex": 2,
+      "explanation": "GitHub Environments let you require manual reviewers before a job runs. Useful for production deploys: CI auto-deploys to staging, but production requires a human to approve in GitHub UI.",
+      "tags": [
+        "github-actions",
+        "approval"
+      ]
+    },
+    {
+      "id": "cicd-q16",
+      "type": "mcq",
+      "prompt": "What is a pipeline artifact?",
+      "choices": [
+        "A test failure report",
+        "The output of a build stage (compiled .jar, Docker image, test reports) passed to subsequent stages",
+        "A git branch",
+        "A deployment strategy"
+      ],
+      "answerIndex": 1,
+      "explanation": "Artifacts are the build outputs: compiled binaries, Docker images, test coverage reports. They are stored and passed between pipeline stages. The Docker image produced in build is deployed in the deploy stage.",
+      "tags": [
+        "artifacts",
+        "pipeline"
+      ]
+    },
+    {
+      "id": "cicd-q17",
+      "type": "multi",
+      "prompt": "Which are valid triggers for a GitHub Actions workflow? (Select all that apply)",
+      "choices": [
+        "push to a branch",
+        "pull_request opened",
+        "schedule (cron)",
+        "manual workflow_dispatch"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "explanation": "GitHub Actions supports: push (on code push), pull_request (PR events), schedule (cron-like), workflow_dispatch (manual trigger from UI), and many more. All four listed are valid.",
+      "tags": [
+        "github-actions",
+        "triggers"
+      ]
+    },
+    {
+      "id": "cicd-q18",
+      "type": "mcq",
+      "prompt": "What DORA metric measures how often a team deploys to production?",
+      "choices": [
+        "Mean Time to Recovery",
+        "Change Failure Rate",
+        "Lead Time for Changes",
+        "Deployment Frequency"
+      ],
+      "answerIndex": 3,
+      "explanation": "DORA (DevOps Research and Assessment) defines 4 metrics: Deployment Frequency, Lead Time for Changes, Mean Time to Recovery (MTTR), and Change Failure Rate. Deployment Frequency = how often you ship.",
+      "tags": [
+        "dora",
+        "metrics"
+      ]
+    },
+    {
+      "id": "cicd-q19",
+      "type": "mcq",
+      "prompt": "Why should you pin GitHub Action versions (`uses: actions/checkout@v4`) instead of using `@main`?",
+      "choices": [
+        "v4 is faster",
+        "@main is invalid",
+        "@main always uses the newest version which may have breaking changes. @v4 is a locked version — your pipeline is reproducible and safe from unexpected upstream changes.",
+        "It is a git requirement"
+      ],
+      "answerIndex": 2,
+      "explanation": "Third-party actions should be pinned. actions/checkout@main could change any day. @v4 is stable. Better practice: pin to exact SHA (actions/checkout@abc1234) for maximum security.",
+      "tags": [
+        "github-actions",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "cicd-q20",
+      "type": "mcq",
+      "prompt": "What is the blast radius of a bug in continuous deployment vs continuous delivery?",
+      "choices": [
+        "Identical — the bug is in prod either way",
+        "Continuous Deployment can affect all users immediately (auto-deployed). Continuous Delivery gives humans a chance to catch issues before approving the production deploy.",
+        "Continuous Delivery has larger blast radius",
+        "Blast radius depends only on test coverage"
+      ],
+      "answerIndex": 1,
+      "explanation": "With Continuous Deployment, a bug that passes tests reaches all production users automatically. With Continuous Delivery, a human reviews before prod — potential extra safety net. Both still require good test coverage.",
+      "tags": [
+        "cd",
+        "risk"
+      ]
     }
   ],
   "flashcards": [
     {
       "id": "cicd-fc1",
       "front": "CI pipeline stages",
-      "back": "Checkout \u2192 Install \u2192 Lint \u2192 Unit test \u2192 Build \u2192 Security scan \u2192 Push artifact. All on every PR/push. Fast (target <10min). Gates: all must pass before merge.",
+      "back": "Checkout → Install → Lint → Unit test → Build → Security scan → Push artifact. All on every PR/push. Fast (target <10min). Gates: all must pass before merge.",
       "tags": [
         "CI/CD"
       ]
@@ -76,7 +370,7 @@
     {
       "id": "cicd-fc2",
       "front": "Deployment strategies",
-      "back": "Rolling: pods updated one at a time (K8s default, zero downtime). Blue/Green: two envs, switch DNS (instant rollback). Canary: 5%\u219250%\u2192100% with monitoring. Shadow: test with real traffic discarded.",
+      "back": "Rolling: pods updated one at a time (K8s default, zero downtime). Blue/Green: two envs, switch DNS (instant rollback). Canary: 5%→50%→100% with monitoring. Shadow: test with real traffic discarded.",
       "tags": [
         "CI/CD",
         "deployment"
@@ -85,10 +379,52 @@
     {
       "id": "cicd-fc3",
       "front": "Feature flags",
-      "back": "Deploy code disabled \u2192 flag on for subset \u2192 monitor \u2192 promote. Decouples deploy from release. Tools: LaunchDarkly, Unleash. Enables continuous deployment safely.",
+      "back": "Deploy code disabled → flag on for subset → monitor → promote. Decouples deploy from release. Tools: LaunchDarkly, Unleash. Enables continuous deployment safely.",
       "tags": [
         "CI/CD",
         "feature-flags"
+      ]
+    },
+    {
+      "id": "cicd-fc4",
+      "front": "CI pipeline stage order (fail-fast)",
+      "back": "Source -> Build -> Unit Tests (fast) -> Static Analysis -> Build Image -> Deploy Staging -> Integration Tests (slow) -> Deploy Prod. Put fastest checks first to fail fast and save compute.",
+      "tags": [
+        "ci",
+        "pipeline"
+      ]
+    },
+    {
+      "id": "cicd-fc5",
+      "front": "Rolling vs Blue-Green vs Canary",
+      "back": "Rolling: replace pods gradually, zero downtime. Blue-Green: two envs, instant LB switch, easy rollback. Canary: % traffic to new version, gradual increase. Recreate: all-stop then all-start (has downtime, avoid).",
+      "tags": [
+        "deployment-strategies"
+      ]
+    },
+    {
+      "id": "cicd-fc6",
+      "front": "Feature flag vs new deployment",
+      "back": "Feature flag: code in prod but toggled off. Enable per user/% without redeploying. Kill switch in seconds. Deploy = code change. Feature flag = behaviour change. Decouple both.",
+      "tags": [
+        "feature-flags"
+      ]
+    },
+    {
+      "id": "cicd-fc7",
+      "front": "GitOps in one sentence",
+      "back": "Git repo is the source of truth for infrastructure state. ArgoCD/Flux watches git and auto-syncs Kubernetes. Every change is a git commit. Rollback = git revert. Full audit trail.",
+      "tags": [
+        "gitops"
+      ]
+    },
+    {
+      "id": "cicd-fc8",
+      "front": "CI/CD secrets rule",
+      "back": "Store in CI secret store (GitHub Secrets/GitLab Variables). Reference as ${{ secrets.KEY }}. Never in YAML files, never in git. Use separate credentials per environment. CI platforms auto-mask secrets in logs.",
+      "tags": [
+        "security",
+        "secrets"
       ]
     }
   ],

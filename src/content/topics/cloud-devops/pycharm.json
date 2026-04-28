@@ -5,408 +5,417 @@
   "title": "PyCharm Power-Use",
   "summary": "Master PyCharm Power-Use: trade-offs, failure modes, and production patterns.",
   "prereqs": [],
-  "guide": "# PyCharm Power-Use\n\n> **Reading time:** ~15 min\n\n## What is PyCharm Power-Use?\n\nPyCharm Power-Use addresses a core problem in distributed systems.\nUnderstanding WHY it exists is more important than its API.\n\n## Core Trade-offs\n\n- Consistency vs availability\n- Speed vs durability\n- Simplicity vs power\n\n## When to Use\n\nAdd PyCharm Power-Use when the problem it solves is actively costing you at your scale.\n\n## Common Failure Modes\n\n1. Misconfiguration (timeouts, retries)\n2. Cascade failures\n3. Data inconsistency on partial failure\n\n## Mind Map\n\n```\nPyCharm Power-Use\n├── Core abstraction\n├── Configuration options\n├── Failure modes\n└── Monitoring metrics\n```\n\n## Connections\n\nRelated topics: pycharm\n",
+  "guide": "# PyCharm Power-Use\n\n## What Is PyCharm? (Start From Zero)\n\nPyCharm is an IDE (Integrated Development Environment) built by JetBrains specifically\nfor Python development. If you have used VS Code, think of PyCharm as a supercharged\nversion that deeply understands Python — it knows your code structure, catches errors\nbefore you run anything, and automates repetitive tasks.\n\n**You might ask: why not just use VS Code or Notepad?**\n\nWhen you write a single 50-line script, any editor works. But when you work on a\nlarge Python project with hundreds of files, multiple environments, complex dependencies,\nand a team of developers — PyCharm's deep tooling saves hours every day.\n\n```\nEditor:                              PyCharm:\n  You type code                        Auto-completes as you type\n  You run it to find mistakes          Red underlines before you run\n  You manually search for a method     Ctrl+click goes to definition instantly\n  You read docs in a browser           Docs appear in-editor on hover\n  You manually run tests               Run all tests with one click, see results\n  You switch Python versions manually  Manage environments in Settings\n```\n\n---\n\n## Setting Up PyCharm for the First Time\n\n```\nDownload: https://www.jetbrains.com/pycharm/\n  Community Edition: free, everything covered in this guide\n  Professional Edition: paid, adds Django/Flask support, remote dev, DB tools\n  Students: free Professional licence via JetBrains Student Pack\n\nFirst-time setup checklist:\n  1. Open PyCharm, click 'New Project'\n  2. Set the project location (folder)\n  3. Under Python Interpreter: choose 'New Virtualenv Environment'\n     - This creates an isolated Python environment just for this project\n     - Libraries installed here don't affect other projects\n  4. Click Create\n  5. PyCharm creates: your project folder + venv/ subfolder\n\nEvery Python project should have its OWN virtual environment.\nNever install everything into the system Python.\n```\n\n---\n\n## Virtual Environments — Why They Matter\n\n```\nProblem: Project A needs Django 3.2. Project B needs Django 4.2.\nWithout venv: install both? Python can only have one version installed globally.\nResult: one project breaks.\n\nSolution: Virtual environments\n  Project A: venv/ -> Django 3.2, requests 2.28\n  Project B: venv/ -> Django 4.2, requests 2.31\n  Each project is completely isolated.\n\nIn PyCharm:\n  Settings -> Project -> Python Interpreter\n  Click gear icon -> Add Interpreter\n  Choose: Virtualenv (local), Conda, or system\n\nFrom terminal in PyCharm:\n  python -m venv venv        # create virtual environment\n  source venv/bin/activate   # activate (Mac/Linux)\n  venv\\Scripts\\activate    # activate (Windows)\n  pip install requests       # installs into THIS venv only\n  pip freeze > requirements.txt  # record exact versions\n  pip install -r requirements.txt  # recreate on another machine\n```\n\n---\n\n## The Most Important Keyboard Shortcuts\n\nMemorising these shortcuts turns PyCharm from a fancy text editor into a superpower.\n\n```\nNAVIGATION (finding things fast):\n  Shift+Shift           Search Everywhere — file, class, action, setting\n  Ctrl+N  (Cmd+O)       Go to Class by name\n  Ctrl+Shift+N          Go to File by name\n  Ctrl+Click            Go to Definition — jump to where method/class is defined\n  Ctrl+Alt+←/→          Navigate back/forward (like browser history)\n  Ctrl+E                Recent files popup\n  Alt+F7                Find all usages of selected symbol\n  Ctrl+F12              File structure popup — see all methods in current file\n\nCODE EDITING:\n  Ctrl+Space            Code completion\n  Ctrl+Shift+Space      Smart completion (context-aware)\n  Alt+Enter             Show quick fixes (fix import, create method, suppress warning)\n  Ctrl+D                Duplicate line\n  Ctrl+Y                Delete line\n  Ctrl+/                Comment/uncomment line\n  Ctrl+Shift+/          Block comment\n  Tab / Shift+Tab       Indent / Unindent selection\n  Ctrl+Shift+F          Reformat code (apply PEP 8 style)\n  Ctrl+Alt+L  (Cmd+Opt+L)  Reformat file\n\nREFACTORING:\n  Shift+F6              Rename — renames ALL usages simultaneously\n  Ctrl+Alt+M            Extract Method — turn selection into a function\n  Ctrl+Alt+V            Extract Variable\n  Ctrl+Alt+C            Extract Constant\n  F6                    Move file/class to different module\n\nRUNNING & DEBUGGING:\n  Shift+F10             Run current configuration\n  Shift+F9              Debug current configuration\n  Ctrl+F2               Stop running process\n  F8                    Step over (debugger)\n  F7                    Step into (debugger)\n  Shift+F8              Step out (debugger)\n  F9                    Resume program (debugger)\n\nSEARCH:\n  Ctrl+F                Find in file\n  Ctrl+R                Find and replace in file\n  Ctrl+Shift+F          Find in project (all files)\n  Ctrl+Shift+R          Replace in project\n```\n\n---\n\n## Code Completion and Smart Suggestions\n\n```\nBasic completion (Ctrl+Space):\n  Type 're' -> PyCharm suggests: requests, re, read, readline...\n  Type 'my_list.' -> suggests: append, extend, pop, sort, reverse...\n\nSmart completion (Ctrl+Shift+Space):\n  Knows the TYPE of what you are typing.\n  If function expects a str, only shows string variables.\n\nPostfix completion:\n  Type: my_list.for  then press Tab\n  Result: for item in my_list:\n              ...\n\n  Type: condition.if  then Tab\n  Result: if condition:\n              ...\n\n  Type: 'hello'.len  then Tab\n  Result: len('hello')\n\nLive Templates (code snippets):\n  Type 'iter' + Tab -> for item in collection: ...\n  Type 'main' + Tab -> if __name__ == '__main__': ...\n  Type 'def' + Tab  -> def function_name(params): ...\n  Settings -> Editor -> Live Templates to see and add your own\n```\n\n---\n\n## The Debugger — Step Through Your Code\n\nThe debugger is one of the biggest productivity gains. Instead of adding `print()`\nstatements everywhere, you pause execution and inspect everything.\n\n```\nHOW TO DEBUG:\n  1. Click in the gutter (left margin) next to a line number\n     A RED DOT appears — this is a BREAKPOINT\n  2. Press Shift+F9 (Debug) instead of Shift+F10 (Run)\n  3. Program pauses at the breakpoint\n  4. In the Debug panel you see:\n     - Variables: current values of ALL variables in scope\n     - Call stack: how you got here (which functions called which)\n  5. Navigate:\n     F8 = Step Over   (go to next line, don't enter calls)\n     F7 = Step Into   (go inside the function being called)\n     F9 = Resume      (run until next breakpoint)\n\nEVALUATE EXPRESSION (most powerful feature):\n  While paused, press Alt+F8\n  Type any Python expression and see its value RIGHT NOW\n  e.g.: len(my_list), my_dict.get('key'), type(obj)\n  No need to restart or add print statements\n\nWATCHES:\n  In Variables panel, click + to add a watch expression\n  PyCharm evaluates it continuously as you step through\n\nCONDITIONAL BREAKPOINTS:\n  Right-click a breakpoint -> Edit\n  Add condition: only pause when count > 100\n  Useful in loops where you only care about specific iterations\n```\n\n---\n\n## Integrated Terminal and Run Configurations\n\n```\nTERMINAL (Alt+F12 or View -> Tool Windows -> Terminal):\n  Opens a terminal inside PyCharm\n  Automatically activates your project's virtualenv\n  Run: pip install, git commands, scripts\n\nRUN CONFIGURATIONS:\n  A saved set of 'how to run this program'\n  Top right dropdown -> Edit Configurations\n\n  Add configuration:\n    Script path: path to your main.py\n    Parameters: command-line arguments\n    Environment variables: DB_URL=..., DEBUG=True\n    Working directory: where to run from\n\n  Why save configurations?\n  - Run the same script with one button\n  - Different configs for dev/test/prod\n  - Set env vars without modifying code\n  - Share via .run/ folder in git (optional)\n```\n\n---\n\n## Refactoring Tools\n\n```\nRENAME (Shift+F6) — the most-used refactoring:\n  Place cursor on variable/function/class name\n  Press Shift+F6\n  Type new name -> Enter\n  PyCharm renames EVERY occurrence in the ENTIRE project\n  Including string references and comments (optional)\n  This is safe: PyCharm understands the code, not just text\n\nEXTRACT METHOD (Ctrl+Alt+M):\n  Select a block of code\n  Press Ctrl+Alt+M\n  Name the new function\n  PyCharm creates the function, moves the code, adds the call\n  Parameters are inferred from used variables\n\nEXTRACT VARIABLE (Ctrl+Alt+V):\n  Select an expression: len(my_list) * 2\n  Press Ctrl+Alt+V\n  Name it: doubled_length\n  Code becomes: doubled_length = len(my_list) * 2\n  All occurrences of that expression are replaced\n\nMOVE (F6):\n  Move a class/function to a different file/module\n  All imports are updated automatically\n```\n\n---\n\n## Code Inspections and Quick Fixes\n\n```\nPyCharm continuously analyses your code and shows problems:\n\nRed underline:     Error — code will not run (undefined name, syntax error)\nYellow underline:  Warning — potential issue (unused import, shadowed variable)\nGreen underline:   Weak warning — style suggestion\n\nQuick Fix (Alt+Enter on any underlined code):\n  Missing import -> 'Import requests'\n  Undefined method -> 'Create method'\n  Wrong type -> type annotation suggestion\n  Long line -> 'Split string'\n  Unused variable -> 'Rename to _'\n\nThe inspection marker in the top-right gutter shows overall file health.\nGreen check = no issues. Yellow = warnings. Red = errors.\n\nRun inspections on whole project:\n  Analyze -> Inspect Code\n  See all issues across ALL files at once\n```\n\n---\n\n## Testing with PyTest in PyCharm\n\n```\nSETUP:\n  Settings -> Tools -> Python Integrated Tools\n  Default test runner: pytest\n\nRUNNING TESTS:\n  Green run icon next to test function/class/file\n  Click to run that specific test\n  Ctrl+Shift+F10 = run tests in current file\n  Run -> Run All Tests = run entire test suite\n\nTEST PANEL:\n  Shows all tests: green = passed, red = failed\n  Click a failed test to see the assertion error\n  Re-run only failed tests (useful for large suites)\n\nDEBUGGING A TEST:\n  Click the debug icon (bug icon) next to a test\n  Set a breakpoint in your test or the tested code\n  Step through to see exactly why it fails\n\nCOVERAGE:\n  Run with Coverage (Shift+Alt+F10, or right-click -> Run with Coverage)\n  Editor shows: green lines = covered, red = not covered by tests\n  Highlights exactly which code paths your tests miss\n```\n\n---\n\n## Git Integration\n\n```\nPyCharm has full Git support without leaving the IDE.\n\nCOMMIT (Ctrl+K):\n  Opens commit panel\n  See all changed files (diff on right)\n  Check which files to include\n  Write commit message\n  Press Commit (or Commit and Push)\n\nPUSH (Ctrl+Shift+K):\n  Push committed changes to remote\n\nPULL:\n  Git menu -> Pull (or fetch first to see what's incoming)\n\nDIFF VIEW:\n  Right-click any file -> Git -> Compare with Branch\n  Side-by-side diff of your changes vs any branch\n\nHISTORY (RIGHT-CLICK FILE):\n  Show History -> see every commit that touched this file\n  Who changed it, when, what was the message\n  Click any revision to see the diff\n\nANNOTATE (git blame):\n  Right-click in editor gutter -> Annotate with Git Blame\n  Each line shows: author, date, commit hash\n\nRESOLVE MERGE CONFLICTS:\n  PyCharm shows a 3-panel merge tool\n  Left: your changes, Middle: result, Right: incoming\n  Click arrows to accept/reject each change\n  Much cleaner than resolving conflicts in a terminal\n```\n\n---\n\n## Database Tools (Professional Edition)\n\n```\nView -> Tool Windows -> Database\n  Add Data Source: PostgreSQL, MySQL, SQLite, etc.\n  Enter connection details\n\nOnce connected:\n  Browse tables in tree view\n  Run SQL queries in an editor with autocomplete\n  Edit cells directly in the table view\n  Export query results as CSV\n  View table structure (columns, types, indexes)\n\nSQL autocomplete:\n  PyCharm knows your schema\n  SELECT * FROM  ->  suggests table names\n  WHERE user.  ->  suggests column names\n  Joins are autocompleted based on foreign keys\n```\n\n---\n\n## Mind Map\n\n```\nPYCHARM POWER-USE\n|\n+-- ENVIRONMENTS\n|   +-- Virtual environments (isolated per project)\n|   +-- Settings -> Python Interpreter\n|   +-- pip + requirements.txt\n|\n+-- NAVIGATION\n|   +-- Shift+Shift (search everywhere)\n|   +-- Ctrl+Click (go to definition)\n|   +-- Alt+F7 (find usages)\n|   +-- Ctrl+E (recent files)\n|\n+-- EDITING\n|   +-- Alt+Enter (quick fixes)\n|   +-- Shift+F6 (rename all usages)\n|   +-- Ctrl+Alt+M (extract method)\n|   +-- Ctrl+Alt+L (reformat code)\n|\n+-- DEBUGGING\n|   +-- Breakpoints (click gutter)\n|   +-- Step Over/Into/Out (F8/F7/Shift+F8)\n|   +-- Evaluate Expression (Alt+F8)\n|   +-- Conditional breakpoints\n|\n+-- TESTING\n|   +-- Run/debug individual tests\n|   +-- Coverage view\n|   +-- Re-run failed only\n|\n+-- GIT\n|   +-- Commit (Ctrl+K)\n|   +-- History / Blame\n|   +-- Merge conflict tool\n|\n+-- RUN CONFIGS\n    +-- Script path + args + env vars\n    +-- Multiple configs per project\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **PyCharm Tips and Tricks** by JetBrains (official):\n  https://www.youtube.com/watch?v=NoDx0MEESDw\n  - Official JetBrains video. Demonstrates key features in real workflow.\n- **Top 10 PyCharm Shortcuts You Need to Know** by Tech With Tim:\n  https://www.youtube.com/watch?v=Gz0f8iFhOAs\n  - Practical shortcuts with demos. Great for beginners.\n\n### Free Books and Articles\n- **PyCharm official documentation**: https://www.jetbrains.com/help/pycharm/\n  - 'Getting Started' and 'Debugging' sections are most useful first.\n- **JetBrains Academy** (interactive Python + PyCharm course): https://hyperskill.org/\n  - Free tier available. Learn Python while using PyCharm features.\n\n### Diagrams and Cheatsheets\n- **PyCharm Keyboard Shortcuts PDF (Mac)**: https://resources.jetbrains.com/storage/products/pycharm/docs/PyCharm_ReferenceCard_mac.pdf\n- **PyCharm Keyboard Shortcuts PDF (Win/Linux)**: https://resources.jetbrains.com/storage/products/pycharm/docs/PyCharm_ReferenceCard.pdf\n  - Print this and stick it on your monitor. Use it daily for 2 weeks — muscle memory locks in.\n\n### Practice\n- **JetBrains IDE Features Trainer** (built into PyCharm!):\n  Help -> IDE Features Trainer\n  Built-in interactive lessons for shortcuts and features. Do all of them.",
   "questions": [
     {
-      "id": "pycharm-q1",
+      "id": "pycharm-q1-real",
       "type": "mcq",
-      "prompt": "Core concept 1: which statement best describes PyCharm Power-Use?",
+      "prompt": "What is the keyboard shortcut to search for ANYTHING in PyCharm (files, classes, actions, settings)?",
       "choices": [
-        "PyCharm Power-Use always requires dedicated hardware",
-        "PyCharm Power-Use trade-offs depend on requirements and scale",
-        "PyCharm Power-Use is only for large enterprises",
-        "PyCharm Power-Use eliminates all database needs"
+        "Ctrl+F",
+        "Ctrl+N",
+        "Shift+Shift (double Shift)",
+        "Ctrl+Shift+F"
+      ],
+      "answerIndex": 2,
+      "explanation": "Double Shift opens 'Search Everywhere' — a single dialog that finds files, classes, symbols, actions, and settings. The single most useful shortcut in PyCharm.",
+      "tags": [
+        "shortcuts",
+        "navigation"
+      ]
+    },
+    {
+      "id": "pycharm-q2-real",
+      "type": "mcq",
+      "prompt": "What does Alt+Enter do in PyCharm?",
+      "choices": [
+        "Runs the current file",
+        "Opens terminal",
+        "Shows context-aware quick fixes — adds missing imports, creates missing methods, fixes type issues",
+        "Formats the code"
+      ],
+      "answerIndex": 2,
+      "explanation": "Alt+Enter is PyCharm's magic wand. On any red/yellow underline, it offers intelligent fixes. Most common: auto-import a missing module. Learn this one shortcut and your productivity triples immediately.",
+      "tags": [
+        "shortcuts",
+        "quick-fixes"
+      ]
+    },
+    {
+      "id": "pycharm-q3-real",
+      "type": "mcq",
+      "prompt": "Why should each Python project have its own virtual environment?",
+      "choices": [
+        "Virtual environments make code run faster",
+        "They allow different projects to have different (potentially conflicting) dependency versions without interfering with each other",
+        "They are required by PyCharm",
+        "They encrypt your code"
       ],
       "answerIndex": 1,
-      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Project A needs Django 3.2, Project B needs Django 4.2. Without venv, only one can be installed globally. Virtual environments give each project an isolated Python environment with its own packages.",
       "tags": [
-        "pycharm",
-        "fundamentals"
+        "virtualenv",
+        "environments"
       ]
     },
     {
-      "id": "pycharm-q2",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q3",
+      "id": "pycharm-q4-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "prompt": "You want to rename a function used in 50 files. What is the safest way in PyCharm?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "Find+Replace in all files",
+        "Manually edit each file",
+        "Shift+F6 (Rename refactoring) — PyCharm finds and renames ALL usages across the entire project safely",
+        "Delete and rewrite"
+      ],
+      "answerIndex": 2,
+      "explanation": "Rename refactoring (Shift+F6) understands code structure — not just text. It renames the definition and every reference. Find+Replace is text-based and can rename unrelated things with the same name.",
+      "tags": [
+        "refactoring",
+        "rename"
+      ]
+    },
+    {
+      "id": "pycharm-q5-real",
+      "type": "mcq",
+      "prompt": "What does Ctrl+Click on a function name do?",
+      "choices": [
+        "Runs the function",
+        "Copies the function",
+        "Jumps to the function's definition — wherever it is defined in the codebase",
+        "Deletes the function"
+      ],
+      "answerIndex": 2,
+      "explanation": "Go to Definition instantly navigates you to where the function/class/variable was defined — in the same file, another file, or even inside a library. Essential for understanding unfamiliar codebases.",
+      "tags": [
+        "navigation",
+        "shortcuts"
+      ]
+    },
+    {
+      "id": "pycharm-q6-real",
+      "type": "mcq",
+      "prompt": "You set a breakpoint and press Shift+F9. Execution pauses. You press F8. What happens?",
+      "choices": [
+        "Program terminates",
+        "Execution jumps to the next breakpoint",
+        "Executes the current line and moves to the next line WITHOUT entering any called functions (Step Over)",
+        "Enters the function on the current line"
+      ],
+      "answerIndex": 2,
+      "explanation": "F8 = Step Over. Runs the current line and stops at the next. If the line calls a function, that function runs entirely — you stay at the same level. F7 = Step Into (enters the function call).",
+      "tags": [
+        "debugging",
+        "shortcuts"
+      ]
+    },
+    {
+      "id": "pycharm-q7-real",
+      "type": "mcq",
+      "prompt": "What is the Evaluate Expression feature in the debugger?",
+      "choices": [
+        "Runs the entire program",
+        "Evaluates a Python expression in the current paused stack frame — lets you inspect any value or test any code without restarting",
+        "Shows stack trace",
+        "Opens the terminal"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "While paused at a breakpoint (Alt+F8): type any Python expression and see its value right now. type(my_var), len(list), my_dict['key'] — all evaluated in the CURRENT execution context. Huge time saver.",
       "tags": [
-        "pycharm",
-        "trade-offs"
+        "debugging",
+        "evaluate"
       ]
     },
     {
-      "id": "pycharm-q4",
+      "id": "pycharm-q8-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "prompt": "What does Ctrl+Alt+M (Extract Method) do?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Creates a new method from scratch",
+        "Moves the selected code block into a new function, with parameters inferred from used variables, and replaces the selection with a call to that function",
+        "Copies a method",
+        "Deletes a method"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Extract Method is one of the most powerful refactorings. Select any block of code, press Ctrl+Alt+M, name the function — PyCharm moves the code, figures out what parameters are needed, and inserts the function call.",
       "tags": [
-        "pycharm",
-        "monitoring"
+        "refactoring",
+        "extract"
       ]
     },
     {
-      "id": "pycharm-q5",
+      "id": "pycharm-q9-real",
       "type": "mcq",
-      "prompt": "Core concept 5: which statement best describes PyCharm Power-Use?",
+      "prompt": "What does 'Run with Coverage' show in PyCharm?",
       "choices": [
-        "PyCharm Power-Use always requires dedicated hardware",
-        "PyCharm Power-Use trade-offs depend on requirements and scale",
-        "PyCharm Power-Use is only for large enterprises",
-        "PyCharm Power-Use eliminates all database needs"
+        "Performance profiling data",
+        "Memory usage",
+        "Green/red highlighting in the editor showing which lines ARE covered by tests and which are NOT",
+        "Security vulnerabilities"
+      ],
+      "answerIndex": 2,
+      "explanation": "Coverage runs your tests and marks each line: green = executed by some test, red = never executed. You can visually see which code paths your tests miss — making it obvious where to add test cases.",
+      "tags": [
+        "testing",
+        "coverage"
+      ]
+    },
+    {
+      "id": "pycharm-q10-real",
+      "type": "mcq",
+      "prompt": "What is a Run Configuration in PyCharm?",
+      "choices": [
+        "A Python configuration file",
+        "A saved setup for running a script — script path, arguments, environment variables, working directory — so you can run it consistently with one click",
+        "A virtualenv setting",
+        "A test framework"
       ],
       "answerIndex": 1,
-      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Run Configurations save how to run your program: which script, with what args, with which env vars. Multiple configs per project: 'Run dev server', 'Run tests', 'Run migration'. Never type long commands again.",
       "tags": [
-        "pycharm",
-        "fundamentals"
+        "run-config",
+        "productivity"
       ]
     },
     {
-      "id": "pycharm-q6",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q7",
+      "id": "pycharm-q11-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "prompt": "What does Shift+F6 do in PyCharm?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "Formats code",
+        "Renames the symbol under cursor and ALL its usages across the entire project simultaneously",
+        "Runs tests",
+        "Opens settings"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "Rename refactoring. The most important refactoring. Cursor on a variable, function, class, or file name -> Shift+F6 -> type new name -> Enter. Every reference is updated. Safe, complete, instant.",
       "tags": [
-        "pycharm",
-        "trade-offs"
+        "refactoring",
+        "shortcuts"
       ]
     },
     {
-      "id": "pycharm-q8",
+      "id": "pycharm-q12-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "prompt": "What information does the PyCharm debugger's Variables panel show while paused at a breakpoint?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Stack trace only",
+        "Current values of all variables in scope at the breakpoint — their names, types, and values",
+        "Error messages",
+        "Code coverage"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "The Variables panel shows every variable in the current scope: local variables, parameters, self attributes. Click to expand objects and see their internals. No print() needed.",
       "tags": [
-        "pycharm",
-        "monitoring"
+        "debugging",
+        "variables"
       ]
     },
     {
-      "id": "pycharm-q9",
+      "id": "pycharm-q13-real",
       "type": "mcq",
-      "prompt": "Core concept 9: which statement best describes PyCharm Power-Use?",
+      "prompt": "In PyCharm's Git integration, what does Ctrl+K open?",
       "choices": [
-        "PyCharm Power-Use always requires dedicated hardware",
-        "PyCharm Power-Use trade-offs depend on requirements and scale",
-        "PyCharm Power-Use is only for large enterprises",
-        "PyCharm Power-Use eliminates all database needs"
+        "Push dialog",
+        "Pull dialog",
+        "Commit dialog — shows changed files, diff preview, commit message field",
+        "Branch manager"
+      ],
+      "answerIndex": 2,
+      "explanation": "Ctrl+K opens the Commit panel. See all modified files, review diffs side-by-side, write your commit message, choose which files to include — all without leaving PyCharm.",
+      "tags": [
+        "git",
+        "shortcuts"
+      ]
+    },
+    {
+      "id": "pycharm-q14-real",
+      "type": "mcq",
+      "prompt": "What does a red underline in PyCharm code mean?",
+      "choices": [
+        "Code style suggestion",
+        "A warning about a potential issue",
+        "An error — the code will not run: undefined name, syntax error, wrong argument count",
+        "A comment"
+      ],
+      "answerIndex": 2,
+      "explanation": "Red = error. PyCharm's static analysis catches real bugs: undefined variables, wrong number of arguments, imported but missing modules. Fix these before running — they are always real problems.",
+      "tags": [
+        "inspections",
+        "errors"
+      ]
+    },
+    {
+      "id": "pycharm-q15-real",
+      "type": "mcq",
+      "prompt": "How do you search for a method/class name across ALL files in the project?",
+      "choices": [
+        "Ctrl+F (in current file only)",
+        "Ctrl+Shift+F (Find in Path — searches all files in project)",
+        "Ctrl+N",
+        "Alt+F7"
       ],
       "answerIndex": 1,
-      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Ctrl+Shift+F opens Find in Path — searches all project files for text. Add file type filter (*.py) and case sensitivity. Alt+F7 finds usages of a specific symbol (smarter than text search).",
       "tags": [
-        "pycharm",
-        "fundamentals"
+        "search",
+        "navigation"
       ]
     },
     {
-      "id": "pycharm-q10",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q11",
+      "id": "pycharm-q16-real",
       "type": "mcq",
-      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
+      "prompt": "What is a conditional breakpoint and when would you use one?",
       "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
+        "A breakpoint in an if statement",
+        "A breakpoint that only pauses execution when a specified condition is true — useful when a bug only occurs for certain values in a loop",
+        "A breakpoint that logs to console",
+        "A disabled breakpoint"
       ],
       "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
+      "explanation": "Right-click a breakpoint -> Edit, add condition e.g. i == 999. Without conditional breakpoints, you would press F9 999 times to reach the interesting iteration. Conditional breakpoints go straight to the relevant case.",
       "tags": [
-        "pycharm",
-        "trade-offs"
+        "debugging",
+        "breakpoints"
       ]
     },
     {
-      "id": "pycharm-q12",
+      "id": "pycharm-q17-real",
       "type": "mcq",
-      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
+      "prompt": "What does `pip freeze > requirements.txt` do and why is it important?",
       "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
+        "Installs packages",
+        "Clears the virtual environment",
+        "Records the exact version of every installed package to a text file — allows exact environment recreation on any machine",
+        "Updates all packages"
+      ],
+      "answerIndex": 2,
+      "explanation": "requirements.txt lists exact versions: requests==2.31.0, Django==4.2.1. Anyone can run pip install -r requirements.txt and get the identical environment. Essential for reproducible deployments and team collaboration.",
+      "tags": [
+        "virtualenv",
+        "dependencies"
+      ]
+    },
+    {
+      "id": "pycharm-q18-real",
+      "type": "mcq",
+      "prompt": "When PyCharm shows 'Annotate with Git Blame' in the editor gutter, what does it display?",
+      "choices": [
+        "Test coverage",
+        "Memory usage per line",
+        "For each line: who last modified it, when, and in which commit",
+        "Code complexity"
+      ],
+      "answerIndex": 2,
+      "explanation": "Git Blame annotation shows the author, date, and commit hash next to each line. Invaluable for understanding why code was written a certain way, who to ask about it, and when a bug was introduced.",
+      "tags": [
+        "git",
+        "blame"
+      ]
+    },
+    {
+      "id": "pycharm-q19-real",
+      "type": "mcq",
+      "prompt": "What is the IDE Features Trainer in PyCharm?",
+      "choices": [
+        "A plugin for training ML models",
+        "A built-in interactive tutorial that teaches PyCharm features through hands-on lessons inside the IDE itself",
+        "A performance profiler",
+        "A code review tool"
       ],
       "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
+      "explanation": "Help -> IDE Features Trainer. Interactive lessons that walk you through shortcuts and features directly in the editor. Better than reading docs — you practice each feature immediately in context.",
       "tags": [
-        "pycharm",
-        "monitoring"
+        "learning",
+        "shortcuts"
       ]
     },
     {
-      "id": "pycharm-q13",
+      "id": "pycharm-q20-real",
       "type": "mcq",
-      "prompt": "Core concept 13: which statement best describes PyCharm Power-Use?",
+      "prompt": "What is the key benefit of PyCharm's 'Extract Variable' refactoring (Ctrl+Alt+V)?",
       "choices": [
-        "PyCharm Power-Use always requires dedicated hardware",
-        "PyCharm Power-Use trade-offs depend on requirements and scale",
-        "PyCharm Power-Use is only for large enterprises",
-        "PyCharm Power-Use eliminates all database needs"
+        "Speeds up execution",
+        "Gives a complex expression a meaningful name as a variable — improving readability and replacing all occurrences of that expression simultaneously",
+        "Moves code to another file",
+        "Adds type annotations"
       ],
       "answerIndex": 1,
-      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
+      "explanation": "Select: len(items) * price_per_unit. Extract Variable. Name it: total_cost. Now every place that expression appeared is replaced with total_cost. Code becomes self-documenting.",
       "tags": [
-        "pycharm",
-        "fundamentals"
-      ]
-    },
-    {
-      "id": "pycharm-q14",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q15",
-      "type": "mcq",
-      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
-      "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
-      ],
-      "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q16",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
-      "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
-      ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
-      "tags": [
-        "pycharm",
-        "monitoring"
-      ]
-    },
-    {
-      "id": "pycharm-q17",
-      "type": "mcq",
-      "prompt": "Core concept 17: which statement best describes PyCharm Power-Use?",
-      "choices": [
-        "PyCharm Power-Use always requires dedicated hardware",
-        "PyCharm Power-Use trade-offs depend on requirements and scale",
-        "PyCharm Power-Use is only for large enterprises",
-        "PyCharm Power-Use eliminates all database needs"
-      ],
-      "answerIndex": 1,
-      "explanation": "PyCharm Power-Use is context-dependent. Trade-offs matter more than API memorisation.",
-      "tags": [
-        "pycharm",
-        "fundamentals"
-      ]
-    },
-    {
-      "id": "pycharm-q18",
-      "type": "fillBlank",
-      "prompt": "The core trade-off in PyCharm Power-Use is between correctness and ___.",
-      "accepted": [
-        "performance",
-        "availability",
-        "speed",
-        "throughput"
-      ],
-      "explanation": "Distributed systems involve the tension between correctness/consistency and performance/availability.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q19",
-      "type": "mcq",
-      "prompt": "When should you avoid adding PyCharm Power-Use to a system?",
-      "choices": [
-        "When it has fewer than 1000 users",
-        "When complexity outweighs its benefits at your current scale",
-        "Never - always include it",
-        "Only for cloud deployments"
-      ],
-      "answerIndex": 1,
-      "explanation": "Add complexity only when the problem it solves is actively costing you.",
-      "tags": [
-        "pycharm",
-        "trade-offs"
-      ]
-    },
-    {
-      "id": "pycharm-q20",
-      "type": "mcq",
-      "prompt": "Which metric best indicates a PyCharm Power-Use system is healthy?",
-      "choices": [
-        "CPU usage",
-        "Error rate and p99 latency",
-        "Disk space",
-        "Log file size"
-      ],
-      "answerIndex": 1,
-      "explanation": "Error rate + p99 latency are leading indicators of customer impact.",
-      "tags": [
-        "pycharm",
-        "monitoring"
+        "refactoring",
+        "readability"
       ]
     }
   ],
   "flashcards": [
     {
-      "id": "pycharm-fc1",
-      "front": "One-line definition of PyCharm Power-Use?",
-      "back": "[Complete after studying — self-generation improves retention]",
+      "id": "pycharm-fc1-real",
+      "front": "Top 5 PyCharm shortcuts to learn first",
+      "back": "1. Shift+Shift (search everywhere)  2. Alt+Enter (quick fix)  3. Ctrl+Click (go to definition)  4. Shift+F6 (rename all)  5. Ctrl+Alt+L (reformat code). Master these five, learn the rest gradually.",
       "tags": [
-        "pycharm"
+        "shortcuts"
       ]
     },
     {
-      "id": "pycharm-fc2",
-      "front": "Core trade-off in PyCharm Power-Use?",
-      "back": "Consistency vs availability, or speed vs durability. Where does this topic stand?",
+      "id": "pycharm-fc2-real",
+      "front": "Debugger: F7 vs F8 vs F9",
+      "back": "F8=Step Over (run line, don't enter calls)  F7=Step Into (enter the function being called)  Shift+F8=Step Out (finish current function, return to caller)  F9=Resume (run to next breakpoint)",
       "tags": [
-        "pycharm"
+        "debugging"
       ]
     },
     {
-      "id": "pycharm-fc3",
-      "front": "When to use PyCharm Power-Use?",
-      "back": "When the problem it solves is actively costing you at your scale.",
+      "id": "pycharm-fc3-real",
+      "front": "Alt+Enter — when to use it",
+      "back": "On ANY red/yellow underline. Common fixes: add missing import, create missing method/variable, change to compatible type, suppress warning, split long string. The single most important shortcut for fixing problems fast.",
       "tags": [
-        "pycharm"
+        "quick-fixes",
+        "shortcuts"
       ]
     },
     {
-      "id": "pycharm-fc4",
-      "front": "When NOT to use PyCharm Power-Use?",
-      "back": "When simpler alternatives work. Complexity has a maintenance cost.",
+      "id": "pycharm-fc4-real",
+      "front": "Virtual environment best practices",
+      "back": "One venv per project. Never use system Python for projects. Always pip freeze > requirements.txt after installing. Commit requirements.txt to git (not the venv/ folder itself — add venv/ to .gitignore).",
       "tags": [
-        "pycharm"
+        "virtualenv",
+        "environments"
       ]
     },
     {
-      "id": "pycharm-fc5",
-      "front": "Top 3 failure modes of PyCharm Power-Use?",
-      "back": "1. Misconfiguration. 2. Cascade failure. 3. Data inconsistency on partial failure.",
+      "id": "pycharm-fc5-real",
+      "front": "Rename refactoring vs Find+Replace",
+      "back": "Shift+F6 (Rename): understands code structure, renames only the correct symbol across all files. Find+Replace: text-based, may rename unrelated things with same name. Always use Rename for code symbols.",
       "tags": [
-        "pycharm"
+        "refactoring"
       ]
     },
     {
-      "id": "pycharm-fc6",
-      "front": "How to monitor PyCharm Power-Use in production?",
-      "back": "Error rate, p99 latency, throughput, saturation (queue depth / connections).",
+      "id": "pycharm-fc6-real",
+      "front": "Run Configuration use cases",
+      "back": "Save: script path, CLI args, env vars (DB_URL=..., DEBUG=True), working directory. Multiple configs: 'Run dev', 'Run tests', 'Run migrations'. Eliminates typing long commands. Share via .run/ in git.",
       "tags": [
-        "pycharm"
+        "run-config",
+        "productivity"
       ]
     },
     {
-      "id": "pycharm-fc7",
-      "front": "PyCharm Power-Use in one interview sentence?",
-      "back": "[Draft: what it is + what problem it solves + when to use it]",
+      "id": "pycharm-fc7-real",
+      "front": "Code coverage workflow",
+      "back": "Run with Coverage -> editor shows green (covered) and red (not covered) lines. Red lines = your tests never execute that code path. Add test cases targeting red paths until all critical code is green.",
       "tags": [
-        "pycharm"
+        "testing",
+        "coverage"
       ]
     },
     {
-      "id": "pycharm-fc8",
-      "front": "How does PyCharm Power-Use connect to caching?",
-      "back": "Most systems cache upstream of expensive operations. Cache-aside is the default pattern.",
+      "id": "pycharm-fc8-real",
+      "front": "Evaluate Expression during debugging",
+      "back": "Alt+F8 while paused at breakpoint. Type any Python expression: len(items), type(x), my_obj.attr. Evaluated in CURRENT execution context. Test hypotheses about bugs without adding print statements or restarting.",
       "tags": [
-        "pycharm",
-        "caching"
+        "debugging",
+        "evaluate"
       ]
     }
   ],

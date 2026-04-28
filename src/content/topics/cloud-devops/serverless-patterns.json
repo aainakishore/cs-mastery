@@ -7,85 +7,434 @@
   "prereqs": [
     "aws-mastery"
   ],
-  "guide": "# Serverless Patterns\n\nServerless computing abstracts away server management \u2014 you deploy functions that auto-scale, run on demand, and charge only for execution time.\n\n## What Is Serverless\n\n```\nTraditional:                   Serverless:\n  You provision servers          Provider provisions and scales\n  Pay 24/7 regardless of load    Pay per invocation (milliseconds)\n  Manual scaling                 Auto-scale to zero and to millions\n  OS patches your problem        No OS, no runtime management\n\nExamples:\n  AWS Lambda: 15-min functions, 10GB RAM, pay per GB-second\n  Cloudflare Workers: edge, <128MB, pay per million requests\n  Vercel Functions: HTTP endpoints at the edge\n  Azure Functions, GCP Cloud Functions\n```\n\n## Common Serverless Patterns\n\n```\n1. HTTP API Backend (most common):\n   API Gateway \u2192 Lambda \u2192 DynamoDB\n   REST CRUD with zero-server deployment.\n\n2. Event-Driven Processing:\n   S3 upload \u2192 Lambda \u2192 compress image \u2192 save\n   SNS/EventBridge \u2192 Lambda \u2192 process event\n\n3. Fan-Out:\n   One event \u2192 multiple parallel Lambdas\n   e.g., new order \u2192 notify Lambda + inventory Lambda + analytics Lambda\n\n4. Step Functions (orchestration):\n   Sequence of Lambdas with retries, parallelism, state\n   Define workflow as state machine JSON\n   Better than chaining Lambda \u2192 Lambda directly\n\n5. Scheduled tasks (cron):\n   EventBridge rule \u2192 Lambda (every hour, every day)\n   Replace cron servers with Lambda + schedule rule\n\n6. Stream processing:\n   Kinesis/SQS \u2192 Lambda (event source mapping)\n   auto-polls stream, batches records, invokes Lambda\n```\n\n## Cold Start Problem\n\n```\nCold start: Lambda hasn't been invoked recently \u2192 container must start\n  JS Lambda: 200-500ms cold start\n  JVM Lambda: 1-5 seconds cold start (huge JVM startup)\n  Python: 100-300ms\n\nMitigations:\n  Provisioned concurrency: keep N Lambda instances warm (pay extra)\n  Lambda Snapstart (Java): restore from snapshot (~100ms)\n  Use lightweight runtimes: Node.js, Python > Java for latency-sensitive\n  Smaller deployment packages: faster container initialization\n```\n\n## AWS Lambda Example\n\n```javascript\n// handler.js\nexports.handler = async (event, context) => {\n  console.log('Event:', JSON.stringify(event));\n\n  // HTTP API: event.body contains request body\n  const body = JSON.parse(event.body || '{}');\n\n  try {\n    const result = await processRequest(body);\n    return {\n      statusCode: 200,\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(result)\n    };\n  } catch (err) {\n    return {\n      statusCode: 500,\n      body: JSON.stringify({ error: err.message })\n    };\n  }\n};\n```\n\n## Common Pitfalls\n- **Lambda cold starts in user-facing APIs** \u2014 use provisioned concurrency or lightweight runtimes to eliminate cold starts.\n- **Timeouts for long operations** \u2014 Lambda max timeout is 15 min. For longer: use Step Functions or offload to ECS.\n- **Shared state between invocations** \u2014 Lambda can reuse containers (execution context) but treat each invocation as stateless. Store state in DynamoDB, S3, or ElastiCache.\n- **Missing DLQ for event-driven Lambda** \u2014 failed processing \u2192 event lost. Configure Dead Letter Queue (SQS or SNS) on Lambda.\n",
+  "guide": "# Serverless Patterns\n\n## What Is Serverless? (Start From Zero)\n\nThe word 'serverless' is a bit misleading — there ARE servers, you just don't see them.\nWhat it really means: you write code (functions), upload it, and AWS runs it for you.\nYou do not provision servers, patch OS, configure capacity, or pay for idle time.\n\n**Traditional server-based model:**\n```\nYou:  rent an EC2 instance ($50/month)\n      configure the OS\n      deploy your app\n      pay $50 whether it gets 0 or 1 million requests\n      scale manually when traffic grows\n      wake up at 3am if the server crashes\n```\n\n**Serverless (Lambda) model:**\n```\nYou:  write a function (50 lines of Python/Java/Node)\n      upload to Lambda\n      AWS runs it when triggered\n      pay ONLY per execution (first million requests/month FREE)\n      AWS scales automatically (0 to 10,000 concurrent in seconds)\n      AWS handles all failures and restarts\n```\n\n**Analogy:** Serverless is like a taxi vs owning a car.\nOwning a car (EC2): pay insurance, maintenance, fuel all the time — even when parked.\nTaxi (Lambda): pay only when you actually ride. Perfect for irregular trips.\n\n---\n\n## AWS Lambda — The Core Serverless Building Block\n\nLambda is a Function-as-a-Service (FaaS). You provide a function, AWS runs it on demand.\n\n```\nLambda function lifecycle:\n\nCOLD START (first invocation or after idle period):\n  1. AWS allocates a container (VM slot)\n  2. Downloads your deployment package\n  3. Starts the runtime (JVM, Node, Python interpreter)\n  4. Runs initialisation code (outside handler)\n  5. Runs your handler function\n  Total: 100ms - 3 seconds depending on runtime + package size\n\nWARM INVOCATION (container reused):\n  1. Runs your handler function\n  Total: your actual code execution time only\n\nCOLD START visual:\n  Request ---> [Cold: init container + runtime + code] ---> Response\n               |                                      |\n               |<-------- 1-3 seconds extra --------->|\n\n  Request ---> [Warm: just run handler] ---> Response\n               |                       |\n               |<--- milliseconds ----->|\n```\n\n**Lambda configuration basics:**\n```\nMemory:    128MB to 10,240MB  (CPU scales proportionally with memory)\nTimeout:   1 second to 15 minutes (max)\nRuntime:   Python 3.12, Node 20, Java 21, Go, etc.\nPackage:   .zip file or container image (up to 10GB)\n\n# Python Lambda handler structure\ndef handler(event, context):\n    # event = the trigger payload (S3 event, API Gateway request, etc.)\n    # context = metadata (function name, remaining time, request ID)\n\n    print(f'Processing event: {event}')\n\n    result = process(event['data'])\n\n    return {\n        'statusCode': 200,\n        'body': json.dumps({'result': result})\n    }\n```\n\n---\n\n## Lambda Triggers — What Can Invoke a Lambda?\n\n```\nLambda is event-driven — something must trigger it.\n\n+------------------+--------------------------------------------+\n| Trigger          | Use case                                   |\n+------------------+--------------------------------------------+\n| API Gateway      | HTTP endpoint -> Lambda = REST API         |\n| S3               | File uploaded -> Lambda processes it       |\n| SQS              | Message in queue -> Lambda consumes it     |\n| SNS              | Notification published -> Lambda receives  |\n| DynamoDB Streams | DB record changed -> Lambda reacts         |\n| EventBridge      | Scheduled (cron) or custom events          |\n| Cognito          | User sign-up -> Lambda validates/enriches  |\n| CloudWatch       | Log pattern matched -> Lambda alerts       |\n+------------------+--------------------------------------------+\n\nPATTERN 1: HTTP API\n  Browser -> API Gateway -> Lambda -> DynamoDB -> Response\n\nPATTERN 2: File processing\n  Upload image to S3 -> S3 triggers Lambda -> Lambda resizes image -> saves to S3\n\nPATTERN 3: Queue worker\n  API writes message to SQS -> Lambda polls SQS -> Lambda processes message\n  (decoupled, retryable, handles bursts via queue buffering)\n\nPATTERN 4: Scheduled job\n  EventBridge cron: '0 2 * * *' -> Lambda runs daily at 2am -> sends report emails\n```\n\n---\n\n## API Gateway + Lambda — Building a REST API\n\nThis is the most common serverless pattern: replace a traditional server with\nAPI Gateway (HTTP router) + Lambda (business logic).\n\n```\nTraditional:               Serverless:\n  EC2 running Spring Boot    API Gateway + Lambda\n  Always on = always paying  Pay per request\n  Manual scaling             Auto-scales to millions\n  You manage OS/runtime      Zero ops\n\nArchitecture:\n  Client\n    |\n    | HTTPS request\n    v\n  API Gateway\n    | matches route: GET /users/{id}\n    v\n  Lambda function: getUserById\n    | queries\n    v\n  DynamoDB\n    |\n    v (response bubbles back up)\n  Client receives JSON response\n\nTerraform / SAM / CDK define both API Gateway and Lambda together.\n```\n\n---\n\n## Cold Start Problem — Causes and Solutions\n\n```\nWHY COLD STARTS HAPPEN:\n  Lambda containers are created on first request and reused for ~15 min.\n  After 15 min idle, container is recycled.\n  Next request creates a new container -> cold start again.\n\nCOLD START DURATION BY RUNTIME:\n  Python/Node.js:  ~100-300ms   (fast startup, small runtime)\n  Java (JVM):      ~1-3 seconds (JVM startup is slow!)\n  Container image: up to 5-10s  (larger image = slower pull)\n\nSOLUTIONS:\n\n1. PROVISIONED CONCURRENCY:\n   Tell Lambda to keep N containers warm at all times.\n   Cost: you pay for idle warm containers.\n   Use for: user-facing APIs where latency matters.\n\n2. KEEP-ALIVE PING:\n   Schedule EventBridge to invoke Lambda every 5 minutes.\n   Free (Lambda gets ~1M free invocations/month).\n   Use for: low-traffic functions that must be fast occasionally.\n\n3. PACKAGE SIZE OPTIMISATION:\n   Smaller .zip = faster cold start.\n   Only include needed libraries.\n   Use Lambda Layers for shared dependencies.\n   Java: use GraalVM native image (compiles to native binary, no JVM startup).\n\n4. CHOOSE FAST RUNTIME:\n   For latency-sensitive APIs: Node.js or Python over Java.\n   Java is great for CPU-heavy batch work where cold start % is small.\n\n5. MEMORY SIZE:\n   More RAM = more CPU = faster init + execution.\n   1024MB often sweet spot: 2x memory, still cheaper than EC2.\n```\n\n---\n\n## Step Functions — Orchestrating Multiple Lambdas\n\nWhen your workflow needs multiple steps, conditional logic, retries, and parallelism,\nchaining Lambda A -> Lambda B in code is fragile.\nStep Functions is a visual state machine for orchestrating workflows.\n\n```\nWITHOUT Step Functions (Lambda chaining):\n  Lambda A calls Lambda B calls Lambda C\n  Problems:\n    - If Lambda B fails, who retries?\n    - If Lambda A times out waiting for B, what happens?\n    - How do you see what step failed?\n    - Nested timeouts: 15min max chains are hard\n\nWITH Step Functions:\n  Define states in JSON (Amazon States Language)\n  Step Functions engine manages transitions, retries, timeouts\n  Visual flow diagram in AWS Console\n  Full audit trail: see every step, input/output, error\n\nExample: Order Processing Workflow:\n  [ValidateOrder]\n       |\n  [ChargePayment] -- FAIL -> [RefundPayment]\n       |\n  [ReserveInventory] -- FAIL -> [RefundPayment]\n       |\n  [SendConfirmationEmail]\n       |\n  [Done]\n\nEach box is a Lambda function. Step Functions handles:\n  - Executing each step\n  - Catching errors (Catch states)\n  - Retrying with exponential backoff (Retry states)\n  - Parallel branches (Parallel state)\n  - Waiting for external events (Wait for Token pattern)\n```\n\n---\n\n## EventBridge — Cloud Event Bus\n\n```\nEventBridge is a serverless event bus — it routes events between services.\n\nSCHEDULED EVENTS (cron):\n  EventBridge rule: rate(1 hour) or cron(0 2 * * ? *)\n  Action: invoke Lambda function\n  Use: scheduled reports, cleanup jobs, notifications\n\nCUSTOM EVENTS (event-driven architecture):\n  Service A publishes event: {source: 'orders', detail-type: 'OrderPlaced', detail: {...}}\n  Rules match on event fields\n  Multiple targets can receive same event:\n    -> Lambda: process fraud check\n    -> SQS: queue for email service\n    -> Step Functions: start workflow\n\nBenefits:\n  - Services don't need to know about each other (loose coupling)\n  - Add new consumers without modifying publishers\n  - Built-in retry with DLQ (dead letter queue)\n  - Schema registry to document event shapes\n```\n\n---\n\n## Lambda Best Practices\n\n```\n1. KEEP FUNCTIONS SMALL AND SINGLE-PURPOSE:\n   One Lambda = one responsibility.\n   getUserById, processPayment, sendEmail — separate functions.\n   Not: doEverything.\n\n2. STORE STATE EXTERNALLY:\n   Lambda is stateless — containers can be recycled any time.\n   Store state in DynamoDB, S3, ElastiCache — NOT in Lambda global variables.\n   Global variables persist ACROSS warm invocations — can cause bugs!\n   (Exception: connection pooling: keep DB connection in global = fine.)\n\n3. SET APPROPRIATE TIMEOUT:\n   Default: 3 seconds. Know your max expected execution time.\n   Too low = functions killed mid-execution.\n   Too high = runaway functions run up your bill.\n\n4. ENVIRONMENT VARIABLES FOR CONFIG:\n   DB_URL, TABLE_NAME, REGION — never hardcode.\n   Use Systems Manager Parameter Store or Secrets Manager for secrets.\n\n5. USE LAMBDA LAYERS FOR SHARED CODE:\n   Common libraries (pandas, numpy, shared utils) as a Layer.\n   Multiple functions share one Layer — update once, applies everywhere.\n\n6. IDEMPOTENCY:\n   Lambda can be invoked more than once for the same event (retries).\n   Your handler must produce same result if called twice.\n   Use idempotency keys: check if already processed before doing work.\n\n7. DEAD LETTER QUEUES (DLQ):\n   Configure SQS or SNS as DLQ for failed Lambda invocations.\n   Failed events are not lost — they go to DLQ for investigation/replay.\n```\n\n---\n\n## Serverless Application Model (SAM)\n\n```\nSAM is AWS's framework for building serverless apps locally and deploying them.\nIt extends CloudFormation with serverless-specific resources.\n\n# template.yaml\nAWSTemplateFormatVersion: '2010-09-09'\nTransform: AWS::Serverless-2016-10-31\n\nResources:\n  GetUserFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Handler: src/handlers/getUser.handler\n      Runtime: python3.12\n      MemorySize: 512\n      Timeout: 10\n      Events:\n        GetUser:\n          Type: Api\n          Properties:\n            Path: /users/{id}\n            Method: GET\n      Environment:\n        Variables:\n          USERS_TABLE: !Ref UsersTable\n\n  UsersTable:\n    Type: AWS::Serverless::SimpleTable\n    Properties:\n      PrimaryKey:\n        Name: userId\n        Type: String\n\n# Commands:\nsam build              # build deployment package\nsam local invoke       # test Lambda locally\nsam local start-api    # run API Gateway locally on port 3000\nsam deploy --guided    # deploy to AWS\n```\n\n---\n\n## Serverless vs Containers vs EC2 — When to Use Each\n\n```\n+------------------+----------------------+----------------------------+\n| Factor           | Lambda (Serverless)  | Container/EC2              |\n+------------------+----------------------+----------------------------+\n| Startup time     | 100ms-3s cold start  | Always warm                |\n| Max runtime      | 15 minutes           | Unlimited                  |\n| Cost model       | Per request          | Per hour (even idle)       |\n| State            | Stateless            | Can be stateful            |\n| Cold start       | Yes (mitigable)      | No                         |\n| Scaling          | Automatic (fast)     | Manual or HPA (slower)     |\n| Ops overhead     | Near zero            | OS patching, monitoring    |\n+------------------+----------------------+----------------------------+\n\nUSE LAMBDA WHEN:\n  - Sporadic/unpredictable traffic\n  - Event-driven triggers (S3 upload, queue message)\n  - Short-duration tasks (under 15 min)\n  - Rapid prototyping\n  - Budget-sensitive (pay per use)\n\nAVOID LAMBDA WHEN:\n  - Long-running jobs (>15 min) -> use ECS Fargate\n  - Latency-critical API with consistent traffic -> EC2/ECS cheaper\n  - Large ML models that need specialised hardware -> SageMaker\n  - Complex stateful workflows -> Step Functions + ECS\n```\n\n---\n\n## Mind Map\n\n```\nSERVERLESS PATTERNS\n|\n+-- LAMBDA\n|   +-- FaaS: pay per execution\n|   +-- Triggers: API GW, S3, SQS, EventBridge, cron\n|   +-- Cold start: init overhead (worst on JVM)\n|   +-- Handler: event + context -> response\n|   +-- Stateless: store state externally\n|\n+-- API GATEWAY + LAMBDA\n|   +-- Replace traditional server\n|   +-- Route -> Lambda -> DynamoDB\n|   +-- Pay per request, auto-scale\n|\n+-- STEP FUNCTIONS\n|   +-- Orchestrate multi-Lambda workflows\n|   +-- Retry/catch/parallel built-in\n|   +-- Visual state machine\n|\n+-- EVENTBRIDGE\n|   +-- Event bus: publish/subscribe\n|   +-- Scheduled cron -> Lambda\n|   +-- Decoupled architecture\n|\n+-- BEST PRACTICES\n|   +-- Single-purpose functions\n|   +-- External state (DynamoDB/S3)\n|   +-- Idempotent handlers\n|   +-- DLQ for failures\n|   +-- Lambda Layers for shared code\n|\n+-- SAM\n    +-- template.yaml = Lambda + API Gateway\n    +-- sam local = test offline\n    +-- sam deploy = ship to AWS\n```\n\n---\n\n## How Serverless Connects to Other Topics\n\n- **AWS Mastery**: Lambda is the foundation of AWS serverless. API Gateway +\n  Lambda + DynamoDB is the canonical serverless stack.\n- **SQS**: Lambda + SQS is one of the most common patterns: queue absorbs bursts,\n  Lambda workers consume at controlled concurrency.\n- **CI/CD**: SAM/CDK pipelines build and deploy Lambda functions automatically.\n- **Docker/Containers**: Lambda also supports container images — bridge between\n  serverless and container worlds.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Storing state in Lambda global variables** — persists across warm invocations,\n   causes bugs. Exception: DB connection objects are fine to cache globally.\n2. **Timeout too short** — Lambda killed mid-execution. Understand your p99 latency.\n3. **Huge deployment packages** — 100MB+ packages cause slow cold starts. Tree-shake,\n   use Layers, use slim base images.\n4. **No DLQ** — failed events silently disappear. Always configure a DLQ.\n5. **Chaining Lambdas directly** — use Step Functions for multi-step workflows.\n6. **No idempotency** — Lambda retries on failure. Running twice = double charge,\n   double email, double insert unless you guard against it.\n7. **Ignoring cold starts for Java** — JVM cold start can be 2-3s. Use Provisioned\n   Concurrency or switch to Python/Node for latency-sensitive endpoints.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **AWS Lambda Tutorial for Beginners** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=eOBq__h4OJ4\n  - 1 hour. Lambda architecture, triggers, hands-on demo.\n- **Serverless Architecture Explained** by Fireship:\n  https://www.youtube.com/watch?v=vxJobGtqKVM\n  - 7 minutes. Visual walkthrough of serverless patterns.\n\n### Free Books and Articles\n- **AWS Lambda official docs - Getting Started**:\n  https://docs.aws.amazon.com/lambda/latest/dg/getting-started.html\n- **Serverless Land** (AWS patterns library): https://serverlessland.com/patterns\n  - Real-world serverless patterns with CDK/SAM code. Browse patterns by use case.\n\n### Diagrams and Cheatsheets\n- **Serverless patterns diagram**: https://serverlessland.com/\n- **AWS Step Functions visualiser**: https://states-language.net/spec.html\n\n### Practice\n- **AWS Serverless Workshop**: https://s12d.com/workshop\n- **Build a Serverless API** (free AWS tutorial): https://aws.amazon.com/getting-started/hands-on/build-serverless-web-app-lambda-apigateway-s3-dynamodb-cognito/",
   "questions": [
     {
-      "id": "sls-q1",
+      "id": "sls-q3",
       "type": "mcq",
-      "prompt": "What is the Lambda cold start problem and when is it most impactful?",
+      "prompt": "Should a Lambda function store temporary per-request user data in a global variable?",
       "choices": [
-        "Lambda restarts every invocation",
-        "First invocation after idle period: provider starts a new container for the function (300ms-5s delay). Most impactful for user-facing APIs (user perceives the latency), negligible for background batch jobs or async processing",
-        "Cold start only affects Java",
-        "Cold start is unavoidable and unfixable"
+        "Yes — global variables persist across invocations improving performance",
+        "No — Lambda containers are reused: global user data from request A persists into request B on the same warm container, causing data leakage",
+        "Yes — Lambda clears globals between invocations",
+        "Only for async invocations"
       ],
       "answerIndex": 1,
-      "explanation": "Cold start = container init time. Background jobs: 2s cold start = fine. User-facing API: 2s cold start = terrible UX. Mitigations: provisioned concurrency (keep containers warm), lightweight runtimes (Node.js/Python vs JVM), smaller packages.",
+      "explanation": "Lambda containers are reused for warm invocations. Global variables persist between them. Safe globals: DB connection, SDK client (reusable, not user-specific). Unsafe globals: userId, request data (leaks between users). Keep per-request data inside the handler.",
       "tags": [
-        "serverless",
-        "cold-start"
+        "lambda",
+        "state",
+        "gotcha"
       ]
     },
     {
       "id": "sls-q2",
       "type": "mcq",
-      "prompt": "AWS Step Functions vs chaining Lambda A \u2192 Lambda B \u2014 why prefer Step Functions?",
+      "prompt": "Why use Step Functions instead of chaining Lambda A -> Lambda B -> Lambda C in code?",
       "choices": [
-        "Step Functions are faster",
-        "Direct Lambda chaining: A calls B synchronously \u2014 A consumes execution time (and cost) waiting for B. If B fails, no retry without custom code. Step Functions: orchestrates lambdas with retries, timeouts, parallel execution, and state persistence \u2014 managed, visible, cheaper for complex workflows",
-        "Step Functions are newer",
-        "Lambda chaining is deprecated"
+        "Step Functions is always faster",
+        "Step Functions provides built-in retry/catch/parallel states and visual execution history — direct Lambda chaining has no retry, no audit trail, and nested timeouts are fragile",
+        "Step Functions is cheaper",
+        "Lambda cannot call other Lambdas"
       ],
       "answerIndex": 1,
-      "explanation": "Lambda A waiting for Lambda B pays for both simultaneously. Step Functions: A completes, state saved, B starts when A's output is ready. Plus: visual workflow, built-in retries, catch/error handling, parallel branches.",
+      "explanation": "Hand-coded Lambda chains: no built-in retry, cascading timeouts, no execution history. Step Functions manages state machine transitions, retries with exponential backoff, error catching by type, parallel branches, and shows every step in console.",
       "tags": [
-        "serverless",
-        "step-functions"
+        "step-functions",
+        "orchestration"
       ]
     },
     {
-      "id": "sls-q3",
+      "id": "sls-q1",
       "type": "mcq",
-      "prompt": "Should a Lambda function store temporary state in a global variable between invocations?",
+      "prompt": "What is the cold start problem in AWS Lambda?",
       "choices": [
-        "Yes, for performance",
-        "No \u2014 Lambda may reuse containers (caching is fine) but you must treat each invocation as stateless. The same container might not be reused; a new container won't have the variable. Store persistent state in DynamoDB, S3, or ElastiCache",
-        "Global variables are forbidden",
-        "Only for read-only config"
+        "Lambda running out of memory",
+        "Lambda function crashing",
+        "The latency added when AWS must provision a new container and initialise the runtime for a Lambda function that has been idle",
+        "Lambda exceeding its timeout"
+      ],
+      "answerIndex": 2,
+      "explanation": "Cold start = container provisioning overhead. New or idle Lambda containers need JVM/Node/Python startup + code load before handling the request. Java adds 1-3s. Python/Node ~100-300ms.",
+      "tags": [
+        "lambda",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "sls-q4",
+      "type": "mcq",
+      "prompt": "What is a Lambda cold start?",
+      "choices": [
+        "Lambda crashing permanently",
+        "The latency overhead when AWS must initialise a new container, download the code, and start the runtime — happens on first invocation after idle",
+        "Lambda running out of memory",
+        "Lambda timeout"
       ],
       "answerIndex": 1,
-      "explanation": "Container reuse is opportunistic. Lambda may reuse the container (reading the global is fine as a cache), or may start fresh (global not set). Write business logic assuming stateless. Use DynamoDB for session state, ElastiCache for shared cache.",
+      "explanation": "Cold start = Lambda container provisioning overhead. After ~15 min idle, containers are recycled. Next request pays the cold start tax. Warm invocations (reused container) have no overhead.",
       "tags": [
-        "serverless",
-        "state"
+        "lambda",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "sls-q5",
+      "type": "mcq",
+      "prompt": "Which runtime has the LONGEST Lambda cold start times?",
+      "choices": [
+        "Python 3.12",
+        "Node.js 20",
+        "Java (JVM)",
+        "Ruby"
+      ],
+      "answerIndex": 2,
+      "explanation": "JVM startup time (loading classes, JIT compilation) adds 1-3 seconds to Lambda cold starts. Python and Node.js start in ~100-300ms. For latency-sensitive APIs, prefer Python/Node or use Provisioned Concurrency with Java.",
+      "tags": [
+        "lambda",
+        "cold-start",
+        "java"
+      ]
+    },
+    {
+      "id": "sls-q6",
+      "type": "mcq",
+      "prompt": "What is Provisioned Concurrency in Lambda?",
+      "choices": [
+        "Maximum number of concurrent Lambda executions",
+        "Pre-warming a specified number of Lambda containers so they are always ready — eliminating cold starts at the cost of paying for idle warm containers",
+        "Automatic scaling policy",
+        "Reserved Lambda capacity"
+      ],
+      "answerIndex": 1,
+      "explanation": "Provisioned Concurrency keeps N containers initialised and warm. No cold start for requests up to N concurrency. You pay for the warm containers even if no requests come in. Worth it for user-facing latency-critical APIs.",
+      "tags": [
+        "lambda",
+        "provisioned-concurrency"
+      ]
+    },
+    {
+      "id": "sls-q7",
+      "type": "mcq",
+      "prompt": "Why must Lambda functions be designed to be idempotent?",
+      "choices": [
+        "Lambda charges per invocation",
+        "Lambda can retry failed invocations — if your handler isn't idempotent, retries cause duplicate actions (double charge, double email, duplicate DB record)",
+        "Lambda has no retry behaviour",
+        "Idempotency improves performance"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda retries on errors (SQS triggers retry up to maxReceiveCount times). If processPayment() runs twice, customer is charged twice unless you check 'already processed this request ID' first.",
+      "tags": [
+        "lambda",
+        "idempotency"
+      ]
+    },
+    {
+      "id": "sls-q8",
+      "type": "mcq",
+      "prompt": "What happens if you store state in a Lambda global variable?",
+      "choices": [
+        "It is lost after every invocation",
+        "It persists across warm invocations of the SAME container — can cause data leakage between unrelated requests",
+        "It causes a cold start",
+        "Lambda resets all globals on every call"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda containers are reused for warm invocations. A global variable set in request 1 is still there in request 2 on the same container. 'Store DB connection globally' = fine. 'Store user data globally' = data leakage bug.",
+      "tags": [
+        "lambda",
+        "state",
+        "gotcha"
+      ]
+    },
+    {
+      "id": "sls-q9",
+      "type": "mcq",
+      "prompt": "What is the maximum timeout for a Lambda function?",
+      "choices": [
+        "30 seconds",
+        "5 minutes",
+        "15 minutes",
+        "1 hour"
+      ],
+      "answerIndex": 2,
+      "explanation": "Lambda maximum timeout is 15 minutes. For longer jobs, use AWS Fargate (ECS tasks) or AWS Batch. Step Functions can coordinate multiple Lambda calls but each individual Lambda still has the 15-min limit.",
+      "tags": [
+        "lambda",
+        "limits"
+      ]
+    },
+    {
+      "id": "sls-q10",
+      "type": "mcq",
+      "prompt": "What is the primary benefit of using Step Functions over chaining Lambdas directly?",
+      "choices": [
+        "Step Functions is cheaper",
+        "Step Functions provides built-in state management, retry/catch logic, parallel execution, and a visual audit trail — replacing fragile hand-coded orchestration logic in Lambda",
+        "Step Functions is faster",
+        "Step Functions removes the need for Lambda"
+      ],
+      "answerIndex": 1,
+      "explanation": "Hand-coded Lambda chains are brittle: no built-in retry, hard to debug, nested timeouts. Step Functions gives you: Retry with backoff, Catch for error handling, Parallel states, Wait states, and a visual execution history in the console.",
+      "tags": [
+        "step-functions",
+        "orchestration"
+      ]
+    },
+    {
+      "id": "sls-q11",
+      "type": "mcq",
+      "prompt": "What is an AWS Lambda Layer?",
+      "choices": [
+        "A networking concept",
+        "A reusable package of shared code or dependencies that multiple Lambda functions can reference — uploaded once, attached to many functions",
+        "Lambda version alias",
+        "Cold start optimisation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Layers let you share: libraries (pandas, boto3), custom runtimes, company-wide utilities. Update the Layer once and all attached functions get the update. Keeps deployment packages small (faster cold starts).",
+      "tags": [
+        "lambda",
+        "layers"
+      ]
+    },
+    {
+      "id": "sls-q12",
+      "type": "mcq",
+      "prompt": "What is a Dead Letter Queue (DLQ) in serverless context?",
+      "choices": [
+        "A queue for spam messages",
+        "A destination (SQS or SNS) where failed Lambda invocations are sent after all retries are exhausted — prevents event loss",
+        "A Lambda error log",
+        "A backup Lambda function"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without DLQ, failed events are silently discarded after retries. With DLQ: failed events go to an SQS queue for investigation, alerting, and manual replay. Always configure DLQ for async Lambda invocations.",
+      "tags": [
+        "lambda",
+        "dlq",
+        "reliability"
+      ]
+    },
+    {
+      "id": "sls-q13",
+      "type": "mcq",
+      "prompt": "Which AWS service replaces traditional cron jobs in a serverless architecture?",
+      "choices": [
+        "CloudWatch Logs",
+        "AWS Batch",
+        "Amazon EventBridge (Scheduler) — triggers Lambda on a cron or rate schedule",
+        "SQS FIFO"
+      ],
+      "answerIndex": 2,
+      "explanation": "EventBridge Scheduler (formerly CloudWatch Events) lets you define cron expressions or rates. It triggers Lambda at the scheduled time. No server needed for 'run every day at 2am' tasks.",
+      "tags": [
+        "eventbridge",
+        "scheduling"
+      ]
+    },
+    {
+      "id": "sls-q14",
+      "type": "mcq",
+      "prompt": "In SAM (Serverless Application Model), what does `sam local start-api` do?",
+      "choices": [
+        "Deploys to AWS",
+        "Creates API Gateway in AWS",
+        "Starts a local HTTP server that simulates API Gateway and invokes your Lambda handler locally — for testing without deploying",
+        "Builds the Docker image"
+      ],
+      "answerIndex": 2,
+      "explanation": "sam local start-api spins up a local API Gateway emulator on port 3000. You can hit it with Postman or curl, and SAM invokes your Lambda handler with the same event structure as real API Gateway — all locally.",
+      "tags": [
+        "sam",
+        "local-development"
+      ]
+    },
+    {
+      "id": "sls-q15",
+      "type": "mcq",
+      "prompt": "What is the 'Lambda execution environment' reuse benefit for database connections?",
+      "choices": [
+        "Lambda automatically manages DB connection pools",
+        "You can initialise a DB connection OUTSIDE the handler function — it persists in the warm container and is reused across invocations, avoiding reconnect overhead",
+        "Lambda has built-in connection pooling",
+        "There is no benefit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Initialise expensive resources (DB connections, SDK clients) outside the handler function body. They are created once during cold start and reused across warm invocations. This is the ONE case where global state in Lambda is correct.",
+      "tags": [
+        "lambda",
+        "performance",
+        "database"
+      ]
+    },
+    {
+      "id": "sls-q16",
+      "type": "mcq",
+      "prompt": "What does the `event` parameter in a Lambda handler contain?",
+      "choices": [
+        "HTTP headers only",
+        "Empty by default",
+        "The trigger payload — for API Gateway: HTTP request details; for S3: bucket/key info; for SQS: message bodies. Format varies by trigger type.",
+        "Lambda configuration settings"
+      ],
+      "answerIndex": 2,
+      "explanation": "The event object is the trigger's input data. API Gateway event contains httpMethod, path, headers, body. S3 event contains bucket name, object key, event type. SQS event contains an array of messages with their bodies.",
+      "tags": [
+        "lambda",
+        "event",
+        "triggers"
+      ]
+    },
+    {
+      "id": "sls-q17",
+      "type": "mcq",
+      "prompt": "When would you choose EC2/ECS over Lambda for a workload?",
+      "choices": [
+        "When requests are sporadic",
+        "When you need auto-scaling",
+        "When the workload runs longer than 15 minutes, needs consistent low latency under constant traffic, or requires GPU/specialised hardware",
+        "Lambda is always better"
+      ],
+      "answerIndex": 2,
+      "explanation": "Lambda excels at sporadic, short-duration, event-driven work. But: video encoding (hours), ML training (GPU needed), constant high-traffic API (EC2/ECS often cheaper than Lambda at scale) — these are EC2/Fargate territory.",
+      "tags": [
+        "lambda",
+        "vs-containers",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "sls-q18",
+      "type": "multi",
+      "prompt": "Which of these are valid Lambda triggers? (Select all that apply)",
+      "choices": [
+        "HTTP request via API Gateway",
+        "File uploaded to S3",
+        "Message added to SQS queue",
+        "Cron schedule via EventBridge"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "explanation": "All four are valid Lambda triggers. Lambda is event-driven and integrates with practically every AWS service. You can also trigger it from DynamoDB Streams, SNS, Kinesis, IoT Core, and more.",
+      "tags": [
+        "lambda",
+        "triggers"
+      ]
+    },
+    {
+      "id": "sls-q19",
+      "type": "mcq",
+      "prompt": "What is the Lambda concurrency limit and what happens when it is hit?",
+      "choices": [
+        "No limit",
+        "When concurrent executions exceed the account limit (default 1000), new requests get a 429 TooManyRequestsException and are throttled",
+        "Lambda auto-scales infinitely",
+        "Requests are queued automatically"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each AWS account has a default concurrency limit (1000 across all Lambdas). When exceeded, new invocations are throttled (429). Request a limit increase via AWS Support or use Reserved Concurrency to guarantee capacity for critical functions.",
+      "tags": [
+        "lambda",
+        "concurrency",
+        "limits"
+      ]
+    },
+    {
+      "id": "sls-q20",
+      "type": "mcq",
+      "prompt": "What is the 'fan-out' serverless pattern?",
+      "choices": [
+        "Lambda calling one downstream service",
+        "One event triggers multiple parallel Lambda executions — used for parallel processing of different aspects of the same event",
+        "Lambda reading from multiple queues",
+        "Step Functions sequential execution"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fan-out: SNS topic receives one event, fans out to multiple SQS queues, each consumed by different Lambda functions in parallel. Example: OrderPlaced -> simultaneously trigger inventory Lambda, email Lambda, analytics Lambda.",
+      "tags": [
+        "patterns",
+        "fan-out",
+        "sns"
       ]
     }
   ],
   "flashcards": [
     {
-      "id": "sls-fc1",
-      "front": "Serverless characteristics",
-      "back": "Zero server management. Pay per invocation (GB-second). Auto-scale to zero. Cold start latency. 15 min max execution. Stateless by design. Good for: event-driven, bursty, variable traffic, API backends.",
+      "id": "sls-fc4",
+      "front": "Lambda cold start mitigation options",
+      "back": "1. Provisioned Concurrency (pre-warm containers, costs money)  2. EventBridge keep-alive ping every 5 min (free)  3. Reduce package size (fewer deps, Lambda Layers)  4. Use Python/Node over Java  5. GraalVM native for Java (no JVM startup)",
       "tags": [
-        "serverless"
-      ]
-    },
-    {
-      "id": "sls-fc2",
-      "front": "Cold start mitigation",
-      "back": "Provisioned concurrency: keep N warm instances ($$). Lambda SnapStart (Java): restore snapshot. Lightweight runtimes: Node.js/Python over JVM. Smaller deployment packages: faster init.",
-      "tags": [
-        "serverless",
+        "lambda",
         "cold-start"
       ]
     },
     {
-      "id": "sls-fc3",
-      "front": "Common Lambda patterns",
-      "back": "HTTP API: API GW \u2192 Lambda \u2192 DB. Event processing: S3/SQS \u2192 Lambda. Fan-out: EventBridge \u2192 N Lambdas. Scheduled: cron \u2192 Lambda. Stream: Kinesis/SQS event source mapping.",
+      "id": "sls-fc5",
+      "front": "Lambda global variable rule",
+      "back": "Initialise OUTSIDE handler: DB connections, SDK clients, config (safe, reused across warm invocations = good performance). Store INSIDE handler: per-request user data, request state (not safe to persist across invocations = data leakage).",
       "tags": [
-        "serverless",
-        "patterns"
+        "lambda",
+        "state"
+      ]
+    },
+    {
+      "id": "sls-fc6",
+      "front": "Step Functions when to use",
+      "back": "Use when: multi-step workflow with error handling, parallel branches, or human approval. Avoid for: simple A->B Lambda chains that rarely fail. Step Functions cost per state transition — don't overuse for trivial chains.",
+      "tags": [
+        "step-functions"
+      ]
+    },
+    {
+      "id": "sls-fc7",
+      "front": "Lambda DLQ — why mandatory for async",
+      "back": "Async Lambda invocations (SQS, SNS, S3) retry on failure. After retries exhausted, event is LOST unless DLQ configured. DLQ = SQS queue receiving failed events for investigation/replay. Always configure DLQ for async Lambda.",
+      "tags": [
+        "lambda",
+        "dlq",
+        "reliability"
+      ]
+    },
+    {
+      "id": "sls-fc8",
+      "front": "Serverless vs container decision",
+      "back": "Lambda: sporadic traffic, event-driven, <15min, pay per use, zero ops. ECS/Fargate: long-running, consistent high traffic (cheaper per request at scale), >15min, stateful. EC2: full control, specialised hardware (GPU), legacy apps.",
+      "tags": [
+        "trade-offs",
+        "architecture"
+      ]
+    },
+    {
+      "id": "sls-fc1-real",
+      "front": "Lambda trigger types summary",
+      "back": "API Gateway (HTTP request) -> sync response. S3 (file upload) -> async processing. SQS (queue message) -> poll-based batch. EventBridge (schedule/event) -> async. DynamoDB Streams (DB change) -> stream. SNS (notification) -> async fan-out.",
+      "tags": [
+        "lambda",
+        "triggers"
+      ]
+    },
+    {
+      "id": "sls-fc2-real",
+      "front": "Step Functions error handling",
+      "back": "Retry: {MaxAttempts:3, IntervalSeconds:2, BackoffRate:2} — exponential backoff. Catch: catch specific error types, transition to error handling state. Much cleaner than try/catch chains inside Lambda code.",
+      "tags": [
+        "step-functions",
+        "error-handling"
+      ]
+    },
+    {
+      "id": "sls-fc3-real",
+      "front": "Serverless cost optimisation tips",
+      "back": "1. Right-size memory (profile, don't always use max)  2. Use ARM64 (Graviton) = 20% cheaper + faster  3. Reduce package size (faster cold start = shorter billed duration)  4. Use Lambda SnapStart for Java (cache initialised snapshot)",
+      "tags": [
+        "lambda",
+        "cost"
       ]
     }
   ],

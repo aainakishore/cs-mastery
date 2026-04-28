@@ -9,7 +9,7 @@ import { GuideView } from '../components/GuideView'
 import { Layout } from '../components/Layout'
 import { AchievementToast } from '../components/AchievementToast'
 import { checkAchievements } from '../lib/achievements'
-import { playCoin, playCorrect, playWrong, playFanfare } from '../lib/sounds'
+import { playCoin, playWrong, playFanfare } from '../lib/sounds'
 import { haptic } from '../lib/haptics'
 import { getSettings } from '../lib/storage'
 import { topics } from '../content'
@@ -226,8 +226,6 @@ export function Quiz() {
           index={currentIdx}
           total={questions.length}
           onAnswer={(ans) => {
-            // Play sound on answer
-            if (settings.sound) playCorrect()
             haptic('light')
             handleAnswer(ans)
           }}

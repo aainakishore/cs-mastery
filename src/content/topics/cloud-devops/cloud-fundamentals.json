@@ -7,20 +7,20 @@
   "prereqs": [
     "linux-essentials"
   ],
-  "guide": "# Cloud Fundamentals\n\nCloud computing provides on-demand access to computing resources (servers, storage, databases, networking) over the internet, paying only for what you use.\n\n## Service Models\n\n```\nIaaS (Infrastructure as a Service):\n  You manage: OS, runtime, app, data\n  Provider manages: hardware, networking, virtualization\n  Examples: AWS EC2, Azure VMs, GCP Compute Engine\n  When: need full control, custom OS configuration\n\nPaaS (Platform as a Service):\n  You manage: app, data\n  Provider manages: OS, runtime, scaling, infrastructure\n  Examples: Heroku, AWS Elastic Beanstalk, Google App Engine\n  When: focus on code, not infrastructure\n\nSaaS (Software as a Service):\n  You manage: just usage/data\n  Provider manages: everything\n  Examples: Salesforce, Gmail, GitHub, Slack\n  When: consuming software\n\nFaaS (Function as a Service / Serverless):\n  You manage: function code only\n  Provider manages: servers, scaling, runtime\n  Examples: AWS Lambda, Cloudflare Workers, Vercel Functions\n  When: event-driven, unpredictable traffic, scale-to-zero\n```\n\n## Core Cloud Concepts\n\n```\nRegions and Availability Zones (AZs):\n  Region:  geographic area (us-east-1 = N. Virginia)\n  AZ:      independent data center within a region (us-east-1a, 1b, 1c)\n  Deploy across 2+ AZs for high availability (one AZ failure = still running)\n\nElasticity vs Scalability:\n  Scalability: can scale to meet demand\n  Elasticity: automatically scales up AND down based on demand\n\nCapEx vs OpEx:\n  On-premise: CapEx (large upfront investment, depreciated over 5 years)\n  Cloud: OpEx (pay-as-you-go, no upfront)\n```\n\n## AWS Core Services\n\n```\nCompute:     EC2 (VMs), Lambda (serverless), ECS/EKS (containers)\nStorage:     S3 (object store), EBS (block = VM disk), EFS (shared file system)\nDatabase:    RDS (relational), DynamoDB (NoSQL), ElastiCache (Redis)\nNetworking:  VPC, Route 53 (DNS), CloudFront (CDN), API Gateway\nSecurity:    IAM (identity), KMS (encryption keys), WAF\nMonitoring:  CloudWatch (metrics + logs), X-Ray (distributed tracing)\n```\n\n## AWS IAM Best Practices\n\n```\nLeast privilege: grant minimum permissions needed\n  Bad:  AdministratorAccess to all EC2 instances\n  Good: arn:aws:iam::*:policy/read-only-s3-production-bucket\n\nMFA: enable for root account always\nRoles: use IAM roles for services (not access keys)\nRotation: rotate access keys < 90 days\n```\n\n## Common Pitfalls\n- **Single AZ deployment** \u2014 AZ outages happen. Deploy across 2+ AZs.\n- **Hardcoded credentials** \u2014 never put AWS keys in code. Use IAM roles for EC2/Lambda, environment variables for local.\n- **Over-provisioning** \u2014 cloud advantage is pay-per-use. Use auto-scaling; don't provision for peak all the time.\n- **Public S3 buckets** \u2014 default-block all public access unless intentional. Many data breaches are from misconfigured S3.\n",
+  "guide": "# Cloud Fundamentals\n\n## What Is Cloud Computing? (Start From Zero)\n\nBefore cloud computing, if you wanted to run a website, you had to:\n1. Buy physical servers (thousands of dollars)\n2. Find a data centre to put them in (expensive rent)\n3. Hire someone to maintain them 24/7\n4. Guess how much traffic you would get and buy enough hardware upfront\n5. Wait weeks for the hardware to arrive and be set up\n\nIf your website suddenly became popular, you were stuck — more hardware took weeks.\nIf traffic was low, your expensive servers sat idle wasting money.\n\n**Cloud computing flips this model.** You rent computing resources (servers, storage,\ndatabases) from a cloud provider (AWS, Google Cloud, Azure) over the internet.\nYou pay only for what you use, scale up or down in minutes, and never touch hardware.\n\n**Analogy:** Think of electricity. You do not build your own power plant to get electricity.\nYou plug into the grid, use what you need, and pay the bill. Cloud computing is the\nsame idea for servers, storage, and software infrastructure.\n\n```\nBefore cloud:                          After cloud:\n  Buy servers = $50,000 upfront          Pay $0.02/hour per server\n  Setup time = 4-8 weeks                 Setup time = 2 minutes\n  Traffic spike = site goes down         Traffic spike = auto-scale in seconds\n  Low traffic = wasted hardware          Low traffic = scale to zero, pay nothing\n  Hardware failure = your problem        Hardware failure = provider's problem\n```\n\n---\n\n## The Three Main Cloud Providers\n\n```\n+----------+-----------------------------------------------------------+\n| Provider | Key facts                                                 |\n+----------+-----------------------------------------------------------+\n| AWS      | Amazon Web Services. Largest market share (31%).         |\n| (Amazon) | Most services, most mature. EC2, S3, Lambda, RDS, EKS.  |\n+----------+-----------------------------------------------------------+\n| Azure    | Microsoft Azure. Strong in enterprise/Windows shops.      |\n| (MS)     | AKS (K8s), Active Directory integration, Office365.      |\n+----------+-----------------------------------------------------------+\n| GCP      | Google Cloud Platform. Strongest in ML/AI, BigQuery.     |\n| (Google) | GKE (K8s), BigQuery, Vertex AI, Cloud Run.              |\n+----------+-----------------------------------------------------------+\n\nAll three offer similar services under different names.\nAWS: EC2  |  Azure: Virtual Machines  |  GCP: Compute Engine\nAWS: S3   |  Azure: Blob Storage      |  GCP: Cloud Storage\nAWS: RDS  |  Azure: Azure SQL         |  GCP: Cloud SQL\n```\n\n---\n\n## Service Models — IaaS, PaaS, SaaS, FaaS\n\nCloud services come in layers — each layer abstracts away more complexity.\nThe higher up you go, the less you manage.\n\n```\nON-PREMISES (you manage everything):\n  Hardware, Network, Storage, Virtualization,\n  OS, Runtime, Middleware, Applications, Data\n  You manage: EVERYTHING\n\nIAAS (Infrastructure as a Service):\n  Cloud manages: Hardware, Network, Storage, Virtualization\n  You manage:    OS, Runtime, Middleware, Applications, Data\n  Examples:      AWS EC2, Azure VMs, Google Compute Engine\n  Use when:      Need full control over OS and runtime\n\nPAAS (Platform as a Service):\n  Cloud manages: Hardware, Network, Storage, Virtualization, OS, Runtime\n  You manage:    Applications, Data\n  Examples:      AWS Elastic Beanstalk, Heroku, Google App Engine\n  Use when:      Just want to deploy code without managing servers\n\nSAAS (Software as a Service):\n  Cloud manages: EVERYTHING\n  You manage:    Just use the application\n  Examples:      Gmail, Slack, Salesforce, GitHub\n  Use when:      End-user product — no infrastructure responsibility\n\nFAAS (Function as a Service / Serverless):\n  Cloud manages: Hardware, OS, Runtime, Scaling\n  You provide:   A function (code snippet)\n  You pay for:   Execution time only (milliseconds)\n  Examples:      AWS Lambda, Google Cloud Functions, Azure Functions\n  Use when:      Event-driven, sporadic workloads\n```\n\n**Analogy — pizza:**\n```\nOn-premises = make pizza at home (buy ingredients, oven, everything yourself)\nIaaS         = use a restaurant kitchen (they provide oven + space, you cook)\nPaaS         = pizza delivery kit (they provide dough+sauce, you just add toppings)\nSaaS         = order pizza delivery (someone else does everything, you just eat)\nFaaS         = pay per slice eaten (only pay when you consume something)\n```\n\n---\n\n## Regions and Availability Zones\n\nCloud providers divide the world into geographic areas to provide low latency\nand fault tolerance.\n\n```\nREGION = a geographic area with multiple data centres\n  Examples: us-east-1 (N. Virginia), eu-west-1 (Ireland), ap-southeast-1 (Singapore)\n  AWS has 30+ regions globally.\n  You choose a region close to your users for low latency.\n\nAVAILABILITY ZONE (AZ) = one or more physical data centres within a region\n  Each region has 2-6 AZs.\n  AZs are physically separated (different buildings, different power/network)\n  but connected with high-speed private fibre.\n\n  us-east-1\n  +-------------------------------------------------------+\n  |  AZ: us-east-1a    AZ: us-east-1b    AZ: us-east-1c  |\n  |  Data centre 1     Data centre 2     Data centre 3    |\n  +-------------------------------------------------------+\n\nMULTI-AZ = deploy your app in multiple AZs simultaneously\n  If one AZ has a power outage, your app keeps running in the others.\n  Load balancer distributes traffic across all healthy AZs.\n\nWhy not one big data centre?\n  Single point of failure: one storm, power outage, or fire takes everything down.\n  Multi-AZ = high availability (HA).\n```\n\n**Key distinction:**\n```\nRegion failure: entire geographic area down (rare, major disaster)\nAZ failure:     one data centre down (more common: power, hardware)\n\nBest practice for production:\n  Deploy across at least 2 AZs in one region.\n  For true disaster recovery: active-active across 2 regions.\n```\n\n---\n\n## Core Cloud Networking\n\n```\nVPC (Virtual Private Cloud) = your private network in the cloud\n  Isolated network just for your account.\n  You define IP address ranges, subnets, routing rules.\n\n  +--------------------------------------------------+\n  |                VPC: 10.0.0.0/16                  |\n  |                                                  |\n  |  Public Subnet         Private Subnet            |\n  |  10.0.1.0/24           10.0.2.0/24               |\n  |  (Internet accessible) (No direct internet)      |\n  |  [Load Balancer]       [App Servers]             |\n  |  [Bastion Host]        [Databases]               |\n  +--+-----------------------------------------------+\n     |\n  Internet Gateway -> connects VPC to internet\n\nPUBLIC SUBNET: resources have public IPs, reachable from internet\n  Use for: load balancers, bastion hosts, NAT gateways\n\nPRIVATE SUBNET: no public IPs, not directly reachable from internet\n  Use for: app servers, databases, internal services\n  Can reach internet via NAT Gateway (outbound only)\n\nSecurity Groups = stateful firewall for EC2/RDS instances\n  Rule: ALLOW port 443 from 0.0.0.0/0 (any IP)\n  Rule: ALLOW port 5432 from 10.0.0.0/16 (VPC only)\n\nNACLs = stateless firewall at subnet level\n```\n\n---\n\n## IAM — Identity and Access Management\n\nIAM controls WHO can do WHAT in your cloud account.\nThis is arguably the most important security concept in cloud.\n\n```\nIAM concepts:\n\nUSER:    A person or service that interacts with AWS\n         Has credentials (password for console, access key for API)\n\nGROUP:   Collection of users with shared permissions\n         e.g. 'developers' group has read-only prod, full dev access\n\nROLE:    An identity assumed by a service or user temporarily\n         EC2 instance assumes role 'app-role' to read from S3\n         No hardcoded credentials needed!\n\nPOLICY:  JSON document defining allowed/denied actions\n         Attached to users, groups, or roles\n\nExample policy (S3 read-only):\n{\n  'Effect': 'Allow',\n  'Action': ['s3:GetObject', 's3:ListBucket'],\n  'Resource': 'arn:aws:s3:::my-bucket/*'\n}\n```\n\n**Principle of Least Privilege:**\n```\nGive every identity the MINIMUM permissions it needs — nothing more.\n\nBad:  EC2 instance has AdministratorAccess policy\n      -> if compromised, attacker controls your entire AWS account\n\nGood: EC2 instance has a role allowing ONLY:\n      - s3:GetObject on the specific bucket it needs\n      - secretsmanager:GetSecretValue for its DB password\n\nUse IAM roles for EC2/Lambda/ECS — NEVER use access keys on servers.\nAccess keys can be stolen. Roles are automatically rotated by AWS.\n```\n\n---\n\n## Cloud Pricing Models\n\n```\nON-DEMAND:\n  Pay per second/hour you use.\n  No commitment. Most flexible. Most expensive per hour.\n  Use for: unpredictable workloads, short-term needs.\n\nRESERVED INSTANCES:\n  Commit to 1 or 3 years. Pay upfront or monthly.\n  Up to 72% cheaper than on-demand.\n  Use for: steady, predictable workloads (production databases).\n\nSPOT INSTANCES (AWS-specific):\n  Bid on spare AWS capacity. Up to 90% cheaper than on-demand.\n  AWS can reclaim with 2-minute notice.\n  Use for: batch jobs, ML training, fault-tolerant workloads.\n  NOT for: databases, anything that cannot handle interruption.\n\nSAVINGS PLANS:\n  Commit to a dollar amount of compute per hour for 1-3 years.\n  More flexible than Reserved Instances.\n  Applies across services (EC2, Lambda, Fargate).\n\nFREE TIER:\n  AWS, GCP, Azure all have free tiers for learning.\n  AWS: 750 hours EC2 t2.micro/month for 12 months.\n  AWS: 5GB S3 storage forever.\n  AWS Lambda: 1 million requests/month forever.\n```\n\n---\n\n## Key Cloud Services Quick Reference\n\n```\nCOMPUTE:\n  EC2          = virtual machine (you manage OS, patches)\n  Lambda       = serverless function (you just write code)\n  ECS/EKS      = run Docker containers / Kubernetes\n  Fargate      = serverless containers (no EC2 to manage)\n\nSTORAGE:\n  S3           = object storage (files, images, backups, static sites)\n  EBS          = block storage (like a hard drive, attached to EC2)\n  EFS          = shared filesystem (multiple EC2s mount same volume)\n\nDATABASE:\n  RDS          = managed relational DB (MySQL, PostgreSQL, etc.)\n  DynamoDB     = NoSQL, serverless, millisecond latency\n  ElastiCache  = managed Redis/Memcached (caching)\n\nNETWORKING:\n  VPC          = private network\n  Route 53     = DNS service\n  CloudFront   = CDN (cache content close to users globally)\n  ELB/ALB      = load balancer\n\nSECURITY:\n  IAM          = identity and access control\n  KMS          = encryption key management\n  WAF          = web application firewall\n\nDEVOPS:\n  CloudWatch   = monitoring, logs, alerts\n  CloudFormation = infrastructure as code (YAML/JSON templates)\n  CDK          = CloudFormation but in real code (TypeScript/Python)\n  CodePipeline = AWS-native CI/CD\n```\n\n---\n\n## The Shared Responsibility Model\n\n```\nCloud security is a shared responsibility between you and the provider.\n\nCloud provider responsible for:     You are responsible for:\n  Physical hardware security          Your application code\n  Data centre facilities              Your data (encryption, backups)\n  Network hardware                    IAM (who has access to what)\n  Hypervisor/virtualisation layer     OS patching (for IaaS/EC2)\n  Service availability (SLA)          Security group rules\n                                      Data classification\n\nSimple rule:\n  Cloud provider secures the CLOUD (infrastructure)\n  You secure what is IN the cloud (your code, data, access)\n```\n\n---\n\n## Mind Map\n\n```\nCLOUD FUNDAMENTALS\n|\n+-- WHY CLOUD\n|   +-- Pay per use (no upfront hardware)\n|   +-- Scale in minutes (not weeks)\n|   +-- Global reach (regions/AZs)\n|   +-- No hardware maintenance\n|\n+-- SERVICE MODELS\n|   +-- IaaS   (EC2: you manage OS, they manage hardware)\n|   +-- PaaS   (Elastic Beanstalk: you deploy app, they manage platform)\n|   +-- SaaS   (Gmail: use the software, manage nothing)\n|   +-- FaaS   (Lambda: pay per function execution)\n|\n+-- GEOGRAPHIC CONCEPTS\n|   +-- Region   (geographic area: us-east-1)\n|   +-- AZ       (data centre: us-east-1a)\n|   +-- Multi-AZ (high availability — survive one AZ failure)\n|\n+-- NETWORKING\n|   +-- VPC       (your private network)\n|   +-- Public subnet  (internet-facing: load balancers)\n|   +-- Private subnet (internal: databases, app servers)\n|   +-- Security Groups (stateful firewall)\n|\n+-- IDENTITY (IAM)\n|   +-- User, Group, Role, Policy\n|   +-- Least privilege principle\n|   +-- Use roles on EC2/Lambda, never access keys\n|\n+-- PRICING\n    +-- On-demand (per second, no commitment)\n    +-- Reserved  (1-3 year commitment, 72% discount)\n    +-- Spot      (cheapest, can be interrupted)\n    +-- Savings Plans (flexible commitment)\n```\n\n---\n\n## How Cloud Fundamentals Connects to Other Topics\n\n- **Docker + Kubernetes**: ECS runs Docker containers; EKS is managed Kubernetes.\n  K8s worker nodes are EC2 instances in a VPC.\n- **CI/CD**: Pipelines deploy to AWS using IAM roles with least-privilege access.\n  CodePipeline is AWS-native CI/CD.\n- **Databases**: RDS is managed PostgreSQL/MySQL in your VPC. DynamoDB is serverless NoSQL.\n- **Networking**: CloudFront CDN sits in front of your app. Route 53 handles DNS.\n  ALB is the load balancer distributing traffic across AZs.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Hardcoding AWS access keys in code** — commit to git = key stolen in minutes by bots.\n   Use IAM roles on EC2/Lambda instead.\n2. **Everything in one AZ** — one power outage takes down your whole app.\n   Deploy across at least 2 AZs.\n3. **Overly permissive security groups** — ALLOW all traffic from 0.0.0.0/0 on all ports.\n   Only open the exact ports needed, from the exact sources needed.\n4. **No cost alerts** — cloud bills can spiral. Set a billing alert at your expected spend.\n5. **Public databases** — RDS should be in a private subnet. Never expose your database to the internet.\n6. **Ignoring the free tier** — for learning, stay within free tier. Set a $5 budget alert.\n7. **Using root account for daily work** — create IAM users with appropriate permissions.\n   Root account is for account-level emergencies only.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **AWS Certified Cloud Practitioner - Full Course** by freeCodeCamp:\n  https://www.youtube.com/watch?v=SOTamWNgDKc\n  - 13 hours. Complete beginner-to-practitioner. Even if you don't want the cert, chapters 1-4 are gold.\n- **Cloud Computing in 6 Minutes** by Simplilearn:\n  https://www.youtube.com/watch?v=M988_fsOSWo\n  - Quick overview of IaaS/PaaS/SaaS with examples.\n\n### Free Books and Articles\n- **AWS Well-Architected Framework**: https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html\n  - AWS best practices across 6 pillars: reliability, security, performance, cost, etc.\n- **AWS Free Tier guide**: https://aws.amazon.com/free/\n  - What you can use for free to practice. Start here.\n\n### Diagrams and Cheatsheets\n- **AWS Global Infrastructure map**: https://infrastructure.aws/\n  - Live map of all regions and AZs worldwide.\n- **AWS Shared Responsibility diagram**: search 'AWS shared responsibility model diagram'\n\n### Practice\n- **AWS Skill Builder** (free official training): https://skillbuilder.aws/\n  - 'AWS Cloud Practitioner Essentials' is a free 6-hour course.\n- **CloudQuest by AWS** (gamified cloud learning): https://aws.amazon.com/training/digital/aws-cloud-quest/",
   "questions": [
     {
       "id": "cloud-q1",
       "type": "mcq",
-      "prompt": "IaaS vs PaaS vs FaaS \u2014 what does each abstract away from the developer?",
+      "prompt": "IaaS vs PaaS vs FaaS — what does each abstract away from the developer?",
       "choices": [
         "Nothing different",
-        "IaaS: abstracts hardware/networking (dev manages OS+app). PaaS: abstracts OS+runtime (dev manages app+data only). FaaS: abstracts EVERYTHING except function code \u2014 autoscales, pay-per-invocation",
+        "IaaS: abstracts hardware/networking (dev manages OS+app). PaaS: abstracts OS+runtime (dev manages app+data only). FaaS: abstracts EVERYTHING except function code — autoscales, pay-per-invocation",
         "All identical",
         "FaaS requires containers"
       ],
       "answerIndex": 1,
-      "explanation": "Each level removes more operational responsibility. IaaS: closest to data center ownership. PaaS: no OS patches. FaaS: zero servers to think about \u2014 write a function, everything else managed.",
+      "explanation": "Each level removes more operational responsibility. IaaS: closest to data center ownership. PaaS: no OS patches. FaaS: zero servers to think about — write a function, everything else managed.",
       "tags": [
         "cloud",
         "IaaS",
@@ -34,7 +34,7 @@
       "prompt": "Why deploy across multiple Availability Zones?",
       "choices": [
         "Lower cost",
-        "An AZ is an independent data center \u2014 power, cooling, and network failures are isolated. Deploying across 2+ AZs means a single AZ failure doesn't cause an outage. AWS SLA requires multi-AZ for 99.99% uptime",
+        "An AZ is an independent data center — power, cooling, and network failures are isolated. Deploying across 2+ AZs means a single AZ failure doesn't cause an outage. AWS SLA requires multi-AZ for 99.99% uptime",
         "AZs are same as regions",
         "Single AZ is sufficient"
       ],
@@ -52,16 +52,314 @@
       "prompt": "AWS IAM: should an EC2 instance use an access key or an IAM role?",
       "choices": [
         "Access key is simpler",
-        "IAM role \u2014 attached to the EC2 instance, credentials are auto-rotated by AWS, never stored in code or environment. Access keys stored on instances get leaked in code or stolen from the instance",
+        "IAM role — attached to the EC2 instance, credentials are auto-rotated by AWS, never stored in code or environment. Access keys stored on instances get leaked in code or stolen from the instance",
         "Both equivalent",
         "Access keys are required for EC2"
       ],
       "answerIndex": 1,
-      "explanation": "IAM roles for EC2: app code calls AWS SDK \u2192 SDK automatically gets temporary credentials from the instance metadata service. No keys to store, rotate, or accidentally commit to GitHub.",
+      "explanation": "IAM roles for EC2: app code calls AWS SDK → SDK automatically gets temporary credentials from the instance metadata service. No keys to store, rotate, or accidentally commit to GitHub.",
       "tags": [
         "cloud",
         "IAM",
         "security"
+      ]
+    },
+    {
+      "id": "cloud-q4",
+      "type": "mcq",
+      "prompt": "What is the main benefit of cloud computing over buying physical servers?",
+      "choices": [
+        "Cloud servers are faster",
+        "You only pay for what you use and can scale in minutes without upfront hardware investment",
+        "Cloud is always cheaper",
+        "Cloud servers never fail"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cloud trades capital expenditure (buy hardware upfront) for operational expenditure (pay per use). You scale in minutes, not weeks, and pay nothing when idle.",
+      "tags": [
+        "cloud-basics",
+        "economics"
+      ]
+    },
+    {
+      "id": "cloud-q5",
+      "type": "mcq",
+      "prompt": "An EC2 instance is an example of which service model?",
+      "choices": [
+        "SaaS",
+        "PaaS",
+        "IaaS",
+        "FaaS"
+      ],
+      "answerIndex": 2,
+      "explanation": "EC2 is Infrastructure as a Service. AWS provides the hardware and virtualisation, but you manage the OS, patching, runtime, and application. You have full control but more responsibility.",
+      "tags": [
+        "iaas",
+        "service-models"
+      ]
+    },
+    {
+      "id": "cloud-q6",
+      "type": "mcq",
+      "prompt": "AWS Lambda is an example of which service model?",
+      "choices": [
+        "IaaS",
+        "PaaS",
+        "SaaS",
+        "FaaS (serverless)"
+      ],
+      "answerIndex": 3,
+      "explanation": "Lambda is Function as a Service. You write a function, AWS handles everything else: servers, OS, scaling, availability. You pay only per execution (milliseconds of compute time).",
+      "tags": [
+        "faas",
+        "serverless"
+      ]
+    },
+    {
+      "id": "cloud-q7",
+      "type": "mcq",
+      "prompt": "What is the purpose of multiple Availability Zones (AZs) in one region?",
+      "choices": [
+        "Reduce network latency",
+        "Provide lower costs",
+        "High availability — if one AZ has an outage (power, fire, hardware), the app keeps running in other AZs",
+        "Separate dev and prod environments"
+      ],
+      "answerIndex": 2,
+      "explanation": "AZs are physically separate data centres with independent power/cooling/network. Deploying across multiple AZs means one AZ failure (which happens) does not take down your application.",
+      "tags": [
+        "availability-zones",
+        "high-availability"
+      ]
+    },
+    {
+      "id": "cloud-q8",
+      "type": "mcq",
+      "prompt": "What is an IAM Role in AWS?",
+      "choices": [
+        "A user account for humans",
+        "A set of allowed IP addresses",
+        "A temporary identity with permissions that services (EC2, Lambda) can assume — no hardcoded credentials needed",
+        "A VPC routing rule"
+      ],
+      "answerIndex": 2,
+      "explanation": "IAM Roles are assumed by services (not humans). An EC2 instance assumes a role to get temporary credentials automatically rotated by AWS. This avoids hardcoding access keys — the most common AWS security mistake.",
+      "tags": [
+        "iam",
+        "security"
+      ]
+    },
+    {
+      "id": "cloud-q9",
+      "type": "mcq",
+      "prompt": "An EC2 instance needs to read files from S3. What is the CORRECT way to provide credentials?",
+      "choices": [
+        "Hardcode access key and secret in the application code",
+        "Create an IAM Role with S3 read permissions, attach it to the EC2 instance",
+        "SSH into the instance and run aws configure",
+        "Store credentials in /etc/environment"
+      ],
+      "answerIndex": 1,
+      "explanation": "IAM Roles on EC2 provide temporary, automatically-rotated credentials via the instance metadata service. No hardcoding needed. Hardcoded keys in code are a critical security vulnerability.",
+      "tags": [
+        "iam",
+        "ec2",
+        "security"
+      ]
+    },
+    {
+      "id": "cloud-q10",
+      "type": "mcq",
+      "prompt": "What is the difference between a public subnet and a private subnet in a VPC?",
+      "choices": [
+        "Public subnets are cheaper",
+        "Public subnets have internet gateway routes (internet accessible); private subnets have no direct internet route (protected, used for databases and app servers)",
+        "Private subnets are faster",
+        "There is no difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "Public subnets have an Internet Gateway route — instances can have public IPs. Private subnets have no internet gateway — instances are not directly reachable from internet. Databases should always be in private subnets.",
+      "tags": [
+        "vpc",
+        "networking"
+      ]
+    },
+    {
+      "id": "cloud-q11",
+      "type": "mcq",
+      "prompt": "What is the Principle of Least Privilege in cloud IAM?",
+      "choices": [
+        "Give all users admin access for convenience",
+        "Give every identity only the minimum permissions it needs — nothing more. Reduces blast radius if credentials are compromised.",
+        "Use root account for all operations",
+        "Rotate passwords every 90 days"
+      ],
+      "answerIndex": 1,
+      "explanation": "Least privilege limits damage. A compromised EC2 with only S3 read access cannot delete databases or spin up new instances. A compromised admin account can destroy everything.",
+      "tags": [
+        "iam",
+        "security",
+        "least-privilege"
+      ]
+    },
+    {
+      "id": "cloud-q12",
+      "type": "mcq",
+      "prompt": "What AWS pricing model gives up to 90% discount but can be interrupted with 2 minutes notice?",
+      "choices": [
+        "Reserved Instances",
+        "On-Demand",
+        "Spot Instances",
+        "Savings Plans"
+      ],
+      "answerIndex": 2,
+      "explanation": "Spot Instances use spare AWS capacity at massive discounts. AWS can reclaim them with 2-minute notice when capacity is needed. Perfect for batch ML training, data processing — anything fault-tolerant.",
+      "tags": [
+        "pricing",
+        "spot-instances"
+      ]
+    },
+    {
+      "id": "cloud-q13",
+      "type": "mcq",
+      "prompt": "What does S3 store?",
+      "choices": [
+        "Virtual machines",
+        "Relational database records",
+        "Objects (files, images, videos, backups, static website assets) — any file up to 5TB",
+        "Docker container images only"
+      ],
+      "answerIndex": 2,
+      "explanation": "S3 (Simple Storage Service) is object storage. Store any file — images, videos, backups, ML datasets, static websites. Infinitely scalable, 11 nines durability. Not a filesystem (no hierarchical directories).",
+      "tags": [
+        "s3",
+        "storage"
+      ]
+    },
+    {
+      "id": "cloud-q14",
+      "type": "mcq",
+      "prompt": "What is the cloud provider's responsibility under the Shared Responsibility Model?",
+      "choices": [
+        "Your application code security",
+        "Your IAM configuration",
+        "Security OF the cloud: physical data centres, hardware, virtualisation infrastructure, and service availability",
+        "Your data encryption"
+      ],
+      "answerIndex": 2,
+      "explanation": "AWS secures the underlying infrastructure. You are responsible for what runs ON it: your code, your data, your IAM policies, your security groups, OS patching (for EC2). 'Security of the cloud vs security in the cloud.'",
+      "tags": [
+        "shared-responsibility",
+        "security"
+      ]
+    },
+    {
+      "id": "cloud-q15",
+      "type": "mcq",
+      "prompt": "What is CloudFront used for?",
+      "choices": [
+        "Running containers",
+        "Managed Kubernetes",
+        "A CDN (Content Delivery Network) that caches content at edge locations globally — serving users from nearby servers instead of your origin, reducing latency",
+        "VPC routing"
+      ],
+      "answerIndex": 2,
+      "explanation": "CloudFront has 400+ edge locations worldwide. A user in Tokyo requesting your US-hosted image gets it from a nearby edge cache — milliseconds instead of hundreds of milliseconds. Also protects against DDoS (integrates with WAF).",
+      "tags": [
+        "cloudfront",
+        "cdn"
+      ]
+    },
+    {
+      "id": "cloud-q16",
+      "type": "mcq",
+      "prompt": "What is the key difference between RDS and DynamoDB?",
+      "choices": [
+        "RDS is serverless; DynamoDB is not",
+        "RDS = managed relational database (SQL, tables, joins, ACID); DynamoDB = serverless NoSQL key-value/document store (millisecond latency, infinite scale)",
+        "They are the same service",
+        "RDS is cheaper"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDS runs MySQL/PostgreSQL/etc. — structured data, SQL queries, joins, transactions. DynamoDB is NoSQL — flexible schema, built for high-throughput, low-latency reads/writes. Choose based on data model.",
+      "tags": [
+        "rds",
+        "dynamodb",
+        "databases"
+      ]
+    },
+    {
+      "id": "cloud-q17",
+      "type": "mcq",
+      "prompt": "What is Infrastructure as Code (IaC)?",
+      "choices": [
+        "Writing application code",
+        "Running code in the cloud",
+        "Defining cloud infrastructure in code files (YAML/JSON/TypeScript) that are version-controlled and applied automatically — AWS CloudFormation, CDK, Terraform",
+        "Serverless functions"
+      ],
+      "answerIndex": 2,
+      "explanation": "IaC treats infrastructure like application code. Version controlled in git. Reproducible environments. Review infrastructure changes in PRs. CloudFormation (AWS), Terraform (multi-cloud), CDK (CloudFormation via real code).",
+      "tags": [
+        "iac",
+        "cloudformation"
+      ]
+    },
+    {
+      "id": "cloud-q18",
+      "type": "multi",
+      "prompt": "Which of these belong in a PRIVATE subnet? (Select all that apply)",
+      "choices": [
+        "RDS database",
+        "EC2 application server (no public access needed)",
+        "Load balancer (receives external traffic)",
+        "Redis ElastiCache"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Databases (RDS), internal app servers, and caches should be in private subnets — no direct internet access. Load balancers need to be in public subnets to receive external traffic (they have a public IP).",
+      "tags": [
+        "vpc",
+        "subnets",
+        "security"
+      ]
+    },
+    {
+      "id": "cloud-q19",
+      "type": "mcq",
+      "prompt": "What is a Security Group in AWS?",
+      "choices": [
+        "An IAM group for security engineers",
+        "A stateful virtual firewall for EC2 instances — controls inbound and outbound traffic by IP, port, and protocol",
+        "An encryption service",
+        "A VPC routing table"
+      ],
+      "answerIndex": 1,
+      "explanation": "Security Groups are stateful (if inbound is allowed, response is automatically allowed). They attach to EC2 instances and RDS. Default: deny all inbound, allow all outbound. Open only specific ports from specific sources.",
+      "tags": [
+        "security-groups",
+        "networking",
+        "security"
+      ]
+    },
+    {
+      "id": "cloud-q20",
+      "type": "mcq",
+      "prompt": "What is the key advantage of a Reserved Instance over On-Demand pricing?",
+      "choices": [
+        "Reserved Instances can be stopped easily",
+        "Reserved Instances are always available",
+        "Up to 72% cost reduction in exchange for a 1 or 3-year commitment — ideal for steady predictable workloads like production databases",
+        "Reserved Instances have no storage limit"
+      ],
+      "answerIndex": 2,
+      "explanation": "On-demand flexibility costs more per hour. If you know a workload will run 24/7 for a year (production database, core API), Reserved Instances give huge savings. 1-year = ~40% off; 3-year = ~72% off.",
+      "tags": [
+        "pricing",
+        "reserved-instances"
       ]
     }
   ],
@@ -69,7 +367,7 @@
     {
       "id": "cloud-fc1",
       "front": "IaaS vs PaaS vs SaaS vs FaaS",
-      "back": "IaaS: manage OS up. PaaS: manage app+data. SaaS: just use it. FaaS: function code only, provider manages everything \u2014 scales to zero, per-invocation billing.",
+      "back": "IaaS: manage OS up. PaaS: manage app+data. SaaS: just use it. FaaS: function code only, provider manages everything — scales to zero, per-invocation billing.",
       "tags": [
         "cloud"
       ]
@@ -77,7 +375,7 @@
     {
       "id": "cloud-fc2",
       "front": "Regions and AZs",
-      "back": "Region: geographic area. AZ: independent data center in region. Multi-AZ deployment: 2+ AZs in same region. Failure of 1 AZ \u2192 traffic shifts to others. Required for >99.9% availability.",
+      "back": "Region: geographic area. AZ: independent data center in region. Multi-AZ deployment: 2+ AZs in same region. Failure of 1 AZ → traffic shifts to others. Required for >99.9% availability.",
       "tags": [
         "cloud",
         "HA"
@@ -91,6 +389,49 @@
         "cloud",
         "IAM",
         "security"
+      ]
+    },
+    {
+      "id": "cloud-fc4",
+      "front": "EC2 vs Lambda vs Fargate",
+      "back": "EC2 = IaaS (you manage OS, runtime). Lambda = FaaS pay per ms, no servers. Fargate = serverless containers (no EC2 to manage). Fargate = between EC2 and Lambda for container workloads.",
+      "tags": [
+        "compute",
+        "service-models"
+      ]
+    },
+    {
+      "id": "cloud-fc5",
+      "front": "Public vs Private subnet rule",
+      "back": "Public subnet: has IGW route, instances get public IPs. Load balancers live here. Private subnet: no internet route. Databases, app servers, caches live here. Only reachable from within VPC.",
+      "tags": [
+        "vpc",
+        "networking"
+      ]
+    },
+    {
+      "id": "cloud-fc6",
+      "front": "IAM Role vs IAM User",
+      "back": "User = person (human) with long-term credentials (password, access key). Role = identity for services/automation (temporary, auto-rotated credentials). Use roles for EC2/Lambda. NEVER use access keys on servers.",
+      "tags": [
+        "iam",
+        "security"
+      ]
+    },
+    {
+      "id": "cloud-fc7",
+      "front": "On-Demand vs Reserved vs Spot",
+      "back": "On-Demand: pay per second, no commitment, most flexible, most expensive. Reserved: 1-3yr commit, 40-72% cheaper, use for steady workloads. Spot: 70-90% cheaper, can be interrupted, use for batch jobs.",
+      "tags": [
+        "pricing"
+      ]
+    },
+    {
+      "id": "cloud-fc8",
+      "front": "S3 vs EBS vs EFS",
+      "back": "S3 = object storage (any file, accessed via HTTP API, globally unique URL). EBS = block storage (like an HD, attached to ONE EC2). EFS = shared filesystem (mounted by MULTIPLE EC2s simultaneously).",
+      "tags": [
+        "storage"
       ]
     }
   ],

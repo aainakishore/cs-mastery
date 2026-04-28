@@ -31,10 +31,12 @@ export const UNIT_LABELS: Record<Unit, string> = {
   8: 'Financial Literacy',
   9: 'DSA in Java',
   10: 'Frontend Frameworks',
+  11: 'Security & System Design',
+  12: 'Languages & Scripting',
 }
 
 export function getTopicsByUnit(unit: Unit): Topic[] {
   return topics.filter((t) => t.unit === unit)
 }
 
-export const UNITS: Unit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+export const UNITS: Unit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]

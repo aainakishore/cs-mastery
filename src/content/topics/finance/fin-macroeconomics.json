@@ -5,113 +5,478 @@
   "title": "Macroeconomics for Investors",
   "summary": "GDP, inflation, interest rates, currency, and how macro trends influence markets.",
   "prereqs": [
-	"fin-stock-market-basics"
+    "fin-stock-market-basics"
   ],
-  "guide": "# Macroeconomics for Investors\n\nMacroeconomics studies the whole economy: growth, prices, jobs, money, credit, and trade. Investors track macro conditions because they influence company earnings, valuation multiples, and risk appetite.\n\n## Core Indicators\n- **GDP growth**: broad output and income growth.\n- **Inflation**: general price increases; high inflation reduces purchasing power.\n- **Interest rates**: the price of borrowing money.\n- **Unemployment**: labor-market health.\n- **Currency movement**: affects importers, exporters, and foreign investors.\n\n## Interest Rates and Markets\nWhen central banks raise rates, borrowing becomes costlier and future cash flows are discounted more heavily. This often pressures high-valuation stocks. When rates fall, credit becomes easier and risk assets may benefit.\n\n## Inflation\nModerate inflation can signal demand, but very high inflation hurts consumers and margins. Businesses with pricing power can pass costs to customers better than commodity-like businesses.\n\n## Practical Investor Checklist\n1. Identify whether growth is accelerating or slowing.\n2. Check whether inflation is above or below the central bank target.\n3. Watch central-bank guidance for rate direction.\n4. Connect macro trends to sectors, not just the overall index.\n\n## Common Pitfalls\n- Treating one data point as a trend.\n- Assuming macro forecasts are precise.\n- Ignoring company fundamentals because of macro headlines.\n- Forgetting that markets often price expectations before data arrives.\n\n## Connections\n- **Stock Market Basics** — indices react to growth and rate expectations.\n- **Fundamental Analysis** — discount rates affect valuation.\n- **Mutual Funds** — asset allocation changes with the macro cycle.",
+  "guide": "# Macroeconomics for Developers\n\n## Why Should a Developer Care About Macroeconomics?\n\nMacro affects your career, salary, company's budget, and the tech industry's hiring cycles.\nInterest rate rises → VC funding dries up → tech layoffs → fewer jobs.\nInflation → your real salary falls even if nominal salary stays the same.\nRecession → company freezes hiring, cuts cloud budgets, kills new projects.\n\n```\n2021 (low rates):    2022-2023 (rate hikes):\n  Cheap money           Expensive money\n  → VC invests freely   → VC pulls back\n  → Companies hire      → Companies lay off\n  → Salaries spike      → Salaries flatten\n  → 'Great Resignation' → 'Survival Mode'\n\nThe macro cycle is the tide. You swim better if you understand the tide.\n```\n\n---\n\n## Key Macroeconomic Concepts\n\n```\nGDP (Gross Domestic Product):\n  Total value of goods/services produced in a country in a year.\n  Growing GDP = economy expanding = more hiring, more investment\n  Shrinking GDP for 2+ quarters = RECESSION = companies cut costs\n\nINFLATION:\n  General rise in prices over time.\n  Measured by CPI (Consumer Price Index) and PCE.\n  Target: ~2% per year (mild inflation = healthy economy)\n  > 5%: serious inflation — your savings lose purchasing power\n\n  For developers: salary negotiation timing matters.\n  If inflation is 8% and you got 3% raise: real pay cut of 5%.\n\nINTEREST RATES (set by central bank, e.g. Fed in US):\n  The cost of borrowing money.\n  High rates → borrowing expensive → companies invest less → fewer jobs\n  Low rates  → borrowing cheap → companies invest more → more jobs, startups\n\n  Tech industry is uniquely sensitive to interest rates:\n  Most startups are funded by borrowed VC money.\n  High rates = VCs can earn 5% safe in bonds instead of risking in startups.\n  → VC funding to startups drops sharply when rates rise.\n```\n\n---\n\n## The Interest Rate Cycle and Tech\n\n```\nFEDERAL FUNDS RATE history (simplified):\n\n  2008 (financial crisis): Fed cuts to 0%\n  2015-2018: Fed gradually raises\n  2020 (COVID): Fed cuts back to 0%\n  2022-2023: Fed raises aggressively (0% → 5.5% in 18 months)\n  2024: Fed starts cutting\n\nImpact on tech industry:\n\n  0% era (2020-2022):\n  └─ Startup valuations 10-100x revenue (growth priced in)\n  └─ Hiring frenzy (Netflix, Meta, Google all hiring 10K+/year)\n  └─ Remote work salaries jump\n  └─ 'Web3', 'metaverse' bubbles inflate\n\n  5.5% era (2022-2024):\n  └─ 'Discount Rate' math: future cash flows worth less → valuations crater\n  └─ 200K+ tech layoffs in 2022-2023\n  └─ IPO market freezes\n  └─ VC funding down 60%+\n  └─ Startups forced to profitability (good discipline, actually)\n\nCareer lesson: low-rate environment = negotiate hard, leverage scarcity.\nHigh-rate environment = focus on stability, demonstrate value, avoid risky startups.\n```\n\n---\n\n## Inflation and Your Real Salary\n\n```\nREAL vs NOMINAL salary:\n  Nominal: the number on your payslip ($100K)\n  Real:    purchasing power adjusted for inflation\n\n  2020 salary: $100K\n  2021 inflation: 7%\n  2022 salary (no raise): $100K nominal\n  2022 real salary: $100K / 1.07 = $93,458 in 2020 dollars\n  → Real pay cut of 6.5% with no change in nominal salary\n\nTECH SALARIES vs INFLATION:\n  2020-2022: tech salaries rose 20-40% (demand > supply of engineers)\n  2022-2024: salaries stagnant/declining (layoffs, lower demand)\n  Engineers who changed jobs in 2020-2021 saw 30-50% raises.\n  Those who stayed at same company: inflation eroded real salary.\n\nLESSON: Understand your real salary = nominal salary / (1+inflation rate)\nNegotiate raises ahead of inflation rate to stay neutral.\nChange companies every 2-3 years for compensation reset.\n```\n\n---\n\n## Cloud and Tech Infrastructure in Economic Context\n\n```\nCLOUD SPENDING follows economic cycles:\n\n  Growth phase: companies throw money at cloud for speed\n  Recession/rate hike: CFO demands FinOps — cloud bills cut 30-50%\n\n  2022: 'FinOps' became a top priority at every company.\n  Cloud waste discovered: unused EC2 instances, over-provisioned RDS,\n  dev environments running 24/7, no reserved instances.\n\n  For developers in a downturn: understand cloud costs.\n  Knowing AWS cost optimisation = job security in tight markets.\n  'This engineer owns cost' = highly valued.\n\nTECH INVESTMENT PRIORITIES shift:\n  Bull market: invest in growth (new features, new products)\n  Bear market: invest in efficiency (automation, cost cuts, reliable systems)\n\n  Skills more valued in downturns:\n    Platform engineering (makes 10 engineers as productive as 15)\n    Observability (find and fix expensive inefficiencies)\n    AI automation (reduce headcount needed for tasks)\n```\n\n---\n\n## Mind Map\n\n```\nMACROECONOMICS FOR DEVELOPERS\n|\n+-- KEY INDICATORS\n|   +-- GDP: economy size and growth\n|   +-- Inflation: purchasing power erosion\n|   +-- Interest rates: cost of money\n|   +-- Unemployment: labour market tightness\n|\n+-- TECH CYCLE\n|   +-- Low rates → VC boom → hiring frenzy\n|   +-- High rates → VC pullback → layoffs\n|   +-- Cycle: ~5-7 years bull → bear → bull\n|\n+-- YOUR SALARY\n|   +-- Real = nominal / (1 + inflation)\n|   +-- Job switch = compensation reset\n|   +-- Negotiate before rate hikes dry up budgets\n|\n+-- CLOUD COSTS\n    +-- Follows economic cycle (growth vs efficiency)\n    +-- FinOps valuable in downturns\n    +-- Cost ownership = career security\n```\n\n---\n\n## References\n\n### Videos\n- **How the Economic Machine Works** by Ray Dalio:\n  https://www.youtube.com/watch?v=PHe0bXAIuk0 (30 min, must watch)\n- **Why Tech Layoffs Happened** by PatrickBoyle: https://www.youtube.com/watch?v=QLQR0UEOUUE\n\n### Articles\n- **Principles for Navigating Big Debt Crises** — Ray Dalio (free PDF): https://economicprinciples.org/\n- **The Tech Salary Guide** by levels.fyi: https://levels.fyi/",
   "questions": [
-	{
-	  "id": "fm-q1",
-	  "type": "mcq",
-	  "prompt": "GDP is primarily a measure of:",
-	  "choices": [
-		"Total economic output",
-		"One company's profit",
-		"A stock's daily volume",
-		"A bond coupon"
-	  ],
-	  "answerIndex": 0,
-	  "explanation": "GDP measures the value of goods and services produced in an economy.",
-	  "tags": [
-		"gdp",
-		"macro"
-	  ]
-	},
-	{
-	  "id": "fm-q2",
-	  "type": "mcq",
-	  "prompt": "Rising interest rates usually make borrowing:",
-	  "choices": [
-		"Cheaper",
-		"Costlier",
-		"Free",
-		"Unrelated to cost"
-	  ],
-	  "answerIndex": 1,
-	  "explanation": "Higher rates increase the cost of loans and raise discount rates.",
-	  "tags": [
-		"interest-rates"
-	  ]
-	},
-	{
-	  "id": "fm-q3",
-	  "type": "multi",
-	  "prompt": "Which are macroeconomic indicators?",
-	  "choices": [
-		"Inflation",
-		"GDP growth",
-		"Unemployment",
-		"A single candlestick pattern"
-	  ],
-	  "answerIndexes": [
-		0,
-		1,
-		2
-	  ],
-	  "explanation": "Inflation, GDP, and unemployment describe broad economic conditions.",
-	  "tags": [
-		"macro-indicators"
-	  ]
-	}
+    {
+      "id": "macro-q1",
+      "type": "mcq",
+      "prompt": "Why did tech layoffs spike in 2022-2023?",
+      "choices": [
+        "AI replaced engineers",
+        "Federal Reserve raised interest rates from 0% to 5.5%. High rates: 1) VCs can earn safe returns in bonds, reducing startup funding. 2) Future revenue worth less (higher discount rate) → valuations crash. 3) Overhired companies cut costs to survive higher borrowing costs.",
+        "Tech bubble simply popped",
+        "Cloud adoption declined"
+      ],
+      "answerIndex": 1,
+      "explanation": "Interest rate math: at 0%, a company earning $1M in 5 years has present value $1M (no discount). At 5.5%, discounted back 5 years: $1M / (1.055^5) = $765K. Tech companies priced on future growth get hit hardest. VC funding dried up → startups couldn't raise → layoffs to extend runway.",
+      "tags": [
+        "rates",
+        "tech-cycle",
+        "macro"
+      ]
+    },
+    {
+      "id": "macro-q2",
+      "type": "mcq",
+      "prompt": "Real salary vs nominal salary — you earn $120K in 2023, inflation was 4%. What is your real 2022-equivalent salary?",
+      "choices": [
+        "$120,000",
+        "$115,385 ($120K / 1.04). Your $120K buys the same as $115,385 did in 2022. If you didn't get at least a 4% raise, your purchasing power declined.",
+        "$124,800",
+        "$96,000"
+      ],
+      "answerIndex": 1,
+      "explanation": "Real salary = nominal / (1 + inflation rate). 4% inflation: $120K / 1.04 = $115,385 in prior-year dollars. Implication: to maintain purchasing power, raises must exceed inflation rate. In 2022 (7% inflation), even a 5% raise was a real pay cut.",
+      "tags": [
+        "salary",
+        "inflation",
+        "real-wages"
+      ]
+    },
+    {
+      "id": "macro-q3",
+      "type": "mcq",
+      "prompt": "What does the Fed 'lowering interest rates' signal to the tech industry?",
+      "choices": [
+        "Higher taxes incoming",
+        "Cheaper borrowing: companies invest more, VCs take on more risk (bonds less attractive), startup funding increases, hiring picks up, cloud spending grows. Historically preludes a tech hiring boom.",
+        "Less cloud adoption",
+        "Inflation is guaranteed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fed rate cuts → lower 'risk-free rate' (bond yields fall). VCs: risk premium over bonds stays same, but absolute returns needed from bonds are lower → startups more attractive. Capital flows to growth assets. 2020: Fed cut to 0% → 2021-2022 hiring frenzy. 2024 cuts → same dynamics beginning.",
+      "tags": [
+        "interest-rates",
+        "vc-funding",
+        "hiring"
+      ]
+    },
+    {
+      "id": "macro-q4",
+      "type": "mcq",
+      "prompt": "What is a recession and how should a developer prepare for one?",
+      "choices": [
+        "Any period of rising unemployment",
+        "Two or more consecutive quarters of negative GDP growth. Developer preparation: build emergency fund (6 months expenses), avoid switching to risky startups near cycle peaks, focus on in-demand skills (cloud costs, observability), demonstrate measurable business impact.",
+        "When tech stocks fall 20%",
+        "Inflation above 5%"
+      ],
+      "answerIndex": 1,
+      "explanation": "Recession: GDP shrinks for 2+ quarters. Tech often enters recession sentiment before official declaration if VC funding collapses. Preparation: 1) Emergency fund — layoffs happen fast. 2) In-demand skills (cost efficiency > growth features in downturns). 3) Avoid joining overfunded unprofitable startups late in bull cycles.",
+      "tags": [
+        "recession",
+        "career",
+        "preparation"
+      ]
+    },
+    {
+      "id": "macro-q5",
+      "type": "mcq",
+      "prompt": "'FinOps' became critical in 2022-2023 because:",
+      "choices": [
+        "New compliance requirements",
+        "Rate hikes forced companies to cut cloud bills 30-50%. Cloud waste discovered: idle instances, over-provisioned databases, no reserved instances. Engineers who could own and reduce cloud costs became highly valued during budget cuts.",
+        "AWS raised prices",
+        "Kubernetes required it"
+      ],
+      "answerIndex": 1,
+      "explanation": "FinOps = financial operations for cloud. In growth mode: cloud bill is an afterthought. In survival mode: CFO demands cloud bill cut by 30%. Engineering teams audited idle resources, right-sized instances, bought Reserved Instances, killed dev environments overnight. Cloud cost ownership = job security in downturns.",
+      "tags": [
+        "finops",
+        "cloud-costs",
+        "recession"
+      ]
+    },
+    {
+      "id": "macro-q6",
+      "type": "mcq",
+      "prompt": "What is the 'discount rate' and why does it make tech valuations sensitive to interest rates?",
+      "choices": [
+        "A coupon code",
+        "The rate used to calculate present value of future cash flows. High discount rate: future revenue worth much less today. Tech companies valued on future growth get destroyed when rates rise — their future profits are discounted heavily.",
+        "Bank fees",
+        "AWS pricing tier"
+      ],
+      "answerIndex": 1,
+      "explanation": "PV = FV / (1+r)^n. $1M in year 5: at r=0%, PV=$1M. At r=10%, PV=$1M/1.1^5=$621K. Tech companies priced at 20x future revenue: at 0% rates = $20M valuation. Same company at 10% rates: future revenue discounted → $12M valuation. Same business, 40% value drop purely from rate change.",
+      "tags": [
+        "valuation",
+        "discount-rate",
+        "tech-stocks"
+      ]
+    },
+    {
+      "id": "macro-q7",
+      "type": "mcq",
+      "prompt": "What cycle length should developers use for career planning?",
+      "choices": [
+        "1 year",
+        "Economic cycles average 5-10 years (boom to bust to boom). Tech hiring cycles: 2015-2019 boom, 2020-2022 boom, 2022-2023 bust. Plan: switch companies every 2-3 years for salary resets, build savings in boom times for recessions.",
+        "20 years",
+        "Cycles don't affect developers"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tech hiring cycles: tend to follow Fed policy and VC sentiment cycles. Boom (2020-2021): negotiate aggressively, multiple offers viable. Bust (2022-2023): stability > optimisation. Recovery (2024+): pick up pace of negotiation again. Engineers who stay flat during boom and switch during recovery miss compensation gains.",
+      "tags": [
+        "career-cycle",
+        "negotiation"
+      ]
+    },
+    {
+      "id": "macro-q8",
+      "type": "mcq",
+      "prompt": "Inflation at 6% and you received a 4% raise. What happened to your real compensation?",
+      "choices": [
+        "It increased by 4%",
+        "Real compensation fell approximately 2% (4% nominal - 6% inflation). In 2022: many tech workers received no raise while inflation hit 8-9% — effective 8-9% pay cut.",
+        "It stayed the same",
+        "Real compensation increased 2%"
+      ],
+      "answerIndex": 1,
+      "explanation": "Approximate real raise = nominal raise % - inflation %. 4% - 6% = -2% real. Exact: (1.04/1.06) - 1 = -1.89%. Over 3 years of this: significant purchasing power erosion. Active job seekers in 2022 got 20-40% raises beating inflation. Those who stayed: 10-15% real pay cut over 2 years.",
+      "tags": [
+        "inflation",
+        "real-wages",
+        "career"
+      ]
+    },
+    {
+      "id": "macro-q9",
+      "type": "mcq",
+      "prompt": "Why is understanding cloud spending important during economic downturns?",
+      "choices": [
+        "Cloud becomes free",
+        "Companies aggressively cut cloud costs in downturns. Engineers who own cloud efficiency: job-protecting skill. Cloud bills: often 20-40% of a startup's burn rate. Cutting 30% = extending runway 3-6 months. That's survival.",
+        "Cloud spending always grows",
+        "Cloud is irrelevant in recessions"
+      ],
+      "answerIndex": 1,
+      "explanation": "Startup burn rate example: $500K/month total, $150K is AWS. Cutting AWS by 30% = $45K/month saved = $540K/year. At current burn: 1+ extra month of runway. For a startup trying to reach profitability: cloud optimisation can be the difference between survival and shutdown.",
+      "tags": [
+        "cloud-costs",
+        "startup",
+        "recession"
+      ]
+    },
+    {
+      "id": "macro-q10",
+      "type": "mcq",
+      "prompt": "Compound learning analogy to compound interest — what is the key insight?",
+      "choices": [
+        "Learning is slower than finance",
+        "Knowledge compounds: knowing A makes learning B faster (B builds on A), which makes C faster. 1% daily improvement = 37x in a year. Early learning investments (fundamentals) have highest compounding leverage. Skipping fundamentals = slower compounding.",
+        "They are unrelated",
+        "Compound learning requires formal education"
+      ],
+      "answerIndex": 1,
+      "explanation": "Investment: $1 growing 1%/day for 365 days = $37.78. Knowledge: understand TCP/IP → learning HTTP much easier. Know HTTP → learning REST APIs faster. Know REST → learning GraphQL faster. Foundational knowledge has the most compounding power. This is why CS fundamentals matter even for web developers.",
+      "tags": [
+        "compound-learning",
+        "leverage",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "macro-q11",
+      "type": "mcq",
+      "prompt": "Should you join a funded startup during a bear market (high interest rates)?",
+      "choices": [
+        "Always yes — startups are always better",
+        "High risk: VC funding is tight, runway may be limited, layoffs likely if they fail to raise next round. Unless you have equity that could be valuable at credible exit, the risk/reward may favour stable employment. Well-funded profitable startups: different.",
+        "Always no",
+        "Timing doesn't matter"
+      ],
+      "answerIndex": 1,
+      "explanation": "During high-rate environment: startup funding down 60%+, valuations compressed = equity worth less. Startups that raised at 2021 valuations: equity underwater. Solid company with 18+ months runway and path to profitability: acceptable. Pre-revenue startup burning $500K/month with 9 months runway: significant risk.",
+      "tags": [
+        "startup",
+        "risk",
+        "timing"
+      ]
+    },
+    {
+      "id": "macro-q12",
+      "type": "mcq",
+      "prompt": "What macroeconomic indicator most directly predicts tech hiring?",
+      "choices": [
+        "Oil prices",
+        "Venture capital funding flows. VC investment leads hiring by 6-12 months: when VCs invest heavily, companies that raise then hire aggressively 6 months later. VC funding is itself driven by: interest rates, exits/IPOs market, LP returns.",
+        "GDP alone",
+        "Trade deficits"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tech hiring chain: Fed rates → bond yields → VC fund returns → VC investment → startup hiring. VC data is public (Crunchbase, PitchBook) with a quarter lag. VC funding in Q3 frequently predicts hiring intensity in Q1 of following year. Tracking VC activity = forward indicator of tech job market.",
+      "tags": [
+        "vc-funding",
+        "hiring",
+        "macro"
+      ]
+    },
+    {
+      "id": "macro-q13",
+      "type": "mcq",
+      "prompt": "What is 'nominal' vs 'real' GDP growth?",
+      "choices": [
+        "Same thing",
+        "Nominal GDP: total value in current dollars — includes inflation effect. Real GDP: adjusted for inflation. If nominal GDP grew 5% but inflation was 4%, real GDP growth was only 1%. Recessions defined by real GDP.",
+        "Real GDP includes government spending",
+        "Nominal GDP is per capita"
+      ],
+      "answerIndex": 1,
+      "explanation": "Nominal GDP can rise while economy shrinks if inflation is high enough. Real GDP growth = nominal GDP growth - inflation rate (approximately). 2022 US: nominal GDP appeared positive, but real GDP contracted two quarters in a row — technically a recession by some definitions, though official NBER didn't call it one.",
+      "tags": [
+        "gdp",
+        "nominal",
+        "real"
+      ]
+    },
+    {
+      "id": "macro-q14",
+      "type": "mcq",
+      "prompt": "Developer skill most valued in economic downturns vs upturns:",
+      "choices": [
+        "Same skills matter regardless",
+        "Upturn: growth features, new products, speed of delivery. Downturn: cost reduction, reliability, observability, automation (reduce headcount), FinOps. Platform engineers (enable others) valued in downturns. Feature developers more valued in growth phases.",
+        "Downturns value security only",
+        "Upturns value security only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Recession hiring: 'do more with less'. Platform engineering (CI/CD, developer tools) = 1 infra engineer enables 10 product engineers = high leverage. Observability = find and fix expensive issues. AI automation = reduce manual work costs. Feature development slows when product investment pauses.",
+      "tags": [
+        "career",
+        "recession",
+        "skills"
+      ]
+    },
+    {
+      "id": "macro-q15",
+      "type": "mcq",
+      "prompt": "What is the 'venture capital funding cycle' and why does it follow interest rates?",
+      "choices": [
+        "VC cycles are random",
+        "VC LPs (pension funds, endowments) have target returns. At 0% rates: bonds return 0%, VC at 15% expected return looks great. At 5% rates: bonds safe at 5%, VC must return 20%+ to compensate risk. Higher hurdle → VCs more selective → less funding → fewer startups hired.",
+        "Only affected by IPO market",
+        "Not related to interest rates"
+      ],
+      "answerIndex": 1,
+      "explanation": "VC as an asset class competes with other investments. Opportunity cost: LP chooses between bond (safe 5%) and VC fund (risky 15%). When bond yields rise, VC must offer higher returns to justify allocation. Higher return requirements = VCs invest less, more selectively, at lower valuations. 2022: VC investment fell 60%+ globally.",
+      "tags": [
+        "vc",
+        "interest-rates",
+        "funding"
+      ]
+    },
+    {
+      "id": "macro-q16",
+      "type": "mcq",
+      "prompt": "What is 'burn rate' and why do developers need to understand it?",
+      "choices": [
+        "Server processing speed",
+        "Rate at which a startup spends its cash reserve, usually measured monthly. Runway = cash / burn rate. High burn rate + low runway = company may shut down or do emergency layoffs. Developer: join companies with 18+ months runway.",
+        "Code deployment frequency",
+        "Memory usage rate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Startup: $3M raised, burns $300K/month = 10 months runway. Needs to raise or hit profitability in 10 months or fold. In 2022-2023 rate environment, many startups couldn't raise next round at acceptable valuation → layoffs or shutdown. Asking 'what's your runway?' before joining a startup is prudent.",
+      "tags": [
+        "startup",
+        "burn-rate",
+        "risk"
+      ]
+    },
+    {
+      "id": "macro-q17",
+      "type": "mcq",
+      "prompt": "Why do cloud providers like AWS benefit from both bull and bear markets?",
+      "choices": [
+        "They don't benefit in bear markets",
+        "Bull: companies use cloud for rapid scaling without capital outlay. Bear: FinOps — companies audit and shift from owned hardware to optimised cloud (consolidation, reserved instances). Cloud is essential infrastructure in both phases.",
+        "They only benefit in bull markets",
+        "AWS profits from data breaches"
+      ],
+      "answerIndex": 1,
+      "explanation": "AWS 2022-2023: slowed growth but didn't collapse. Companies couldn't cut cloud entirely (apps run there). They optimised: reserved instances (commit to usage for discount), spot instances, rightsizing. Net: cloud spending more efficient, not eliminated. AWS earns less per workload but workloads stay.",
+      "tags": [
+        "aws",
+        "cloud",
+        "economic-cycle"
+      ]
+    },
+    {
+      "id": "macro-q18",
+      "type": "mcq",
+      "prompt": "What does 'quantitative tightening' (QT) mean and how does it affect developers?",
+      "choices": [
+        "Reducing software bugs",
+        "Fed selling bonds from its balance sheet, reducing money supply. Makes credit tighter, borrowing more expensive (reinforces rate hikes). Effect: even slower startup funding, lower evaluations, tech spending cuts.",
+        "Reducing cloud capacity",
+        "Reducing server costs"
+      ],
+      "answerIndex": 1,
+      "explanation": "2020-2021: Fed did QE (buying bonds, expanding balance sheet, pumping money). 2022+: QT (selling bonds, shrinking money supply, removing liquidity). Double impact on tech: 1) higher rates → higher borrowing costs. 2) QT → less money sloshing around looking for returns → less VC allocation to tech.",
+      "tags": [
+        "fed-policy",
+        "qt",
+        "macro"
+      ]
+    },
+    {
+      "id": "macro-q19",
+      "type": "mcq",
+      "prompt": "What should you do with savings during a tech bull market (low rates, hiring frenzy)?",
+      "choices": [
+        "Spend freely — good times last",
+        "Build emergency fund (6+ months expenses), invest consistently (never try to time markets), avoid lifestyle inflation, build negotiating power through skills. Good times are when to prepare for bad times.",
+        "Take maximum financial risk",
+        "Quit and start a company immediately"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bull market behaviour: salary high, bonuses large, stock vesting well. Risk: lifestyle inflation (expensive rent, car, etc.) that's hard to reverse. Preparation: automate savings (pay yourself first), build 6-12 month emergency fund, index fund investments, pay down high-interest debt. When downturn hits: you have runway.",
+      "tags": [
+        "personal-finance",
+        "career",
+        "preparation"
+      ]
+    },
+    {
+      "id": "macro-q20",
+      "type": "mcq",
+      "prompt": "How does the stock market relate to tech hiring, and is it a reliable indicator?",
+      "choices": [
+        "Stock market has no relation",
+        "Stock market is a leading indicator (forward-looking) but imperfect. NASDAQ down 30%+ = tech company valuations down → hiring freeze typically follows 3-6 months later. But: profitable big tech (Google, Microsoft) can absorb stock drops better than unprofitable startups.",
+        "Stock market is perfectly correlated",
+        "Only small caps matter"
+      ],
+      "answerIndex": 1,
+      "explanation": "Correlation not causation. NASDAQ crashed in 2022: tech hiring froze with 3-6 month lag. But: large profitable tech (Microsoft, Apple) hired more slowly, not emergency cuts. Unprofitable growth startups: immediate cuts. Better indicator than stock market: VC funding rounds, startup job postings, and weekly earnings calls from major tech companies.",
+      "tags": [
+        "stock-market",
+        "hiring",
+        "indicators"
+      ]
+    }
   ],
   "flashcards": [
-	{
-	  "id": "fm-fc1",
-	  "front": "GDP",
-	  "back": "A measure of broad economic output.",
-	  "tags": [
-		"macro"
-	  ]
-	},
-	{
-	  "id": "fm-fc2",
-	  "front": "Inflation",
-	  "back": "A general rise in prices that reduces purchasing power.",
-	  "tags": [
-		"macro"
-	  ]
-	},
-	{
-	  "id": "fm-fc3",
-	  "front": "Higher rates usually do what to borrowing?",
-	  "back": "They make borrowing costlier.",
-	  "tags": [
-		"interest-rates"
-	  ]
-	}
+    {
+      "id": "macro-fc1",
+      "front": "Real salary formula",
+      "back": "Real salary = nominal salary / (1 + inflation rate). Approximate: real raise = nominal raise % - inflation %. If inflation=7% and raise=3%: real pay cut of ~4%. To stay neutral: raise must equal inflation rate. Job switch is the fastest way to reset.",
+      "tags": [
+        "salary",
+        "inflation"
+      ]
+    },
+    {
+      "id": "macro-fc2",
+      "front": "Fed rate impact on tech hiring",
+      "back": "Rates ↑ → bond yields ↑ → VC opportunity cost ↑ → less VC funding → startups lay off or freeze hiring. Rates ↓ → bonds less attractive → VC invests more → hiring picks up. Lag: 6-12 months from rate change to hiring impact.",
+      "tags": [
+        "interest-rates",
+        "hiring"
+      ]
+    },
+    {
+      "id": "macro-fc3",
+      "front": "Economic cycle for career planning",
+      "back": "Bull (low rates): negotiate aggressively, switch companies for 20-30% raises, stock options have positive momentum. Bear (high rates): prioritise stability, build cash reserves, focus on efficiency skills (cloud cost, platform eng), avoid late-stage underfunded startups.",
+      "tags": [
+        "career",
+        "economic-cycle"
+      ]
+    },
+    {
+      "id": "macro-fc4",
+      "front": "Startup runway calculation",
+      "back": "Runway months = total cash / monthly burn rate. < 12 months: risky time to join. 18+ months: reasonable stability. 36+ months: very stable. Before joining: ask 'what's the runway?' and 'what are the next milestones?' Profitable = no runway concern.",
+      "tags": [
+        "startup",
+        "burn-rate"
+      ]
+    },
+    {
+      "id": "macro-fc5",
+      "front": "FinOps in downturns",
+      "back": "Bear market: CFO mandates cloud bill cuts 30-50%. Valuable skills: identify idle resources, rightsize instances, buy Reserved Instances, eliminate dev/test waste, implement auto-shutdown. AWS cost reduction = extending company runway. Knowing this = job security.",
+      "tags": [
+        "finops",
+        "cloud",
+        "recession"
+      ]
+    },
+    {
+      "id": "macro-fc6",
+      "front": "Compound learning = compound interest",
+      "back": "1% better daily = 37x in a year (1.01^365). Knowledge builds on knowledge: TCP→HTTP→REST→GraphQL each easier because of prior. Invest in fundamentals early (highest compounding leverage). Teach others: solidifies your own knowledge AND builds reputation.",
+      "tags": [
+        "compound-learning",
+        "leverage"
+      ]
+    },
+    {
+      "id": "macro-fc7",
+      "front": "GDP recession definition",
+      "back": "Two or more consecutive quarters of REAL GDP growth being negative. Real GDP = nominal GDP adjusted for inflation. Recession signals for developers: VC funding falls, companies freeze headcount, cloud budgets cut. Typically: hiring lags GDP by 2-3 quarters.",
+      "tags": [
+        "gdp",
+        "recession"
+      ]
+    },
+    {
+      "id": "macro-fc8",
+      "front": "Discount rate and tech valuations",
+      "back": "PV = FV / (1+r)^years. At r=0%: $1M in 5 years = $1M today. At r=10%: $1M in 5 years = $621K today. Tech companies priced on future growth: high rates → future earnings worth much less → valuations crash. Direct cause of 2022 tech valuation collapse.",
+      "tags": [
+        "valuation",
+        "discount-rate"
+      ]
+    }
   ],
   "project": {
-	"brief": "Build a one-page macro dashboard explaining GDP, inflation, rates, and likely sector impact.",
-	"checklist": [
-	  {
-		"id": "c1",
-		"text": "Explains at least four macro indicators",
-		"weight": 1
-	  },
-	  {
-		"id": "c2",
-		"text": "Connects interest rates to market valuation",
-		"weight": 1
-	  },
-	  {
-		"id": "c3",
-		"text": "Lists risks of over-relying on macro forecasts",
-		"weight": 1
-	  }
-	],
-	"hints": [
-	  "Separate facts from forecasts.",
-	  "Think in sector impacts: banks, exporters, real estate, and consumer companies react differently."
-	]
+    "brief": "It is Q1 2026. The Fed has cut rates twice from their 2023 peak. You need to make the following decisions: 1) Should you negotiate a salary increase now or wait 6 months? 2) A Series B startup (18 months runway) is offering you 20% more salary + 0.5% equity. Should you take it? 3) Your company is asking you to help cut cloud bills by 30%. Where would you start? Reason through each using macroeconomic principles.",
+    "checklist": [
+      {
+        "id": "m1",
+        "text": "Salary timing: Fed cuts signal hiring recovery in 6-12 months. Negotiate now while the next cycle begins, before competition increases.",
+        "weight": 20
+      },
+      {
+        "id": "m2",
+        "text": "Startup analysis: 18 months runway + Series B = reasonable stability. Check: burn rate vs MRR growth, path to profitability. Equity: 0.5% of what valuation? Model exit scenarios.",
+        "weight": 20
+      },
+      {
+        "id": "m3",
+        "text": "Cloud cuts: start with idle/overnight dev environments (often 20-30% waste). Then: rightsize over-provisioned RDS/ElastiCache. Buy Reserved Instances for steady-state workloads.",
+        "weight": 20
+      },
+      {
+        "id": "m4",
+        "text": "Real salary: current inflation ~3%. Negotiate at minimum 3% + performance component to maintain purchasing power.",
+        "weight": 20
+      },
+      {
+        "id": "m5",
+        "text": "Equity discounting: startup equity has discount rate too. Apply personal discount rate (opportunity cost) to determine if 0.5% compensates for job security risk differential.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Equity value: 0.5% × (potential exit valuation) × (probability of exit) × (probability of staying to vest) × (dilution discount). Very rough: at $20M exit, 0.5% = $100K pre-tax before dilution.",
+      "FinOps quick wins: AWS Trusted Advisor identifies low-hanging fruit. Cost Explorer by service. Enable S3 Intelligent-Tiering. Delete unattached EBS volumes.",
+      "Negotiation timing: early in a rate-cutting cycle (now) = leverage improving. Competition for engineers has been low, about to rise. Negotiate before the market gets competitive again."
+    ]
   }
 }
-

@@ -1,0 +1,477 @@
+{
+  "id": "time-space-complexity",
+  "unit": 1,
+  "order": 1,
+  "title": "Time & Space Complexity",
+  "summary": "Big-O notation, complexity hierarchy, common data structure operations, and practical performance thinking.",
+  "prereqs": [],
+  "guide": "# Time & Space Complexity\n\n## Why Care About Complexity?\n\nYour code might run on 10 items in your test, but production might have 10 million.\nHow do you know if your algorithm will still finish in seconds — or will hang for hours?\n\n**Big-O notation** is a shorthand for: 'as input size grows, how does running time grow?'\n\n```\n  Items (n)     O(1)    O(log n)   O(n)      O(n log n)   O(n^2)         O(2^n)\n  10            1       3          10        33           100            1024\n  100           1       7          100       664          10,000         huge\n  1,000         1       10         1,000     9,966        1,000,000      crash\n  1,000,000     1       20         1M        20M          1 trillion!    impossible\n\n  Notice: O(n^2) at 1M items = 1 trillion operations = ~1000 SECONDS!\n          O(n)   at 1M items = 1M operations         = ~1 millisecond.\n  Same task, 1 million times difference in performance.\n```\n\n---\n\n## Big-O — The Growth Rate Hierarchy\n\nBig-O describes **the worst-case upper bound** of growth, ignoring constants and small terms.\n\n```\nFrom fastest growing (slowest) to slowest growing (fastest):\n\nO(1)        = constant         — independent of n\n                                  array[i], hash get, push to stack\n\nO(log n)    = logarithmic      — halves the problem each step\n                                  binary search, balanced BST lookup\n\nO(n)        = linear           — touches each element once\n                                  loop through array, max value\n\nO(n log n)  = linearithmic     — divide-and-conquer sorting\n                                  merge sort, quick sort (avg)\n\nO(n^2)      = quadratic        — nested loops over n\n                                  bubble sort, comparing all pairs\n\nO(n^3)      = cubic            — triple-nested\n                                  naive matrix multiply\n\nO(2^n)      = exponential      — recursive branching\n                                  naive Fibonacci, subset generation\n\nO(n!)       = factorial        — permutations\n                                  brute-force traveling salesman\n```\n\n---\n\n## How to Calculate Big-O — Step by Step\n\n```java\n// Example 1:\nvoid example1(int n) {\n    System.out.println('hi');     // 1 operation\n    System.out.println('hi');     // 1 operation\n}\n// Total: 2 operations, regardless of n\n// Big-O: O(1) — drop the constant 2\n\n// Example 2:\nvoid example2(int n) {\n    for (int i = 0; i < n; i++) {  // runs n times\n        System.out.println(i);      //   1 op per iteration\n    }\n}\n// Total: n × 1 = n operations\n// Big-O: O(n)\n\n// Example 3:\nvoid example3(int n) {\n    for (int i = 0; i < n; i++) {        // n times\n        for (int j = 0; j < n; j++) {    //   n times\n            System.out.println(i + j);   //     1 op\n        }\n    }\n}\n// Total: n × n × 1 = n^2 operations\n// Big-O: O(n^2)\n\n// Example 4 (TRICKY!):\nvoid example4(int n) {\n    for (int i = 0; i < n; i++) {        // n times\n        System.out.println(i);            //   1 op\n    }\n    for (int j = 0; j < n; j++) {        // n times\n        System.out.println(j);            //   1 op\n    }\n}\n// Total: n + n = 2n operations\n// Big-O: O(n) — drop the constant 2\n// Sequential loops ADD; nested loops MULTIPLY.\n```\n\n---\n\n## Rules of Thumb\n\n```\n1. DROP CONSTANTS:\n   O(2n) → O(n)\n   O(500) → O(1)\n   O(n/2) → O(n)\n\n2. DROP NON-DOMINANT TERMS:\n   O(n^2 + n) → O(n^2)\n   O(n + log n) → O(n)\n   O(2^n + 1000n) → O(2^n)\n\n3. DIFFERENT INPUTS = DIFFERENT VARIABLES:\n   for (int i = 0; i < a; i++) {\n     for (int j = 0; j < b; j++) {  ← b is independent of a\n       ...\n     }\n   }\n   Big-O: O(a × b)  NOT  O(n^2)\n\n4. RECURSIVE BRANCHING IS EXPONENTIAL:\n   fib(n) calls fib(n-1) and fib(n-2) — branching factor 2\n   Big-O: O(2^n)\n\n5. LOG SHOWS UP WHEN YOU HALVE:\n   Binary search: halve search space each step\n   Tree traversal: balanced tree height = log n\n   How many times can n be halved before reaching 1? log_2(n) times.\n```\n\n---\n\n## Common Operations Cheat Sheet\n\n```\nARRAY:\n  Access by index (arr[i]):    O(1)\n  Search for value:            O(n)\n  Insert at end (amortised):   O(1)\n  Insert at front:             O(n) — shifts everything\n  Sort:                        O(n log n)\n\nARRAYLIST / DYNAMIC ARRAY (Java's ArrayList):\n  Same as array, but resize on full = amortised O(1) for append\n\nLINKED LIST:\n  Access by index:             O(n) — must traverse\n  Insert/delete at head/tail:  O(1) — if you have the reference\n  Insert in middle:            O(n) — find then O(1) link\n\nHASH MAP / HASH SET:\n  Get/Put/Contains (avg):      O(1)\n  Get/Put/Contains (worst):    O(n) — when many collisions\n  Iterate all keys:            O(n)\n\nBINARY SEARCH TREE (balanced):\n  Insert/Search/Delete:        O(log n)\n  Worst case (unbalanced):     O(n) — like a linked list\n\nHEAP / PRIORITY QUEUE:\n  Insert:                      O(log n)\n  Peek min/max:                O(1)\n  Extract min/max:             O(log n)\n\nSTACK / QUEUE (LinkedList-backed):\n  Push/Pop/Enqueue/Dequeue:    O(1)\n\nSORTING:\n  Quicksort (avg):             O(n log n)\n  Quicksort (worst):           O(n^2) — already sorted with bad pivot\n  Mergesort:                   O(n log n) — guaranteed\n  Bubble/Insertion/Selection:  O(n^2)\n\nGRAPH:\n  BFS/DFS (V vertices, E edges): O(V + E)\n  Dijkstra with heap:          O((V + E) log V)\n```\n\n---\n\n## Space Complexity — Memory Usage\n\n```\nSpace complexity = how much extra memory does the algorithm use\n(not counting the input itself).\n\nvoid sumOf(int[] arr) {                    // input: arr\n    int sum = 0;                            // O(1) extra space\n    for (int x : arr) sum += x;\n}\n// Space: O(1)\n\nint[] doubleArray(int[] arr) {              // input: arr\n    int[] result = new int[arr.length];     // O(n) extra space\n    for (int i = 0; i < arr.length; i++) {\n        result[i] = arr[i] * 2;\n    }\n    return result;\n}\n// Space: O(n)\n\n// RECURSION USES STACK SPACE\nint fib(int n) {\n    if (n <= 1) return n;\n    return fib(n-1) + fib(n-2);\n}\n// Space: O(n) — call stack depth, even though branching is 2^n in time\n// Each recursive call adds a stack frame (function arguments, locals).\n// Stack overflow when depth exceeds ~1MB (~10000 frames in Java).\n```\n\n---\n\n## Real-World Mental Calibration\n\n```\nROUGH RULE: A modern CPU does ~10^8 simple operations per second.\n\nIf n = 10^6 (1 million):\n  O(n)        = 10^6 ops    = ~10ms      ✓ instant\n  O(n log n)  = 2×10^7 ops  = ~200ms     ✓ acceptable\n  O(n^2)      = 10^12 ops   = ~3 hours   ✗ too slow\n\nIf n = 10^9 (1 billion):\n  O(n)        = 10^9 ops    = ~10s       ✓ slow but ok for batch\n  O(n log n)  = 3×10^10 ops = ~5 min    ✓ tolerable\n  O(n^2)      = 10^18 ops   = 30+ years  ✗ never\n\nPRACTICAL THRESHOLDS (for online API or interactive UI):\n  n ≤ 10:           any algorithm works (even O(n!) for n ≤ 8)\n  n ≤ 100:          O(n^3) ok\n  n ≤ 1,000:        O(n^2) ok\n  n ≤ 1,000,000:    O(n log n) needed\n  n ≤ 10,000,000:   O(n) needed\n  n > 10^9:         O(log n) or pre-computed\n\nINTERVIEW HEURISTIC: if your O(n^2) solution looks reasonable,\nthe interviewer almost certainly wants you to find an O(n log n) or O(n) approach.\n```\n\n---\n\n## Mind Map\n\n```\nTIME & SPACE COMPLEXITY\n|\n+-- BIG-O NOTATION\n|   +-- Worst-case upper bound\n|   +-- Drop constants, drop non-dominants\n|   +-- Sequential adds, nested multiplies\n|\n+-- HIERARCHY (best to worst)\n|   +-- O(1)        constant\n|   +-- O(log n)    halve each step\n|   +-- O(n)        single pass\n|   +-- O(n log n)  divide-and-conquer sort\n|   +-- O(n^2)      nested loops\n|   +-- O(2^n)      recursive branching\n|   +-- O(n!)       permutations\n|\n+-- DATA STRUCTURE OPS\n|   +-- Array: O(1) access, O(n) search\n|   +-- HashMap: O(1) avg, O(n) worst\n|   +-- BST balanced: O(log n) all ops\n|   +-- Heap: O(log n) insert/extract\n|\n+-- SPACE COMPLEXITY\n    +-- Auxiliary memory used by algorithm\n    +-- Recursion = O(depth) stack frames\n    +-- Tradeoff: space for time (memoisation)\n```\n\n---\n\n## How This Connects to Other Topics\n\n- **DSA**: every algorithm and data structure topic uses Big-O analysis\n- **System Design**: 'will this scale to 1M users?' = Big-O thinking on a system level\n- **Database queries**: SQL EXPLAIN shows query complexity (full scan = O(n), index = O(log n))\n- **Frontend rendering**: O(n^2) re-renders kill React performance — same Big-O thinking\n\n---\n\n## References\n\n### Videos\n- **Big O Notation in 5 Minutes** by Jeff Dean: https://www.youtube.com/watch?v=__vX2sjlpXU\n- **Big O Notation, Time and Space Complexity** by HackerRank: https://www.youtube.com/watch?v=v4cd1O4zkGw\n\n### Articles\n- **Big-O Cheat Sheet**: https://www.bigocheatsheet.com/\n- **Big-O Algorithms** by Khan Academy: https://www.khanacademy.org/computing/computer-science/algorithms/asymptotic-notation/a/big-o-notation",
+  "questions": [
+    {
+      "id": "cmplx-q1",
+      "type": "mcq",
+      "prompt": "What does Big-O notation describe?",
+      "choices": [
+        "The exact number of operations",
+        "An upper bound on growth rate as input size approaches infinity, ignoring constants and lower-order terms",
+        "The best-case running time",
+        "The memory layout of an algorithm"
+      ],
+      "answerIndex": 1,
+      "explanation": "Big-O is asymptotic notation. It describes how an algorithm's runtime/memory grows as n grows large, ignoring constants (5n vs 1n both = O(n)) and lower-order terms (n^2 + n = O(n^2)). It's a worst-case upper bound — the algorithm performs no worse than this growth rate.",
+      "tags": [
+        "big-o",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "cmplx-q2",
+      "type": "mcq",
+      "prompt": "Two sequential O(n) loops over the same input — what's the total complexity?",
+      "choices": [
+        "O(n^2)",
+        "O(2n) which simplifies to O(n) — sequential loops add, then we drop constants",
+        "O(n log n)",
+        "O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sequential operations ADD. n + n = 2n. Big-O drops constants: O(2n) = O(n). Compare to NESTED loops which multiply: O(n×n) = O(n^2). Recognising sequential vs nested is the most common Big-O mistake.",
+      "tags": [
+        "big-o",
+        "sequential",
+        "calculation"
+      ]
+    },
+    {
+      "id": "cmplx-q3",
+      "type": "mcq",
+      "prompt": "Binary search on a sorted array of n elements — what's the complexity?",
+      "choices": [
+        "O(n)",
+        "O(log n) — each step halves the search space, so the number of steps is log_2(n)",
+        "O(n log n)",
+        "O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Binary search halves the remaining search range each comparison. Starting at n, the question is: how many times can you halve n before reaching 1? Answer: log_2(n) times. For n=1M, that's only ~20 comparisons. This is why sorted arrays + binary search beat linear search dramatically.",
+      "tags": [
+        "big-o",
+        "binary-search",
+        "logarithmic"
+      ]
+    },
+    {
+      "id": "cmplx-q4",
+      "type": "mcq",
+      "prompt": "What is the time complexity of accessing arr[i] in a Java array?",
+      "choices": [
+        "O(n)",
+        "O(1) — array access by index uses pointer arithmetic: base_address + (i × element_size). Single memory read regardless of array size or position.",
+        "O(log n)",
+        "O(i)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arrays store elements in contiguous memory. arr[i] = base + i*sizeof(element). Computed in constant time, single memory access. Linked list arr[i] is O(n) because you must walk node by node. This is why arrays are preferred for random access.",
+      "tags": [
+        "array",
+        "access",
+        "constant"
+      ]
+    },
+    {
+      "id": "cmplx-q5",
+      "type": "mcq",
+      "prompt": "What is the WORST-case time complexity of HashMap.get(key) in Java?",
+      "choices": [
+        "O(1) always",
+        "O(log n)",
+        "O(n) — when many keys hash to the same bucket (collisions), lookup degrades to a linear scan of that bucket. Java 8+ converts long collision chains to a tree (O(log n)) at threshold.",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "HashMap average-case: O(1). Worst-case: O(n) when all keys hash to same bucket. Java 8+ improvement: when bucket has 8+ entries, converts to red-black tree, making worst-case O(log n). Most code only cares about average. Bad hash function or adversarial input can trigger worst case.",
+      "tags": [
+        "hashmap",
+        "worst-case"
+      ]
+    },
+    {
+      "id": "cmplx-q6",
+      "type": "codeOutput",
+      "prompt": "What is the time complexity of this Java code?",
+      "code": "void f(int[] a, int[] b) {\n    for (int x : a) {\n        for (int y : b) {\n            System.out.println(x + y);\n        }\n    }\n}",
+      "choices": [
+        "O(n)",
+        "O(n^2) — nested loops over same n",
+        "O(a × b) where a and b are different sizes",
+        "O(a + b)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Nested loops multiply, but a and b are DIFFERENT inputs. Don't lazily call this O(n^2) — that assumes a.length == b.length. Correct: O(a × b). If a=1000 and b=10, it's 10,000 operations, not 1,000,000. Different inputs need different variables in Big-O analysis.",
+      "tags": [
+        "big-o",
+        "multiple-inputs"
+      ]
+    },
+    {
+      "id": "cmplx-q7",
+      "type": "mcq",
+      "prompt": "What is the space complexity of recursive Fibonacci: fib(n) returns fib(n-1) + fib(n-2)?",
+      "choices": [
+        "O(2^n)",
+        "O(n) — call stack depth is at most n, even though TIME complexity is O(2^n) due to recursive branching",
+        "O(1)",
+        "O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Subtle: time vs space differ. Time: each call branches into 2, so total calls is O(2^n). Space: at any moment, only one branch is being computed; max stack depth = n (going from fib(n) down to fib(0)). Once fib(n-1) returns, that stack space is reclaimed before fib(n-2) is called.",
+      "tags": [
+        "recursion",
+        "space-complexity",
+        "fibonacci"
+      ]
+    },
+    {
+      "id": "cmplx-q8",
+      "type": "mcq",
+      "prompt": "O(n^2 + 1000n + 5) simplifies to:",
+      "choices": [
+        "O(n^2 + 1000n)",
+        "O(n^2) — drop non-dominant terms (1000n is dwarfed by n^2 for large n) and constants",
+        "O(n^3)",
+        "O(1000n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Drop non-dominant terms: as n grows, n^2 dwarfs 1000n. At n=10000: n^2 = 10^8, 1000n = 10^7 — the n^2 term is 10x bigger. At n=10^6: n^2 = 10^12 vs 1000n = 10^9 — 1000x. Constants and lower-order terms become irrelevant. Final: O(n^2).",
+      "tags": [
+        "big-o",
+        "simplification"
+      ]
+    },
+    {
+      "id": "cmplx-q9",
+      "type": "mcq",
+      "prompt": "For an input of n=10^6, which complexity is too slow for a typical interactive web request (target <100ms)?",
+      "choices": [
+        "O(n)",
+        "O(n log n)",
+        "O(n^2) — 10^12 operations ≈ 1000+ seconds",
+        "O(log n)"
+      ],
+      "answerIndex": 2,
+      "explanation": "Mental model: ~10^8 simple ops/sec on a modern CPU. n=10^6: O(n)=10^6=10ms (fine), O(n log n)=2×10^7=200ms (borderline), O(n^2)=10^12=10000s (impossible). Online APIs need O(n) or better at n=10^6. O(n^2) is fine only when n ≤ ~3000.",
+      "tags": [
+        "big-o",
+        "practical",
+        "performance"
+      ]
+    },
+    {
+      "id": "cmplx-q10",
+      "type": "mcq",
+      "prompt": "What is the time complexity of mergesort?",
+      "choices": [
+        "O(n^2) worst case",
+        "O(n log n) — guaranteed in ALL cases (best, average, worst). Divide step has log n levels, each level processes n elements.",
+        "O(n log log n)",
+        "O(n) average"
+      ],
+      "answerIndex": 1,
+      "explanation": "Mergesort divides the array log n times (each step halves), and at each level merges n elements total. Result: n × log n = O(n log n). Unlike quicksort (which can degrade to O(n^2) on bad pivots), mergesort guarantees O(n log n) in worst case. Trade-off: O(n) extra space.",
+      "tags": [
+        "sorting",
+        "mergesort",
+        "divide-and-conquer"
+      ]
+    },
+    {
+      "id": "cmplx-q11",
+      "type": "mcq",
+      "prompt": "Inserting at the FRONT of an ArrayList of size n — complexity?",
+      "choices": [
+        "O(1)",
+        "O(log n)",
+        "O(n) — must shift all existing elements one position to the right",
+        "O(n^2)"
+      ],
+      "answerIndex": 2,
+      "explanation": "ArrayList stores elements in a backing array. Inserting at front: every existing element shifts right by 1 = n shifts = O(n). Inserting at END is O(1) amortised (occasional resize). For frequent front inserts: use ArrayDeque or LinkedList instead.",
+      "tags": [
+        "arraylist",
+        "insertion"
+      ]
+    },
+    {
+      "id": "cmplx-q12",
+      "type": "mcq",
+      "prompt": "In a balanced binary search tree (Red-Black, AVL), search complexity is:",
+      "choices": [
+        "O(n)",
+        "O(log n) — tree height is bounded at log_2(n) due to balancing rotations",
+        "O(1)",
+        "O(n log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Balanced BSTs maintain height ~log n via rotations. Each search descends one level per comparison. Worst case: log_2(n) comparisons. For n=1M: ~20 comparisons. Java TreeMap uses red-black tree. Unbalanced BST (insert sorted data) degenerates to linked list = O(n) — that's why balancing matters.",
+      "tags": [
+        "bst",
+        "balanced",
+        "search"
+      ]
+    },
+    {
+      "id": "cmplx-q13",
+      "type": "mcq",
+      "prompt": "What does 'amortised O(1)' mean for ArrayList.add() at end?",
+      "choices": [
+        "Always exactly O(1)",
+        "Average over a long sequence of operations: most adds are O(1), but occasional resizes cost O(n). Total cost / number of operations = O(1) on average.",
+        "Best-case O(1)",
+        "Worst-case O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "ArrayList grows by doubling when full. Most adds: O(1). When full, resize: copy n elements to new array = O(n) for that one add. But resizes are rare: after n adds, only log(n) resizes happened. Total: n + 2 + 4 + ... + n = ~3n operations for n adds. Per add: 3n/n = 3 = O(1) amortised.",
+      "tags": [
+        "amortised",
+        "arraylist",
+        "analysis"
+      ]
+    },
+    {
+      "id": "cmplx-q14",
+      "type": "mcq",
+      "prompt": "Which algorithm is correctly classified?",
+      "choices": [
+        "Bubble sort: O(n log n)",
+        "Quick sort average: O(n log n) — typical good-pivot case",
+        "Hash insert: O(log n)",
+        "Linear search: O(log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Quicksort: average O(n log n), worst O(n^2). Bubble sort: O(n^2). Hash insert avg: O(1). Linear search: O(n). Knowing the standard complexities is essential for technical interviews and choosing the right algorithm for a problem.",
+      "tags": [
+        "complexities",
+        "standard"
+      ]
+    },
+    {
+      "id": "cmplx-q15",
+      "type": "mcq",
+      "prompt": "Time complexity of generating all subsets of n elements:",
+      "choices": [
+        "O(n^2)",
+        "O(2^n) — there are 2^n subsets (each element either in or out), and we must produce each",
+        "O(n!)",
+        "O(n log n)"
+      ],
+      "answerIndex": 1,
+      "explanation": "For n elements, there are 2^n possible subsets (each element has 2 choices: included/excluded). Even just enumerating them is O(2^n). For n=20: 1M subsets. For n=30: 1 billion. n=40: 1 trillion (intractable). This is why subset/power-set algorithms work only for small n.",
+      "tags": [
+        "big-o",
+        "exponential",
+        "subsets"
+      ]
+    },
+    {
+      "id": "cmplx-q16",
+      "type": "mcq",
+      "prompt": "Memoisation vs naive recursion — typical impact on Fibonacci?",
+      "choices": [
+        "No change",
+        "Time O(2^n) → O(n), space O(n) → O(n) — memo cache trades space for huge time savings",
+        "Time stays the same",
+        "Time worse"
+      ],
+      "answerIndex": 1,
+      "explanation": "Naive fib(n) recomputes fib(5) hundreds of times in fib(40). Memoisation: cache results. Each fib(k) computed exactly once. Time goes from O(2^n) to O(n). Space increases from O(n) call stack to O(n) call stack + O(n) cache = still O(n). Classic 'space for time' trade.",
+      "tags": [
+        "memoisation",
+        "dynamic-programming",
+        "recursion"
+      ]
+    },
+    {
+      "id": "cmplx-q17",
+      "type": "multi",
+      "prompt": "Which operations are O(1) on average for HashMap?",
+      "choices": [
+        "get(key)",
+        "put(key, value)",
+        "containsKey(key)",
+        "keySet()"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "get/put/containsKey/remove are all O(1) average (worst O(n) on collisions). keySet() returns a view but iterating it is O(n). Just calling keySet() is O(1) (returns lazy view), but iterating O(n).",
+      "tags": [
+        "hashmap",
+        "operations"
+      ]
+    },
+    {
+      "id": "cmplx-q18",
+      "type": "mcq",
+      "prompt": "What is O(n) space complexity caused by in this code?",
+      "choices": [
+        "The for loop",
+        "Creating a new array of size n inside the function — auxiliary space, separate from input",
+        "The print statements",
+        "Nothing — it's O(1)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Space complexity counts EXTRA memory beyond input. A new array allocates n elements = O(n) auxiliary space. Loop variables and print statements use O(1). The input array doesn't count (we already had it). To reduce: try to modify in-place if possible.",
+      "tags": [
+        "space-complexity",
+        "auxiliary"
+      ]
+    },
+    {
+      "id": "cmplx-q19",
+      "type": "mcq",
+      "prompt": "Why is binary search O(log n) and not O(n/2)?",
+      "choices": [
+        "They're the same",
+        "O(n/2) simplifies to O(n) (drop constants), and binary search isn't 'half the work' — it RECURSIVELY halves until reaching 1, doing log_2(n) comparisons total.",
+        "Binary search uses logarithm",
+        "Convention"
+      ],
+      "answerIndex": 1,
+      "explanation": "Common confusion. n/2 = doing half the work once = still linear (Big-O drops constants). Binary search keeps halving the remaining range: n → n/2 → n/4 → n/8 → ... → 1. Number of halvings to go from n to 1 = log_2(n). That's why it's O(log n), not O(n/2).",
+      "tags": [
+        "binary-search",
+        "logarithmic",
+        "misconception"
+      ]
+    },
+    {
+      "id": "cmplx-q20",
+      "type": "mcq",
+      "prompt": "For Heap (PriorityQueue) in Java, which operation is O(1)?",
+      "choices": [
+        "offer (insert)",
+        "poll (extract min)",
+        "peek (look at min) — accessing root of heap is constant time",
+        "contains"
+      ],
+      "answerIndex": 2,
+      "explanation": "Min-heap: smallest element is always at root (index 0 of array-backed heap). peek() returns it in O(1). offer() and poll() require sift-up/sift-down to maintain heap property, both O(log n). contains() requires linear scan O(n) — heaps aren't designed for searching arbitrary values.",
+      "tags": [
+        "heap",
+        "priority-queue",
+        "operations"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "cmplx-fc1",
+      "front": "Big-O simplification rules",
+      "back": "1) Drop constants: O(2n)=O(n), O(500)=O(1). 2) Drop non-dominant terms: O(n^2+n)=O(n^2). 3) Sequential ops add, nested ops multiply. 4) Different inputs = different variables: O(a × b) not O(n^2).",
+      "tags": [
+        "big-o",
+        "rules"
+      ]
+    },
+    {
+      "id": "cmplx-fc2",
+      "front": "Complexity hierarchy",
+      "back": "O(1) < O(log n) < O(n) < O(n log n) < O(n^2) < O(2^n) < O(n!). At n=10^6: O(n)=10ms, O(n log n)=200ms, O(n^2)=hours, O(2^n)=impossible. Choose algorithm based on expected n.",
+      "tags": [
+        "big-o",
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "cmplx-fc3",
+      "front": "Array vs LinkedList vs HashMap",
+      "back": "Array: O(1) access by index, O(n) search. LinkedList: O(n) access, O(1) head/tail insert. HashMap: O(1) avg get/put/contains. Pick by: random access frequency, insert position, lookup pattern.",
+      "tags": [
+        "data-structures",
+        "complexity"
+      ]
+    },
+    {
+      "id": "cmplx-fc4",
+      "front": "BST balanced vs unbalanced",
+      "back": "Balanced BST (Red-Black, AVL): O(log n) all ops, height bounded. Unbalanced (insert sorted): degenerates to linked list, O(n). Java TreeMap is red-black. C++ std::map too. Manually implementing BST without rotations = bug.",
+      "tags": [
+        "bst",
+        "balanced"
+      ]
+    },
+    {
+      "id": "cmplx-fc5",
+      "front": "Sorting algorithms cheat sheet",
+      "back": "Quicksort: avg O(n log n), worst O(n^2). Mergesort: O(n log n) guaranteed, O(n) extra space. Heapsort: O(n log n) guaranteed, O(1) space. Insertion: O(n^2), but O(n) on nearly-sorted. Bubble: never use (O(n^2)).",
+      "tags": [
+        "sorting",
+        "algorithms"
+      ]
+    },
+    {
+      "id": "cmplx-fc6",
+      "front": "Recursion = stack space",
+      "back": "Each recursive call adds a stack frame (locals, return address). Depth d = O(d) space. Java default stack: ~1MB ≈ 10K frames. Too deep = StackOverflowError. Convert to iteration with explicit stack, or use tail-call optimisation (not Java).",
+      "tags": [
+        "recursion",
+        "stack"
+      ]
+    },
+    {
+      "id": "cmplx-fc7",
+      "front": "Memoisation: space for time",
+      "back": "Cache previously computed results. Naive fib(n)=O(2^n). Memoised fib(n)=O(n) time, O(n) space. Apply when: 1) function deterministic, 2) overlapping subproblems, 3) memory available. Map<Input, Output> in instance variable.",
+      "tags": [
+        "memoisation",
+        "dp"
+      ]
+    },
+    {
+      "id": "cmplx-fc8",
+      "front": "Practical n thresholds",
+      "back": "For interactive (<100ms): n<10⁶ → need O(n log n). n<10⁹ → need O(n) or pre-compute. n<10¹² → need O(log n) or external. n>10¹² → distributed/streaming. Match algorithm complexity to expected n!",
+      "tags": [
+        "performance",
+        "scale"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You're optimising a feature that ranks 100,000 search results by relevance. The naive implementation uses a nested O(n^2) loop that's taking 8 seconds. Design a faster approach: 1) Identify what makes the current code O(n^2). 2) Propose 3 alternative approaches with their complexities. 3) Pick the best for this use case. 4) Estimate runtime improvement.",
+    "checklist": [
+      {
+        "id": "c1",
+        "text": "Identify the O(n²) cause: probably nested comparison or score calculation. State it precisely.",
+        "weight": 20
+      },
+      {
+        "id": "c2",
+        "text": "Approach 1: pre-compute scores once O(n), then sort O(n log n) — total O(n log n)",
+        "weight": 20
+      },
+      {
+        "id": "c3",
+        "text": "Approach 2: heap of top-K results — O(n log k) where k=20 results shown",
+        "weight": 20
+      },
+      {
+        "id": "c4",
+        "text": "Approach 3: parallelise across cores — same Big-O but constant speedup proportional to cores",
+        "weight": 20
+      },
+      {
+        "id": "c5",
+        "text": "Estimate: O(n²)=10^10 ops≈100s. O(n log n)=2×10^6 ops≈20ms. ~5000x speedup. Best choice: pre-compute + sort.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "If only top 20 results displayed: O(n log k) heap approach has the smallest k factor — fastest in practice for top-K.",
+      "Be careful: if scores need to be recomputed per query (depend on query terms), pre-compute may not apply. Then heap of top-K is optimal.",
+      "Constants matter: O(n log n) sort with cache-friendly contiguous memory is often faster than O(n) algorithms that pointer-chase."
+    ]
+  }
+}

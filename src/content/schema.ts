@@ -1,7 +1,7 @@
 // Content schema — all types used by topic JSON files and state layer
 
 export type TopicId = string
-export type Unit = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
+export type Unit = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
 
 export type QuestionType = 'mcq' | 'multi' | 'order' | 'match' | 'fillBlank' | 'codeOutput'
 

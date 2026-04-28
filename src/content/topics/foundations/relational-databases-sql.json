@@ -1,0 +1,477 @@
+{
+  "id": "relational-databases-sql",
+  "unit": 1,
+  "order": 5,
+  "title": "Relational Databases & SQL",
+  "summary": "Tables, queries, joins, transactions, indexes, normalisation, and the ACID guarantees that make databases trustworthy.",
+  "prereqs": [
+    "pointers-references"
+  ],
+  "guide": "# Relational Databases & SQL\n\n## What Is a Relational Database?\n\nA relational database stores data in **tables** (rows and columns), like spreadsheets,\nwhere tables can be **related** to each other via shared values (foreign keys).\n\n**SQL** (Structured Query Language) is the language you use to query and modify the data.\n\nAlmost every real-world software system uses a relational database for its core data:\n- E-commerce: users, products, orders\n- Banking: accounts, transactions, balances\n- Social: users, posts, follows\n- Even your phone's contacts app (uses SQLite under the hood)\n\n**Popular relational databases:**\n- **PostgreSQL** — open-source, feature-rich, the favourite of modern devs\n- **MySQL / MariaDB** — open-source, widely used in legacy systems\n- **Oracle** — enterprise heavyweight\n- **SQL Server** — Microsoft's option\n- **SQLite** — embedded, single-file, used in mobile apps\n\n---\n\n## The Anatomy of a Table\n\n```\n  users table:\n  +────+──────────+──────────────────+──────────+\n  │ id │ name     │ email            │ age      │\n  +────+──────────+──────────────────+──────────+\n  │ 1  │ Alice    │ alice@example.com│ 28       │\n  │ 2  │ Bob      │ bob@example.com  │ 35       │\n  │ 3  │ Charlie  │ charlie@gmail.com│ 22       │\n  +────+──────────+──────────────────+──────────+\n\n  Each ROW = one record (one user).\n  Each COLUMN = one attribute (e.g. age).\n  Columns have TYPES (integer, varchar, timestamp).\n  PRIMARY KEY (here: id) uniquely identifies each row.\n```\n\n**Multi-table example:**\n\n```\n  users:                    orders:\n  +────+─────────+         +─────+─────────+──────────+\n  │ id │ name    │         │ id  │ user_id │ amount   │\n  +────+─────────+         +─────+─────────+──────────+\n  │ 1  │ Alice   │←────────│ 100 │ 1       │ 49.99    │\n  │ 2  │ Bob     │         │ 101 │ 1       │ 19.99    │\n  +────+─────────+         │ 102 │ 2       │ 99.00    │\n                           +─────+─────────+──────────+\n\n  orders.user_id is a FOREIGN KEY referencing users.id\n  This is the 'relation' in 'relational database'.\n  Alice (id=1) has two orders. Bob has one.\n```\n\n---\n\n## SELECT — Reading Data\n\n```sql\n-- Get all columns, all rows:\nSELECT * FROM users;\n\n-- Specific columns:\nSELECT name, email FROM users;\n\n-- Filter rows with WHERE:\nSELECT * FROM users WHERE age >= 18;\nSELECT * FROM users WHERE name = 'Alice';\nSELECT * FROM users WHERE email LIKE '%@gmail.com';\n\n-- Sort with ORDER BY:\nSELECT * FROM users ORDER BY age DESC;     -- newest first\nSELECT * FROM users ORDER BY name ASC;     -- alphabetical\n\n-- Limit rows returned:\nSELECT * FROM users LIMIT 10;\nSELECT * FROM users ORDER BY id LIMIT 10 OFFSET 20;  -- pagination\n\n-- Aggregate functions:\nSELECT COUNT(*) FROM users;                -- total users\nSELECT AVG(age) FROM users;                -- average age\nSELECT MIN(age), MAX(age) FROM users;\n\n-- GROUP BY + aggregate:\nSELECT user_id, COUNT(*) AS order_count, SUM(amount) AS total_spent\nFROM orders\nGROUP BY user_id;\n-- Result:\n-- user_id | order_count | total_spent\n-- 1       | 2           | 69.98\n-- 2       | 1           | 99.00\n\n-- HAVING filters AFTER grouping:\nSELECT user_id, COUNT(*) AS cnt\nFROM orders\nGROUP BY user_id\nHAVING COUNT(*) > 5;\n```\n\n---\n\n## JOINs — Combining Tables\n\n```sql\n-- INNER JOIN: only rows that match in BOTH tables\nSELECT u.name, o.amount\nFROM users u\nINNER JOIN orders o ON o.user_id = u.id;\n\n-- Result: only users WITH orders\n-- name  | amount\n-- Alice | 49.99\n-- Alice | 19.99\n-- Bob   | 99.00\n-- (Charlie has no orders → excluded)\n\n-- LEFT JOIN: all rows from LEFT table, NULL for unmatched right\nSELECT u.name, o.amount\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id;\n\n-- Result: all users, NULL where no orders\n-- name    | amount\n-- Alice   | 49.99\n-- Alice   | 19.99\n-- Bob     | 99.00\n-- Charlie | NULL\n\n-- RIGHT JOIN: mirror of LEFT (rare; usually use LEFT)\n-- FULL OUTER JOIN: all rows from both tables (NULL where no match)\n```\n\n**JOIN visualisation:**\n\n```\n  INNER JOIN              LEFT JOIN              FULL OUTER JOIN\n                                                                \n    users  orders          users  orders          users  orders\n      ◯─────◯                ◯─────◯                ◯─────◯  \n      │     │                │     │                │     │  \n      └─────┘                └─────┘                └─────┘  \n       only                  all left              all from\n       intersection         + matches              both sides\n```\n\n---\n\n## INSERT, UPDATE, DELETE — Modifying Data\n\n```sql\n-- INSERT: add new rows\nINSERT INTO users (name, email, age)\nVALUES ('Diana', 'diana@example.com', 30);\n\n-- INSERT multiple rows:\nINSERT INTO users (name, email, age) VALUES\n    ('Eve', 'eve@example.com', 25),\n    ('Frank', 'frank@example.com', 40);\n\n-- UPDATE: modify existing rows\nUPDATE users SET age = 29 WHERE id = 1;\n\n-- ALWAYS use WHERE — without it, updates ALL rows!\nUPDATE users SET active = false;   -- updates EVERY user!\n\n-- DELETE: remove rows\nDELETE FROM orders WHERE id = 100;\n\n-- DANGEROUS without WHERE:\nDELETE FROM users;     -- deletes ALL users! Use TRUNCATE for clean wipe.\n\n-- Best practice: write SELECT first, verify, then change to UPDATE/DELETE\nSELECT * FROM users WHERE last_login < '2020-01-01';   -- preview\nDELETE FROM users WHERE last_login < '2020-01-01';     -- act\n```\n\n---\n\n## Schema Design Basics\n\n```sql\nCREATE TABLE users (\n    id          SERIAL PRIMARY KEY,            -- auto-increment ID\n    name        VARCHAR(100) NOT NULL,\n    email       VARCHAR(255) UNIQUE NOT NULL,  -- no duplicates\n    age         INTEGER CHECK (age >= 0),      -- validation\n    created_at  TIMESTAMPTZ DEFAULT NOW()      -- auto-set on insert\n);\n\nCREATE TABLE orders (\n    id          SERIAL PRIMARY KEY,\n    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n    amount      DECIMAL(10, 2) NOT NULL,       -- money: 10 digits, 2 decimal\n    created_at  TIMESTAMPTZ DEFAULT NOW()\n);\n\n-- INDEX: speeds up queries on this column\nCREATE INDEX idx_orders_user_id ON orders(user_id);\nCREATE INDEX idx_orders_created ON orders(created_at);\n\nKEY CONSTRAINTS:\n  PRIMARY KEY: unique identifier, not null, indexed\n  FOREIGN KEY: references another table — DB enforces referential integrity\n  UNIQUE:      no two rows can have same value\n  NOT NULL:    column required\n  CHECK:       custom validation rule\n  DEFAULT:     value if not specified on insert\n\nDATA TYPES (PostgreSQL examples):\n  INTEGER, BIGINT, SMALLINT, SERIAL (auto-incrementing int)\n  TEXT, VARCHAR(n), CHAR(n)\n  DECIMAL(p, s), NUMERIC, REAL, DOUBLE PRECISION\n  BOOLEAN\n  DATE, TIME, TIMESTAMP, TIMESTAMPTZ (with timezone)\n  UUID, JSON, JSONB, ARRAY\n  BYTEA (binary)\n```\n\n---\n\n## Indexes — How Lookups Get Fast\n\n```\nWITHOUT INDEX:\n  SELECT * FROM users WHERE email = 'alice@example.com';\n  → DB scans EVERY row checking emails. O(n) — slow for big tables.\n\nWITH INDEX on email:\n  → DB walks a B-tree (~log n) to find row. O(log n).\n\n  For 1M users:\n  Without index: 1M comparisons (~100ms)\n  With index:    20 comparisons (~0.1ms) → 1000x faster!\n\nINDEX = a sorted data structure (B-tree typically) on one or more columns.\n  Stored separately from the table.\n  Updated automatically on INSERT/UPDATE/DELETE.\n\nWHEN TO INDEX:\n  Columns frequently in WHERE\n  Columns frequently in JOIN ON\n  Columns frequently in ORDER BY\n  Foreign keys (almost always)\n\nWHEN NOT TO INDEX:\n  Tiny tables (full scan is faster)\n  Columns with few distinct values (e.g. boolean) — index doesn't help much\n  Write-heavy tables — every index slows INSERT/UPDATE\n\nRULE OF THUMB: index any column you filter or join on. Profile slow queries with EXPLAIN.\n\nEXPLAIN — see how DB executes your query:\n  EXPLAIN ANALYZE SELECT * FROM users WHERE email = 'alice@example.com';\n  → Shows 'Index Scan' (good) or 'Seq Scan' (bad if table is large).\n```\n\n---\n\n## ACID Transactions\n\nACID is the foundation of database trustworthiness:\n\n```\nATOMICITY:\n  All-or-nothing. Either ALL changes commit, or NONE do.\n  Money transfer: deduct from A AND add to B — both happen, or neither.\n\nCONSISTENCY:\n  DB never violates rules (constraints, foreign keys, types).\n  Failed transaction rolls back; constraints prevent invalid states.\n\nISOLATION:\n  Concurrent transactions don't interfere.\n  Reading half-applied data of another transaction = bad. Isolation prevents.\n  Levels: READ UNCOMMITTED (loosest), READ COMMITTED (default), \n          REPEATABLE READ, SERIALIZABLE (strictest, slowest).\n\nDURABILITY:\n  Once committed, data survives crashes (written to disk).\n  Power outage right after COMMIT? Data is safe.\n\nEXAMPLE TRANSACTION:\n  BEGIN;\n    UPDATE accounts SET balance = balance - 100 WHERE id = 1;\n    UPDATE accounts SET balance = balance + 100 WHERE id = 2;\n    -- if any error, ROLLBACK auto\n  COMMIT;\n\n  If second UPDATE fails: BEGIN..ROLLBACK undoes the first too.\n  No partial state ever seen by other transactions.\n```\n\n---\n\n## Normalisation — Avoiding Duplicate Data\n\n```\nBAD (denormalised — redundant data):\n  orders:\n  +─────+─────────────+──────────────────+─────────+\n  │ id  │ user_name   │ user_email       │ amount  │\n  +─────+─────────────+──────────────────+─────────+\n  │ 100 │ Alice       │ alice@example.com│ 49.99   │\n  │ 101 │ Alice       │ alice@example.com│ 19.99   │\n  +─────+─────────────+──────────────────+─────────+\n\n  Problems:\n  - Alice's email stored twice → 'update email' must update many rows\n  - Easy for data to get inconsistent\n  - Wastes storage\n\nGOOD (normalised — split into related tables):\n  users:\n  +────+───────+──────────────────+\n  │ id │ name  │ email            │\n  +────+───────+──────────────────+\n  │ 1  │ Alice │ alice@example.com│\n  +────+───────+──────────────────+\n\n  orders:\n  +─────+─────────+─────────+\n  │ id  │ user_id │ amount  │\n  +─────+─────────+─────────+\n  │ 100 │ 1       │ 49.99   │\n  │ 101 │ 1       │ 19.99   │\n  +─────+─────────+─────────+\n\n  Update email once. JOIN to combine when needed.\n\nNORMAL FORMS (informally):\n  1NF: no repeating groups, each cell is atomic (no comma-separated lists in a column)\n  2NF: no partial dependencies (every non-key column depends on the FULL primary key)\n  3NF: no transitive dependencies (non-key columns don't depend on other non-key)\n\n  Most production schemas aim for 3NF.\n  Sometimes denormalise for read performance (caching computed totals).\n```\n\n---\n\n## Mind Map\n\n```\nRELATIONAL DATABASES & SQL\n|\n+-- BASIC STRUCTURE\n|   +-- Tables (rows, columns)\n|   +-- Primary keys (unique row id)\n|   +-- Foreign keys (relationships)\n|   +-- Constraints (NOT NULL, UNIQUE, CHECK)\n|\n+-- SQL OPERATIONS (CRUD)\n|   +-- SELECT (read)\n|   +-- INSERT (create)\n|   +-- UPDATE (modify)\n|   +-- DELETE (remove)\n|\n+-- QUERYING\n|   +-- WHERE (filter rows)\n|   +-- ORDER BY (sort)\n|   +-- GROUP BY (aggregate)\n|   +-- HAVING (filter groups)\n|   +-- LIMIT/OFFSET (paginate)\n|   +-- JOINs (INNER, LEFT, RIGHT, FULL)\n|\n+-- INDEXES\n|   +-- Speed up lookups (B-tree)\n|   +-- Slow down writes\n|   +-- EXPLAIN to verify usage\n|\n+-- ACID TRANSACTIONS\n|   +-- Atomicity (all or nothing)\n|   +-- Consistency (constraints upheld)\n|   +-- Isolation (concurrent safety)\n|   +-- Durability (survives crash)\n|\n+-- SCHEMA DESIGN\n    +-- Normalisation (1NF, 2NF, 3NF)\n    +-- Avoid duplication\n    +-- Sometimes denormalise for speed\n```\n\n---\n\n## How SQL Connects to Other Topics\n\n- **Big-O**: queries with indexes are O(log n); without are O(n). Same thinking.\n- **System Design**: master-replica, sharding, partitioning all build on relational basics.\n- **NoSQL**: understand SQL first; NoSQL is about trade-offs against this base.\n- **Java/Spring**: JPA/Hibernate translate Java objects to SQL queries. Knowing SQL helps debug performance.\n\n---\n\n## Common Beginner Mistakes\n\n1. **UPDATE/DELETE without WHERE** — modifies/deletes ALL rows. Always preview with SELECT first.\n2. **N+1 query problem** — looping in app code, querying for each item. Use JOIN instead.\n3. **No indexes on foreign keys** — slow JOINs and CASCADE operations.\n4. **Wrong data type for money** — use DECIMAL(p,s), never FLOAT (rounding errors).\n5. **Storing dates as strings** — use TIMESTAMP/DATE types for proper comparison/sorting.\n6. **Comparing NULL with =** — use IS NULL/IS NOT NULL. NULL = NULL is NULL, not TRUE!\n7. **SELECT * in production** — fetches unnecessary columns; specify needed columns.\n\n---\n\n## References\n\n### Videos\n- **SQL Tutorial — Full Database Course for Beginners** by freeCodeCamp: https://www.youtube.com/watch?v=HXV3zeQKqGY\n- **Database Indexing Explained** by Hussein Nasser: https://www.youtube.com/watch?v=HubezKbFL7E\n\n### Articles\n- **Mode SQL Tutorial** (interactive): https://mode.com/sql-tutorial/\n- **SQLBolt** (interactive lessons): https://sqlbolt.com/\n- **Use The Index, Luke** (deep on indexing): https://use-the-index-luke.com/",
+  "questions": [
+    {
+      "id": "sql-q1",
+      "type": "mcq",
+      "prompt": "What is a PRIMARY KEY in a relational database?",
+      "choices": [
+        "The first column",
+        "A column (or set) that uniquely identifies each row — automatically NOT NULL and indexed",
+        "The largest column",
+        "Optional"
+      ],
+      "answerIndex": 1,
+      "explanation": "Primary key uniquely identifies each row. Cannot be NULL. Cannot be duplicated. Automatically indexed for fast lookups. Conventionally an auto-incrementing 'id' integer or a UUID. Foundation of relational integrity — foreign keys reference primary keys.",
+      "tags": [
+        "sql",
+        "primary-key"
+      ]
+    },
+    {
+      "id": "sql-q2",
+      "type": "mcq",
+      "prompt": "What does this query return?\n\nSELECT name, COUNT(*)\nFROM users\nGROUP BY name\nHAVING COUNT(*) > 1;",
+      "choices": [
+        "All users",
+        "Names that appear more than once and how many times — useful for finding duplicates",
+        "Single random user",
+        "Compile error"
+      ],
+      "answerIndex": 1,
+      "explanation": "GROUP BY name groups rows by name. COUNT(*) counts rows per group. HAVING filters groups (you cannot filter aggregates with WHERE). Result: only names appearing more than once. WHERE filters before grouping; HAVING filters after.",
+      "tags": [
+        "sql",
+        "group-by",
+        "having"
+      ]
+    },
+    {
+      "id": "sql-q3",
+      "type": "mcq",
+      "prompt": "INNER JOIN vs LEFT JOIN — what's the difference?",
+      "choices": [
+        "Identical",
+        "INNER JOIN: returns only rows with a match in BOTH tables. LEFT JOIN: returns ALL rows from left table, NULL for missing right side.",
+        "LEFT JOIN is faster",
+        "INNER JOIN is older"
+      ],
+      "answerIndex": 1,
+      "explanation": "INNER JOIN: 'Alice has no orders' → Alice excluded from result. LEFT JOIN users LEFT JOIN orders: Alice included with NULL orders. Use LEFT when you want all of left even if no match. RIGHT JOIN: mirror of LEFT (rare). FULL OUTER: all from both, NULL where no match.",
+      "tags": [
+        "sql",
+        "joins"
+      ]
+    },
+    {
+      "id": "sql-q4",
+      "type": "mcq",
+      "prompt": "Why is 'DELETE FROM users;' (no WHERE) dangerous?",
+      "choices": [
+        "Slow performance",
+        "Deletes EVERY row in the users table — irreversible without backup. Always include WHERE, or use TRUNCATE for intentional full clear.",
+        "Compile error",
+        "Triggers a backup"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without WHERE, DELETE/UPDATE applies to entire table. Same disaster: 'UPDATE users SET active=false' deactivates everyone. Best practice: always write SELECT first to verify rows, THEN change to UPDATE/DELETE. Many DBs allow safe-update mode that requires WHERE.",
+      "tags": [
+        "sql",
+        "safety"
+      ]
+    },
+    {
+      "id": "sql-q5",
+      "type": "mcq",
+      "prompt": "What does an INDEX on the 'email' column do?",
+      "choices": [
+        "Forces uniqueness",
+        "Creates a separate sorted data structure (typically B-tree) so queries filtering by email run in O(log n) instead of O(n) full table scan",
+        "Slows queries",
+        "Compresses data"
+      ],
+      "answerIndex": 1,
+      "explanation": "Index = sorted lookup structure. Email queries become O(log n). For 1M users: ~20 comparisons vs 1M without. Trade-off: indexes slow INSERT/UPDATE/DELETE (must update index too) and use disk space. Index columns used in WHERE, JOIN, ORDER BY.",
+      "tags": [
+        "sql",
+        "indexes"
+      ]
+    },
+    {
+      "id": "sql-q6",
+      "type": "mcq",
+      "prompt": "What does ACID stand for in database transactions?",
+      "choices": [
+        "A coding standard",
+        "Atomicity (all-or-nothing), Consistency (constraints upheld), Isolation (concurrent transactions don't interfere), Durability (survives crashes)",
+        "A backup format",
+        "Auth standard"
+      ],
+      "answerIndex": 1,
+      "explanation": "ACID is foundational. Atomicity: BEGIN..COMMIT either both happen or neither. Consistency: constraints (FK, CHECK) always valid. Isolation: levels READ COMMITTED, REPEATABLE READ, SERIALIZABLE. Durability: COMMIT writes to durable storage. NoSQL often relaxes these for scale.",
+      "tags": [
+        "sql",
+        "acid",
+        "transactions"
+      ]
+    },
+    {
+      "id": "sql-q7",
+      "type": "mcq",
+      "prompt": "What does a FOREIGN KEY do?",
+      "choices": [
+        "Encrypts data",
+        "Establishes a referential link to another table's primary key — DB enforces that referenced row exists",
+        "Backs up automatically",
+        "Sorts the table"
+      ],
+      "answerIndex": 1,
+      "explanation": "FOREIGN KEY (user_id) REFERENCES users(id): every order's user_id must match an existing user.id. DB rejects orphan inserts and can CASCADE deletes. Maintains referential integrity. Always index foreign keys (DB doesn't always do this automatically).",
+      "tags": [
+        "sql",
+        "foreign-key"
+      ]
+    },
+    {
+      "id": "sql-q8",
+      "type": "mcq",
+      "prompt": "What's wrong with: WHERE email = NULL?",
+      "choices": [
+        "Nothing",
+        "NULL comparisons with = always return NULL (treated as not-true), so this matches no rows. Use 'IS NULL' instead.",
+        "Returns all rows",
+        "Compile error"
+      ],
+      "answerIndex": 1,
+      "explanation": "NULL means 'unknown'. NULL = NULL is NULL (not TRUE). NULL = anything is NULL. Use 'WHERE email IS NULL' or 'IS NOT NULL'. Subtle source of bugs — query returns empty result silently. Three-valued logic in SQL: TRUE, FALSE, UNKNOWN.",
+      "tags": [
+        "sql",
+        "null"
+      ]
+    },
+    {
+      "id": "sql-q9",
+      "type": "mcq",
+      "prompt": "You have orders and need each user's total spending. Best query?",
+      "choices": [
+        "SELECT * FROM orders ORDER BY user_id",
+        "SELECT user_id, SUM(amount) FROM orders GROUP BY user_id",
+        "SELECT * FROM orders WHERE amount > 0",
+        "SELECT COUNT(*) FROM orders"
+      ],
+      "answerIndex": 1,
+      "explanation": "GROUP BY user_id buckets rows by user. SUM(amount) sums each bucket. Returns one row per user with their total. Add JOIN to users to get names. ORDER BY SUM(amount) DESC for top spenders. This is the canonical aggregation pattern.",
+      "tags": [
+        "sql",
+        "aggregation",
+        "group-by"
+      ]
+    },
+    {
+      "id": "sql-q10",
+      "type": "mcq",
+      "prompt": "What is the N+1 query problem?",
+      "choices": [
+        "Too many rows",
+        "Loop in application code that fires 1 query for the list, then 1 query per item — for 100 users, 101 queries total. Should be 1 query with JOIN.",
+        "Too few rows",
+        "An index issue"
+      ],
+      "answerIndex": 1,
+      "explanation": "Classic ORM/lazy-load pitfall. Get 100 users (1 query). Loop accessing user.orders triggers 100 separate queries. 101 total = N+1. Fix: eager-fetch with JOIN, or batch (WHERE user_id IN (...)). Single biggest performance issue in many apps.",
+      "tags": [
+        "sql",
+        "performance",
+        "n-plus-one"
+      ]
+    },
+    {
+      "id": "sql-q11",
+      "type": "mcq",
+      "prompt": "What data type should you use for money?",
+      "choices": [
+        "FLOAT",
+        "DOUBLE",
+        "DECIMAL/NUMERIC with explicit precision (e.g. DECIMAL(10,2)) — exact arithmetic, no floating-point rounding errors",
+        "INTEGER"
+      ],
+      "answerIndex": 2,
+      "explanation": "FLOAT/DOUBLE use binary floating-point: 0.1 + 0.2 = 0.30000000000000004. Catastrophic for money (off-by-cents in totals). DECIMAL stores exact decimal values: DECIMAL(10,2) = up to 10 digits, 2 after decimal. Some systems use INTEGER cents (multiply by 100) — also exact.",
+      "tags": [
+        "sql",
+        "types",
+        "money"
+      ]
+    },
+    {
+      "id": "sql-q12",
+      "type": "mcq",
+      "prompt": "BEGIN; UPDATE A...; UPDATE B...; ROLLBACK; — what happened?",
+      "choices": [
+        "A changed, B didn't",
+        "Both updates UNDONE — transaction rolled back. DB returned to pre-BEGIN state. This is atomicity in action.",
+        "Compile error",
+        "B changed, A didn't"
+      ],
+      "answerIndex": 1,
+      "explanation": "BEGIN starts transaction. ROLLBACK reverses ALL changes since BEGIN. Atomic property: either all changes commit, or none take effect. Failure recovery: catch exception in code, ROLLBACK; report error. ROLLBACK after COMMIT does nothing — once committed, you need a compensating transaction.",
+      "tags": [
+        "transactions",
+        "rollback"
+      ]
+    },
+    {
+      "id": "sql-q13",
+      "type": "mcq",
+      "prompt": "What is normalisation?",
+      "choices": [
+        "Encryption",
+        "Organising data to eliminate redundancy by splitting tables linked by foreign keys — usually aiming for 3NF (no transitive dependencies)",
+        "Sorting rows",
+        "Indexing"
+      ],
+      "answerIndex": 1,
+      "explanation": "Normalisation reduces duplication. Bad: storing user_email in every order row. Good: orders.user_id references users.id, email stored once in users. Updates affect one row. Normal forms: 1NF (atomic columns), 2NF (no partial deps on composite key), 3NF (no transitive deps). Sometimes denormalise for read performance.",
+      "tags": [
+        "sql",
+        "normalisation"
+      ]
+    },
+    {
+      "id": "sql-q14",
+      "type": "multi",
+      "prompt": "Which query results are slow without an index? (Select all)",
+      "choices": [
+        "SELECT * FROM users WHERE email = 'a@b.com'",
+        "SELECT * FROM orders WHERE user_id = 42",
+        "SELECT * FROM users",
+        "SELECT name FROM users WHERE id = 1"
+      ],
+      "answerIndexes": [
+        0,
+        1
+      ],
+      "explanation": "WHERE on non-indexed column = full table scan O(n). Both filtering by email and user_id need index for speed. SELECT * (no filter) reads everything regardless. Filter by primary key (id) — already indexed (PK auto-indexed) so #4 is fast.",
+      "tags": [
+        "sql",
+        "indexes",
+        "performance"
+      ]
+    },
+    {
+      "id": "sql-q15",
+      "type": "mcq",
+      "prompt": "What does EXPLAIN do?",
+      "choices": [
+        "Documents the query",
+        "Shows the DB's execution plan: which indexes used, scan types, estimated cost — for query optimisation",
+        "Runs query slower",
+        "Adds indexes"
+      ],
+      "answerIndex": 1,
+      "explanation": "EXPLAIN shows how DB will execute query. Look for: 'Seq Scan' (full table scan, slow), 'Index Scan' (uses index, fast), 'Hash Join' vs 'Nested Loop'. EXPLAIN ANALYZE actually runs the query and shows real timing. Essential for diagnosing slow queries.",
+      "tags": [
+        "sql",
+        "explain",
+        "optimisation"
+      ]
+    },
+    {
+      "id": "sql-q16",
+      "type": "mcq",
+      "prompt": "Why use parameterised queries / prepared statements?",
+      "choices": [
+        "Looks pretty",
+        "SECURITY: prevents SQL injection. User input is sent as parameter, never concatenated into the SQL string — DB treats it as data, not code.",
+        "Faster",
+        "Required by JDBC"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQL injection: user enters 'admin'; DROP TABLE users; --' as username. Concatenation builds malicious query. Parameterised: 'WHERE name = ?' with bound parameter — DB treats input as VALUE, never as SQL. Always use ? placeholders or PreparedStatement in Java/JDBC.",
+      "tags": [
+        "sql",
+        "security",
+        "injection"
+      ]
+    },
+    {
+      "id": "sql-q17",
+      "type": "mcq",
+      "prompt": "What's the difference between TRUNCATE and DELETE without WHERE?",
+      "choices": [
+        "Same",
+        "TRUNCATE: fast (drops table data, resets auto-increment), can't be in transaction (in some DBs), no row triggers fire. DELETE: row-by-row, transactional, triggers fire — slower for large tables.",
+        "TRUNCATE keeps schema",
+        "TRUNCATE is for backups"
+      ],
+      "answerIndex": 1,
+      "explanation": "TRUNCATE: instant (deallocates pages), resets identity counters, lighter on log. Can't ROLLBACK in some DBs. DELETE: per-row processing, full transactional support, trigger firing per row, much slower for large tables. Both empty the table, keep schema. Choose based on context.",
+      "tags": [
+        "sql",
+        "truncate",
+        "delete"
+      ]
+    },
+    {
+      "id": "sql-q18",
+      "type": "mcq",
+      "prompt": "What is a transaction isolation level READ COMMITTED?",
+      "choices": [
+        "No isolation",
+        "Default in many DBs: a query reads only data committed by other transactions before this query starts. Prevents dirty reads (seeing uncommitted changes).",
+        "Highest isolation",
+        "Lowest isolation"
+      ],
+      "answerIndex": 1,
+      "explanation": "READ COMMITTED: each statement sees committed data. Prevents dirty reads. But: same query in same transaction can return different rows if another tx commits between (non-repeatable read). Stricter: REPEATABLE READ (snapshot at tx start). SERIALIZABLE: full isolation, slowest.",
+      "tags": [
+        "sql",
+        "isolation",
+        "transactions"
+      ]
+    },
+    {
+      "id": "sql-q19",
+      "type": "mcq",
+      "prompt": "What's wrong with `SELECT *` in production code?",
+      "choices": [
+        "Always wrong",
+        "Fetches all columns even if you only need a few — wastes network/memory; breaks if schema adds columns; less explicit; and prevents covering-index optimisations.",
+        "Slow only",
+        "No issue"
+      ],
+      "answerIndex": 1,
+      "explanation": "SELECT * is convenient in ad-hoc queries but wastes bandwidth and resources. SELECT name, email is explicit and faster. Schema changes adding columns silently shift downstream code. Use specific columns in production code; SELECT * only for exploration.",
+      "tags": [
+        "sql",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "sql-q20",
+      "type": "mcq",
+      "prompt": "For pagination of 1000+ rows, why is OFFSET inefficient at high pages?",
+      "choices": [
+        "No issue",
+        "DB must SCAN and skip OFFSET rows before returning the page — page 1000 of 100 means scanning 100,000 rows. Better: keyset pagination using WHERE id > last_id LIMIT N.",
+        "OFFSET is fastest",
+        "SQL bug"
+      ],
+      "answerIndex": 1,
+      "explanation": "OFFSET 100000 LIMIT 100: DB reads 100,100 rows, discards first 100,000. Slow for deep pages. Keyset (cursor) pagination: WHERE id > last_seen_id ORDER BY id LIMIT 100 — DB jumps directly via index, O(log n) regardless of page number. Use for infinite scroll.",
+      "tags": [
+        "sql",
+        "pagination",
+        "performance"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "sql-fc1",
+      "front": "SELECT clause execution order",
+      "back": "Logical order: FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT. Knowing this explains why aliases in SELECT can't be used in WHERE (computed after). HAVING filters groups, WHERE filters rows.",
+      "tags": [
+        "sql",
+        "ordering"
+      ]
+    },
+    {
+      "id": "sql-fc2",
+      "front": "JOIN types quick reference",
+      "back": "INNER JOIN: only matches in both. LEFT JOIN: all from left + matching right (NULL if no match). RIGHT JOIN: mirror (rare). FULL OUTER: all rows from both. CROSS JOIN: cartesian product (avoid unless intentional).",
+      "tags": [
+        "sql",
+        "joins"
+      ]
+    },
+    {
+      "id": "sql-fc3",
+      "front": "Index trade-offs",
+      "back": "Speeds reads (WHERE, JOIN, ORDER BY). Slows writes (every INSERT/UPDATE/DELETE updates indexes). Costs disk space. Rule: index columns frequently filtered on, especially foreign keys. Profile slow queries with EXPLAIN ANALYZE.",
+      "tags": [
+        "sql",
+        "indexes"
+      ]
+    },
+    {
+      "id": "sql-fc4",
+      "front": "ACID summary",
+      "back": "Atomicity (all-or-nothing), Consistency (constraints upheld), Isolation (concurrent transactions don't see each other's incomplete state), Durability (commit survives crash). Foundation of trustworthy DBs. NoSQL often trades these for scale.",
+      "tags": [
+        "sql",
+        "acid"
+      ]
+    },
+    {
+      "id": "sql-fc5",
+      "front": "NULL handling",
+      "back": "NULL means unknown. NULL = NULL is NULL, not TRUE! Use IS NULL / IS NOT NULL. NULL in arithmetic returns NULL. In aggregates: COUNT(col) skips NULLs, COUNT(*) counts all rows. ORDER BY: NULLs first/last varies by DB.",
+      "tags": [
+        "sql",
+        "null"
+      ]
+    },
+    {
+      "id": "sql-fc6",
+      "front": "N+1 query problem and fix",
+      "back": "Loop fetching list (1 query) then per-item details (N queries) = N+1 total. Fix: 1) JOIN to fetch all in single query. 2) Batch with WHERE id IN (...). 3) ORM eager-fetch hint. Always check ORM-generated SQL in development.",
+      "tags": [
+        "sql",
+        "performance"
+      ]
+    },
+    {
+      "id": "sql-fc7",
+      "front": "Use parameterised queries",
+      "back": "NEVER concatenate user input into SQL — SQL injection risk. Use ? placeholders or PreparedStatement. DB treats parameter as VALUE not CODE. 'WHERE name = ?' bound to user input. OWASP top web security risk historically.",
+      "tags": [
+        "sql",
+        "security"
+      ]
+    },
+    {
+      "id": "sql-fc8",
+      "front": "Money — use DECIMAL not FLOAT",
+      "back": "FLOAT/DOUBLE = binary floating-point. Sum of cents accumulates errors. Use DECIMAL(p,s): DECIMAL(10,2) for max 10 digits with 2 decimal. Or store as INTEGER cents (× 100). Exact arithmetic guaranteed.",
+      "tags": [
+        "sql",
+        "types",
+        "money"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the SQL schema for a simple e-commerce site: users, products, orders, order_items. Include: appropriate primary keys, foreign keys, indexes, constraints, and at least 5 SELECT queries that solve real business questions (top customers, monthly revenue, etc.).",
+    "checklist": [
+      {
+        "id": "s1",
+        "text": "Tables with PRIMARY KEY (SERIAL/UUID), FOREIGN KEY constraints (orders.user_id REFERENCES users), NOT NULL where appropriate, DECIMAL(10,2) for prices, TIMESTAMPTZ DEFAULT NOW() for timestamps.",
+        "weight": 20
+      },
+      {
+        "id": "s2",
+        "text": "Indexes on foreign keys (orders.user_id), commonly-filtered columns (orders.created_at for reports), unique constraint on users.email.",
+        "weight": 20
+      },
+      {
+        "id": "s3",
+        "text": "Top 10 customers by total spent: SELECT u.name, SUM(oi.price * oi.qty) total FROM users u JOIN orders o ON o.user_id = u.id JOIN order_items oi ON oi.order_id = o.id GROUP BY u.id, u.name ORDER BY total DESC LIMIT 10.",
+        "weight": 20
+      },
+      {
+        "id": "s4",
+        "text": "Monthly revenue: SELECT date_trunc('month', created_at) AS month, SUM(amount) FROM orders GROUP BY month ORDER BY month. Add WHERE created_at > NOW() - INTERVAL '12 months' for last year.",
+        "weight": 20
+      },
+      {
+        "id": "s5",
+        "text": "Out-of-stock products: SELECT * FROM products WHERE stock = 0. Trending: products with most orders in last 30 days using JOIN + GROUP BY + ORDER BY count.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "order_items is a join table linking orders ↔ products with quantity/price snapshot. PK = (order_id, product_id) composite or separate id. Always FK both columns.",
+      "Snapshot price in order_items at purchase time — products.price changes over time. Without snapshot, old orders show wrong totals.",
+      "For analytics queries on millions of orders: consider partitioning orders by created_at month, materialised views for monthly summaries, and read replicas to keep analytics off primary."
+    ]
+  }
+}

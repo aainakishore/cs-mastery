@@ -3,8 +3,13 @@ import { Download, Upload, Trash2, Bell, Volume2, VolumeX, Sun, Moon } from 'luc
 import { exportProgress, importProgress, resetProgress } from '../lib/sync'
 import { useProgress } from '../state/ProgressContext'
 import { Layout } from '../components/Layout'
-import { getLastStudied, getSettings, setSettings } from '../lib/storage'
-import { getCurrentNudge } from '../lib/nudgeMessages'
+import { getSettings, setSettings } from '../lib/storage'
+import {
+  requestPermission,
+  scheduleDailyStudyReminder,
+  scheduleWeeklyVideoReminder,
+  sendAntiBoredomeNudge,
+} from '../lib/notificationService'
 import type { AppSettings } from '../content/schema'
 
 export function Settings() {
@@ -29,37 +34,32 @@ export function Settings() {
 
   const requestNotifications = async () => {
     if (!('Notification' in window)) return alert('Notifications not supported in this browser.')
-    const result = await Notification.requestPermission()
-    setNotifPermission(result)
-    if (result === 'granted') {
-      // Schedule a test notification
-      setTimeout(() => {
-        new Notification('CS Mastery 🎓', {
-          body: 'Notifications enabled! You\'ll be reminded when topics are due for review.',
-          icon: '/icon-192.png',
-        })
-      }, 500)
+    const granted = await requestPermission()
+    setNotifPermission(granted ? 'granted' : 'denied')
+    if (granted) {
+      // Show immediate confirmation via SW (works on iPhone home screen)
+      await scheduleDailyStudyReminder()
+      setTimeout(() => scheduleWeeklyVideoReminder(), 2000)
     }
   }
 
-  const getHoursSinceLastStudy = () => {
-    const lastStudied = getLastStudied()
-    if (!lastStudied) return 48
-    return Math.max(0, (Date.now() - new Date(lastStudied).getTime()) / (1000 * 60 * 60))
+  const testDailyReminder = async () => {
+    if (Notification.permission !== 'granted') return
+    localStorage.removeItem('csm:lastDailyReminder')
+    await scheduleDailyStudyReminder()
   }
 
-  const testNudge = () => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return
-    const nudge = getCurrentNudge(Math.max(getHoursSinceLastStudy(), 2)) ?? {
-      title: 'CS Mastery reminder 🧠',
-      body: 'Time for a quick study session.',
-    }
-    new Notification(nudge.title, {
-      body: nudge.body,
-      icon: '/icon-192.png',
-      tag: 'csm-nudge-test',
-    })
+  const testWeeklyVideo = async () => {
+    if (Notification.permission !== 'granted') return
+    localStorage.removeItem('csm:lastWeeklyVideoReminder')
+    await scheduleWeeklyVideoReminder()
   }
+
+  const testAntiBoredom = async () => {
+    if (Notification.permission !== 'granted') return
+    await sendAntiBoredomeNudge()
+  }
+
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -154,33 +154,51 @@ export function Settings() {
           </div>
 
           {/* Notifications */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Bell size={18} className={notifPermission === 'granted' ? 'text-emerald-400' : 'text-slate-500'} />
-              <div>
-                <div className="text-sm text-slate-200 font-medium">Angry study reminders 😤</div>
-                <div className="text-xs text-slate-500">
-                  {notifPermission === 'granted'
-                    ? '✓ Active — reminders enabled'
-                    : notifPermission === 'denied'
-                    ? 'Blocked — enable in browser settings'
-                    : 'Gets angrier the longer you ignore it'}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Bell size={18} className={notifPermission === 'granted' ? 'text-emerald-400' : 'text-slate-500'} />
+                <div>
+                  <div className="text-sm text-slate-200 font-medium">Study reminders 📱</div>
+                  <div className="text-xs text-slate-500">
+                    {notifPermission === 'granted'
+                      ? '✓ Active — shows on iPhone home screen'
+                      : notifPermission === 'denied'
+                      ? 'Blocked — enable in Settings → Safari → Notifications'
+                      : 'Daily review + weekly video + anti-boredom nudges'}
+                  </div>
                 </div>
               </div>
+              <div className="flex gap-2">
+                {notifPermission !== 'granted' && notifPermission !== 'denied' && (
+                  <button onClick={requestNotifications} className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold">
+                    Enable
+                  </button>
+                )}
+                {notifPermission === 'granted' && <span className="text-emerald-400 text-lg">✓</span>}
+              </div>
             </div>
-            <div className="flex gap-2">
-              {notifPermission === 'granted' && (
-                <button onClick={testNudge} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded-lg">
-                  Test
+            {notifPermission === 'granted' && (
+              <div className="grid grid-cols-3 gap-2 pl-7">
+                <button onClick={testDailyReminder} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1.5 rounded-lg">
+                  🎯 Daily test
                 </button>
-              )}
-              {notifPermission !== 'granted' && notifPermission !== 'denied' && (
-                <button onClick={requestNotifications} className="text-xs bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold">
-                  Enable
+                <button onClick={testWeeklyVideo} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1.5 rounded-lg">
+                  📺 Video nudge
                 </button>
-              )}
-              {notifPermission === 'granted' && <span className="text-emerald-400 text-lg">✓</span>}
-            </div>
+                <button onClick={testAntiBoredom} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1.5 rounded-lg">
+                  🔀 Boredom tip
+                </button>
+              </div>
+            )}
+            {notifPermission === 'granted' && (
+              <div className="pl-7 text-xs text-slate-500 space-y-1">
+                <div>• Daily reminder fires once a day when you open the app</div>
+                <div>• Weekly video nudge fires once a week</div>
+                <div>• Anti-boredom tips fire randomly to break monotony</div>
+                <div className="text-indigo-400">iPhone: Install as PWA (Share → Add to Home Screen) for home screen notifications</div>
+              </div>
+            )}
           </div>
         </div>
 

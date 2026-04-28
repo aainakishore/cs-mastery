@@ -7,84 +7,437 @@
   "prereqs": [
     "relational-databases"
   ],
-  "guide": "# Database Sharding\n\nSharding is a **horizontal partitioning** technique that distributes data across multiple database instances (shards) to scale beyond a single machine's capacity.\n\n## Sharding vs Replication\n\n```\nReplication (copies):\n  Master  \u2500\u2500\u2192  Replica 1   (same data, different server)\n           \u2514\u2500\u2500\u2192 Replica 2   (scale reads, HA)\n  Each replica has ALL the data. Read scale but write bottleneck.\n\nSharding (partitions):\n  Shard 1: users 0-3M      (different data, different server)\n  Shard 2: users 3M-6M\n  Shard 3: users 6M-9M+\n  Write scale \u2014 each shard handles a fraction of total write load.\n```\n\n## Sharding Strategies\n\n```\nRange-based:\n  users 1-1M \u2192 Shard 1, 1M-2M \u2192 Shard 2\n  Pros: range queries easy (all Jan orders on one shard)\n  Cons: hotspots if new data concentrates in one range (all new IDs \u2192 Shard 2)\n\nHash-based:\n  shard = hash(userId) % numShards\n  Pros: even distribution, no hotspots\n  Cons: range queries require all shards, resharding is expensive\n\nDirectory-based:\n  Lookup table: userId \u2192 shard (stored separately)\n  Pros: flexible, easy resharding\n  Cons: lookup table is a bottleneck/single point of failure\n\nGeographic:\n  US users \u2192 US shard, EU users \u2192 EU shard\n  Pros: latency, data residency compliance\n  Cons: uneven distribution possible\n```\n\n## Resharding Problem\n\n```\nhash(userId) % 3 shards:  hash(123) % 3 = 0 \u2192 Shard A\n\nAdd 4th shard:\n  hash(userId) % 4 shards: hash(123) % 4 = 3 \u2192 Shard D  (different!)\n  MOST existing keys must move \u2014 expensive data migration\n\nConsistent Hashing (solution):\n  Hash ring \u2014 keys and nodes on a circle\n  Key routes to the nearest node clockwise\n  Adding a node: only adjacent keys need moving (~1/N of data)\n```\n\n## Cross-Shard Challenges\n\n```\nProblem: JOIN across shards\n  SELECT u.*, o.* FROM users u JOIN orders o ON u.id = o.userId\n  WHERE u.country = 'US'\n\n  users on Shard 1,2 | orders on Shard 3,4 \u2192 can't join server-side\n\nSolutions:\n  1. Co-locate (same entity on same shard via same shard key)\n  2. Denormalize (duplicate user data in orders shard)\n  3. Application-level join (fetch from both, join in code)\n  4. Cross-shard query engine (Vitess, Citus)\n```\n\n## Common Pitfalls\n- **Choosing the wrong shard key** \u2014 bad key creates hotspots. Key should distribute writes evenly.\n- **Cross-shard queries** \u2014 avoid joins and transactions across shards. Design schema to keep related data on the same shard.\n- **Resharding without consistent hashing** \u2014 modular hashing requires migrating most data. Use consistent hashing for production.\n",
+  "guide": "# Database Sharding\n\n## What Is Sharding? (Start From Zero)\n\nImagine a library with a million books. One librarian handles all requests.\nWhen the library gets popular, one librarian can't keep up — too many visitors.\n\nOne solution: hire more librarians and split the books. Librarian A handles\nauthors A-G, Librarian B handles H-N, Librarian C handles O-Z.\nNow three librarians work in parallel, each handling a third of the load.\n\nThat is sharding. You split your database into multiple smaller databases\n(shards), each responsible for a subset of the data, running on separate\nmachines. All shards together hold the complete dataset.\n\n```\nWithout sharding (one DB, vertical scaling):\n  DB Server: 128GB RAM, 32 cores, 10TB storage\n  Can't scale further — hardware limit reached\n  Single point of failure\n\nWith sharding (horizontal scaling):\n  Shard 1: users 0-33M      (DB server 1)\n  Shard 2: users 33M-66M    (DB server 2)\n  Shard 3: users 66M-100M   (DB server 3)\n\n  Add more shards when needed. Near-linear scale.\n  3x the capacity, 3x the throughput.\n```\n\n---\n\n## Sharding vs Replication — Different Problems\n\n```\nREPLICATION:\n  Same data on multiple servers.\n  Purpose: high availability + read scaling.\n  Master writes -> replicas receive copies.\n\n  Master: [A B C D E F G]\n  Replica 1: [A B C D E F G]  <- exact copy\n  Replica 2: [A B C D E F G]  <- exact copy\n\n  Reads distributed across replicas.\n  If Master fails: promote a replica (no data loss).\n\nSHARDING:\n  Different data on each server.\n  Purpose: write scaling + storage scaling beyond one machine.\n  Each shard has different rows.\n\n  Shard 1: [A B C]\n  Shard 2: [D E F]\n  Shard 3: [G H I]\n\n  Writes distributed across shards (parallel write capacity).\n  If Shard 1 fails: those records are UNAVAILABLE (or lost without shard replica).\n\nCOMBINED (production pattern):\n  Each shard also has replication:\n  Shard 1 Master + Shard 1 Replica\n  Shard 2 Master + Shard 2 Replica\n  Shard 3 Master + Shard 3 Replica\n  Best of both: horizontal scale + high availability\n```\n\n---\n\n## Sharding Strategies\n\n### Range-Based Sharding\n```\nDivide data by value ranges of the shard key.\n\nuser_id < 33M   -> Shard 1\nuser_id 33M-66M -> Shard 2\nuser_id > 66M   -> Shard 3\n\nPros:\n  Simple to understand and implement\n  Range queries are efficient (all users 1-1000 on one shard)\nCons:\n  HOTSPOT RISK: new users always go to the last shard (highest IDs)\n  Uneven distribution if data is skewed\n  Rebalancing needed when a shard fills up\n```\n\n### Hash-Based Sharding\n```\nApply hash function to shard key, modulo by shard count.\n\nshard = hash(user_id) % 3\n\nuser_id=1:   hash(1) % 3 = 1  -> Shard 2\nuser_id=5:   hash(5) % 3 = 2  -> Shard 3\nuser_id=9:   hash(9) % 3 = 0  -> Shard 1\n\nPros:\n  Even distribution (no hotspots for sequential IDs)\n  Predictable routing\nCons:\n  Range queries are EXPENSIVE (must scan all shards)\n  Adding/removing shards requires resharding (almost all data moves)\n  % N strategy breaks when N changes\n```\n\n### Consistent Hashing\n```\nAlternative to hash(key) % N that solves the resharding problem.\n\nVirtual hash ring (0 to 2^32):\n  Shard 1 owns tokens 0-1B\n  Shard 2 owns tokens 1B-2B\n  Shard 3 owns tokens 2B-3B\n  ...\n  (ring wraps around)\n\nhash(user_id) -> position on ring -> find shard responsible for that range\n\nAdding Shard 4:\n  Shard 4 takes a portion of Shard 1's range\n  Only ~25% of data moves (vs 100% with simple hash % N)\n\nUsed by: Cassandra, DynamoDB, Redis Cluster, Riak\n```\n\n### Directory-Based Sharding\n```\nLookup table maps every record to its shard.\n\nShard Directory (stored in a highly available cache):\n  user_id=1 -> Shard 2\n  user_id=5 -> Shard 1\n  user_id=9 -> Shard 3\n\nPros:\n  Maximum flexibility: move any record to any shard easily\n  No re-hashing needed\nCons:\n  Directory is a SINGLE POINT OF FAILURE (must be highly available)\n  Directory lookup adds latency to every query\n  Directory can become very large\n```\n\n---\n\n## The Sharding Key — Most Critical Decision\n\nThe shard key determines how data is distributed. A bad shard key creates\nhotspots that negate all benefits of sharding.\n\n```\nBAD SHARD KEY: created_at (timestamp)\n  All new records go to the \"latest\" shard\n  That shard gets ALL writes while others are idle\n  Hotspot!\n\nBAD SHARD KEY: status (only 3 values: active/inactive/deleted)\n  Only 3 shards possible\n  Doesn't scale beyond 3 nodes\n\nGOOD SHARD KEY: user_id\n  Evenly distributed across all users\n  Most queries filter by user_id\n\nGOOD SHARD KEY: hash(email)\n  Uniform distribution\n  Single-user queries are fast\n\nMULTI-TENANT: tenant_id\n  All data for one tenant on one shard (good for isolation)\n  Risk: large tenants create hotspots\n\nRULES FOR CHOOSING SHARD KEY:\n  1. High cardinality (many unique values — not just a few)\n  2. Uniform distribution (no value dominates)\n  3. Your most common query filter (queries without shard key = scatter-gather)\n  4. Immutable (changing the key means moving the record)\n```\n\n---\n\n## The Downsides of Sharding\n\n```\n1. CROSS-SHARD JOINS:\n   SELECT users.name, orders.amount\n   FROM users JOIN orders ON users.id = orders.user_id\n   WHERE users.country = 'US'\n\n   If users on Shard 1-3 and orders on Shard 4-6:\n   Must query all shards and join in application code.\n   Expensive, complex.\n\n2. CROSS-SHARD TRANSACTIONS:\n   Transfer money from user_id=1 (Shard 1) to user_id=100 (Shard 3)\n   No native distributed transactions in most DBs.\n   Must use 2-phase commit (slow) or sagas (complex).\n\n3. REBALANCING:\n   When shard data grows unevenly or you add new shards,\n   data must be moved. During rebalancing: traffic must continue,\n   data must not be lost. Very complex operation.\n\n4. OPERATIONAL COMPLEXITY:\n   3x the DB instances to monitor, backup, patch, failover.\n   Schema changes must be applied to every shard.\n   Debugging: which shard has the bad data?\n\n5. SCATTER-GATHER QUERIES:\n   \"How many total users?\" -> query ALL shards, sum results\n   \"Top 10 users by activity?\" -> query all shards, merge, sort\n   Slow and expensive.\n```\n\n---\n\n## When to Shard vs Alternatives\n\n```\nDO THESE FIRST (in order):\n  1. Optimise queries (missing indexes, N+1, slow queries)\n  2. Add read replicas (for read-heavy workloads)\n  3. Add caching (Redis in front of DB)\n  4. Vertical scaling (bigger DB server: more RAM, faster SSD)\n  5. Partition tables (within one DB — simpler than sharding)\n  THEN: Shard when nothing else works\n\nSHARD WHEN:\n  Single DB server maxes out on writes (not reads — use replicas for that)\n  Data size exceeds single server capacity (>5-10TB)\n  Write throughput exceeds single master capacity\n  Google/Facebook scale: billions of records\n\nDON'T SHARD WHEN:\n  You just need more read capacity (use read replicas)\n  You need to run complex joins often (sharding makes this hell)\n  Your data fits on one server (most apps never need sharding)\n  Startup / early stage (premature optimisation)\n```\n\n---\n\n## Mind Map\n\n```\nSHARDING\n|\n+-- CONCEPT\n|   +-- Split data across multiple DB instances\n|   +-- Each shard = subset of data\n|   +-- All shards = complete dataset\n|\n+-- STRATEGIES\n|   +-- Range-based  (simple but hotspot risk)\n|   +-- Hash-based   (even dist, bad for range queries)\n|   +-- Consistent hashing (good for adding shards)\n|   +-- Directory-based (most flexible, needs lookup table)\n|\n+-- SHARD KEY RULES\n|   +-- High cardinality\n|   +-- Even distribution\n|   +-- Matches common query patterns\n|   +-- Immutable\n|\n+-- PROBLEMS\n|   +-- Cross-shard joins (do in app layer)\n|   +-- Cross-shard transactions (2PC or Sagas)\n|   +-- Rebalancing (hard)\n|   +-- Scatter-gather queries (slow)\n|\n+-- ALTERNATIVES FIRST\n    +-- Indexes -> replicas -> caching -> vertical scale -> partition -> THEN shard\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Database Sharding Explained** by ByteByteGo:\n  https://www.youtube.com/watch?v=5faMjKuB9bc\n  - Visual walkthrough of sharding strategies.\n- **Consistent Hashing Explained** by Tech Dummies Narendra L:\n  https://www.youtube.com/watch?v=UF9Iqmg94tk\n  - Deep dive into consistent hashing with visual ring diagrams.\n\n### Free Books and Articles\n- **System Design Primer — Sharding**: https://github.com/donnemartin/system-design-primer#sharding\n- **AWS DynamoDB Sharding**: https://aws.amazon.com/blogs/database/choosing-the-right-dynamodb-partition-key/\n\n### Practice\n- **Design a URL shortener with sharding**: classic system design exercise.\n  How do you shard the mapping table? What is the shard key?\n",
   "questions": [
     {
-      "id": "sh-q1",
+      "id": "shard-q1",
       "type": "mcq",
-      "prompt": "Sharding vs replication \u2014 fundamental difference?",
+      "prompt": "What is the primary purpose of database sharding?",
       "choices": [
-        "Same thing",
-        "Replication: copies of all data on multiple servers (read scale, HA). Sharding: each server has a SUBSET of data (write scale). Sharding enables write scaling that replication cannot provide",
-        "Replication is slower",
-        "Sharding requires more memory"
+        "Improve read performance with copies",
+        "Horizontal partitioning — split data across multiple DB instances to scale writes and storage beyond what a single machine can handle",
+        "Encrypt database data",
+        "Backup and disaster recovery"
       ],
       "answerIndex": 1,
-      "explanation": "Replication: all replicas have ALL rows \u2014 each write must propagate to all replicas (write bottleneck stays). Sharding: each shard has different rows \u2014 writes distribute across shards. Both are typically combined.",
+      "explanation": "Sharding splits data rows across machines. Each shard handles a fraction of the writes and stores a fraction of the data. Unlike replication (same data everywhere), sharding divides data to distribute load.",
+      "tags": [
+        "sharding",
+        "scaling",
+        "basics"
+      ]
+    },
+    {
+      "id": "shard-q2",
+      "type": "mcq",
+      "prompt": "What is the difference between sharding and replication?",
+      "choices": [
+        "They are the same",
+        "Sharding: different data on each server (scale writes/storage). Replication: same data on each server (scale reads + HA). Production DBs often combine both.",
+        "Replication scales writes, sharding scales reads",
+        "Sharding is for NoSQL only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Replication = copies of all data (reads spread across replicas). Sharding = data partitioned (writes spread across shards). Production: shard the data AND replicate each shard for HA. You need both for a truly scalable, reliable system.",
+      "tags": [
+        "sharding",
+        "replication",
+        "comparison"
+      ]
+    },
+    {
+      "id": "shard-q3",
+      "type": "mcq",
+      "prompt": "What is the problem with using `status` (active/inactive/deleted) as a shard key?",
+      "choices": [
+        "Status is a reserved word",
+        "Low cardinality — only 3 possible values means only 3 possible shards, and active users create a hotspot on the 'active' shard",
+        "Status changes too frequently",
+        "Status is not indexed"
+      ],
+      "answerIndex": 1,
+      "explanation": "A good shard key needs HIGH cardinality (many unique values) and EVEN distribution. Status has 3 values — almost all records are 'active', creating a massive hotspot. Never use boolean or low-enum fields as shard keys.",
+      "tags": [
+        "sharding",
+        "shard-key",
+        "cardinality"
+      ]
+    },
+    {
+      "id": "shard-q4",
+      "type": "mcq",
+      "prompt": "What is consistent hashing and why is it better than hash(key) % N for sharding?",
+      "choices": [
+        "It gives the same hash every time",
+        "It maps keys to positions on a virtual ring — adding/removing a shard only requires moving ~1/N of data instead of rehashing everything",
+        "It is faster than modulo hashing",
+        "It prevents hash collisions"
+      ],
+      "answerIndex": 1,
+      "explanation": "hash(key) % 3: add a 4th shard and hash(key) % 4 changes mappings for ~75% of data — massive data movement. Consistent hashing: adding a node only affects the adjacent range on the ring, ~25% data movement.",
+      "tags": [
+        "sharding",
+        "consistent-hashing"
+      ]
+    },
+    {
+      "id": "shard-q5",
+      "type": "mcq",
+      "prompt": "What is a scatter-gather query in a sharded database?",
+      "choices": [
+        "A write that goes to multiple shards",
+        "A query that must be sent to ALL shards because it cannot be routed to a single shard — results are merged in the application layer",
+        "A query that uses wildcards",
+        "A distributed join"
+      ],
+      "answerIndex": 1,
+      "explanation": "'Select top 10 users by total spend' — total spend is spread across all shards. Must query all N shards, merge all results, sort globally. Expensive: N network round trips, N query executions. Avoid by designing queries to be shard-local.",
+      "tags": [
+        "sharding",
+        "scatter-gather",
+        "queries"
+      ]
+    },
+    {
+      "id": "shard-q6",
+      "type": "mcq",
+      "prompt": "What makes a good shard key?",
+      "choices": [
+        "Low cardinality and common in queries",
+        "High cardinality, uniform distribution, matches common query filters, and is immutable (doesn't change over time)",
+        "Auto-increment integer",
+        "Most recently updated field"
+      ],
+      "answerIndex": 1,
+      "explanation": "Shard key must: have many unique values (high cardinality), distribute evenly (no single value dominates), appear in your most common queries (otherwise scatter-gather every time), and never change (changing key = moving the record = nightmare).",
+      "tags": [
+        "sharding",
+        "shard-key"
+      ]
+    },
+    {
+      "id": "shard-q7",
+      "type": "mcq",
+      "prompt": "Why are cross-shard transactions difficult?",
+      "choices": [
+        "They are not difficult at all",
+        "Standard DB transactions (ACID) require all operations on the same DB server. Cross-shard = operations on different servers — requires 2-phase commit (slow) or sagas (complex application logic)",
+        "Cross-shard transactions are blocked by firewalls",
+        "You must use NoSQL for cross-shard"
+      ],
+      "answerIndex": 1,
+      "explanation": "ACID transactions within one DB are simple. Across shards (different machines), you need distributed coordination: 2-phase commit (slow, coordinator is bottleneck) or Saga pattern (eventual consistency, application manages compensation logic). Both are complex.",
+      "tags": [
+        "sharding",
+        "transactions",
+        "distributed"
+      ]
+    },
+    {
+      "id": "shard-q8",
+      "type": "mcq",
+      "prompt": "What should you do BEFORE sharding your database?",
+      "choices": [
+        "Shard immediately at startup",
+        "Optimise queries with indexes, add read replicas for read load, add caching (Redis), try vertical scaling — shard only when these are exhausted",
+        "Always start with sharding",
+        "Sharding has no prerequisites"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sharding is operationally complex. Try in order: 1) Add missing indexes (often 100x speedup), 2) Read replicas (for read-heavy), 3) Redis cache (for hot data), 4) Bigger server. Most applications never need to shard. Premature sharding = operational nightmare.",
+      "tags": [
+        "sharding",
+        "when-to-shard",
+        "alternatives"
+      ]
+    },
+    {
+      "id": "shard-q9",
+      "type": "mcq",
+      "prompt": "What problem does range-based sharding have?",
+      "choices": [
+        "Range queries are impossible",
+        "Hotspot: sequential IDs cause all new writes to go to the highest shard. Auto-increment user_id means Shard 3 (highest IDs) gets ALL new user writes while Shard 1 sits idle.",
+        "Range sharding requires consistent hashing",
+        "Range sharding only works for integers"
+      ],
+      "answerIndex": 1,
+      "explanation": "Range sharding on sequential keys (timestamps, auto-increment IDs) creates write hotspots on the latest range. All new data piles into one shard. Fix: use hash-based sharding, or add random suffix to keys, or use UUID v4 as primary key.",
+      "tags": [
+        "sharding",
+        "range-based",
+        "hotspot"
+      ]
+    },
+    {
+      "id": "shard-q10",
+      "type": "mcq",
+      "prompt": "How does directory-based sharding work?",
+      "choices": [
+        "Uses a hash function",
+        "Uses a lookup table (directory) mapping each record or key range to its shard — maximum flexibility, any record can be on any shard",
+        "Shards based on alphabetical order",
+        "Uses consistent hashing ring"
+      ],
+      "answerIndex": 1,
+      "explanation": "Directory sharding: lookup service maps user_id=123 -> Shard 2. Want to move user 123 to Shard 5? Just update the directory entry. No rehashing. Most flexible. Downside: directory must be highly available (it's in the critical path for every request).",
+      "tags": [
+        "sharding",
+        "directory-based"
+      ]
+    },
+    {
+      "id": "shard-q11",
+      "type": "mcq",
+      "prompt": "A user makes a payment and the sender is on Shard 1, receiver on Shard 3. How do you ensure atomicity?",
+      "choices": [
+        "Use a foreign key constraint",
+        "Both accounts are on the same shard always",
+        "Use 2-phase commit (distributed transaction protocol) or Saga pattern (compensating transactions) — no native ACID across shards",
+        "Use database replication"
+      ],
+      "answerIndex": 2,
+      "explanation": "Cross-shard atomicity requires: 2PC (coordinator asks both shards to prepare, then commit — slow, coordinator is bottleneck) or Saga (each step has a compensating rollback action — eventual consistency, complex orchestration). Design to avoid cross-shard transactions when possible.",
+      "tags": [
+        "sharding",
+        "transactions",
+        "saga"
+      ]
+    },
+    {
+      "id": "shard-q12",
+      "type": "mcq",
+      "prompt": "What happens to a sharded system during rebalancing?",
+      "choices": [
+        "System shuts down completely",
+        "Traffic is paused until data moves",
+        "Data is migrated between shards while the system continues operating — requires careful coordination to avoid serving from both old and new locations simultaneously",
+        "Rebalancing is instant"
+      ],
+      "answerIndex": 2,
+      "explanation": "Rebalancing while live: double-write to both old and new shard during migration, switch reads to new shard, then stop writing to old. Or use consistent hashing which minimises data movement. This is one of the hardest operations in a sharded system.",
+      "tags": [
+        "sharding",
+        "rebalancing",
+        "operations"
+      ]
+    },
+    {
+      "id": "shard-q13",
+      "type": "mcq",
+      "prompt": "Which database does NOT support automatic sharding natively?",
+      "choices": [
+        "MongoDB",
+        "Cassandra",
+        "PostgreSQL (manual sharding or use Citus extension)",
+        "DynamoDB"
+      ],
+      "answerIndex": 2,
+      "explanation": "MongoDB, Cassandra, DynamoDB — built-in distributed sharding. PostgreSQL is single-node by default. Sharding options: Citus (extension for horizontal scale), Vitess (middleware by YouTube), or manual application-level sharding. This is why NoSQL DBs are often chosen for massive scale.",
+      "tags": [
+        "sharding",
+        "databases",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "shard-q14",
+      "type": "mcq",
+      "prompt": "What is a 'virtual shard' or 'virtual partition' in consistent hashing?",
+      "choices": [
+        "A shard with no data",
+        "A shard in read-only mode",
+        "Multiple positions on the hash ring assigned to one physical shard — ensures even distribution even with few shards and handles node weight differences",
+        "A backup shard"
+      ],
+      "answerIndex": 2,
+      "explanation": "With 3 shards and a simple ring, one shard might get 60% of traffic due to uneven ring positioning. Virtual nodes (vnodes): each physical shard gets 100+ positions on the ring. Distribution becomes statistically even. Also: a powerful node gets more vnodes (handles more traffic).",
+      "tags": [
+        "sharding",
+        "consistent-hashing",
+        "vnodes"
+      ]
+    },
+    {
+      "id": "shard-q15",
+      "type": "mcq",
+      "prompt": "What is the fan-out problem in sharded writes?",
+      "choices": [
+        "Fan-out is a network issue",
+        "When one user action must write to multiple shards simultaneously (e.g., updating a timeline for 1M followers spread across all shards) — creates write amplification",
+        "Fan-out only affects reads",
+        "Fan-out is specific to Redis"
+      ],
+      "answerIndex": 1,
+      "explanation": "Twitter-like: user A has 1M followers. A tweets -> write to 1M timelines. Followers are spread across all shards -> write to every shard. Write amplification. Solutions: pull model (user fetches timeline on load), hybrid model (push for regular users, pull for celebrities).",
+      "tags": [
+        "sharding",
+        "fan-out",
+        "write-amplification"
+      ]
+    },
+    {
+      "id": "shard-q16",
+      "type": "mcq",
+      "prompt": "How does sharding affect schema migrations?",
+      "choices": [
+        "Schema migration is easier with sharding",
+        "Schema changes must be applied to EVERY shard — requires careful rolling migrations, backward compatibility, and coordination across all shard instances",
+        "Sharding prevents schema changes",
+        "Schema only applies to Shard 1"
+      ],
+      "answerIndex": 1,
+      "explanation": "ALTER TABLE users ADD COLUMN: must run on all 3 shards. If you run it on Shard 1 first, queries must work with both old and new schema while migration is in progress. Requires: backward-compatible migrations, feature flags, blue-green deployments.",
+      "tags": [
+        "sharding",
+        "operations",
+        "schema-migration"
+      ]
+    },
+    {
+      "id": "shard-q17",
+      "type": "mcq",
+      "prompt": "What is 'resharding' and when is it needed?",
+      "choices": [
+        "Initial sharding setup",
+        "Redistributing existing sharded data across a different number of shards — needed when shards become uneven, full, or when adding new shard nodes",
+        "Moving a shard to a different cloud",
+        "Deleting duplicate shards"
+      ],
+      "answerIndex": 1,
+      "explanation": "Resharding: if you start with 3 shards and need 6, data must move. With simple hash % 3, all data changes shard (massive movement). With consistent hashing: only the adjacent ranges move (~50% of data for doubling). Resharding while live is the hardest database operation.",
+      "tags": [
+        "sharding",
+        "resharding",
+        "operations"
+      ]
+    },
+    {
+      "id": "shard-q18",
+      "type": "mcq",
+      "prompt": "How does Vitess (YouTube's MySQL sharding layer) work?",
+      "choices": [
+        "It replaces MySQL entirely",
+        "A middleware layer that sits in front of MySQL instances, handling sharding logic, connection pooling, and query routing — apps talk to Vitess as if it were a single MySQL",
+        "Vitess is a NoSQL database",
+        "Vitess only works with Google Cloud"
+      ],
+      "answerIndex": 1,
+      "explanation": "Vitess (now CNCF project, used by PlanetScale) wraps MySQL in a sharding layer. App sends SQL to Vitess -> Vitess parses query -> routes to correct shard(s) -> merges results if needed. Transparent horizontal scaling for MySQL without changing app code.",
+      "tags": [
+        "sharding",
+        "vitess",
+        "mysql"
+      ]
+    },
+    {
+      "id": "shard-q19",
+      "type": "mcq",
+      "prompt": "What is a hotspot in sharding and how do you fix it?",
+      "choices": [
+        "A shard that runs out of disk",
+        "A shard that receives disproportionate traffic due to a popular or sequential shard key — fix by adding random salt, using hash-based sharding, or splitting the hot shard",
+        "A shard with corrupted data",
+        "Multiple shards using same hardware"
+      ],
+      "answerIndex": 1,
+      "explanation": "Hotspot: shard for users A-G gets 80% of traffic because most users have names starting A-G. Or: timestamp-based shard key means all 'today' writes go to one shard. Fix: hash the key first, add random suffix, or split the hot shard into sub-shards.",
+      "tags": [
+        "sharding",
+        "hotspot"
+      ]
+    },
+    {
+      "id": "shard-q20",
+      "type": "mcq",
+      "prompt": "Which of the following queries is NOT affected by sharding (avoids scatter-gather)?",
+      "choices": [
+        "SELECT COUNT(*) FROM users",
+        "SELECT * FROM orders WHERE total > 100 ORDER BY total DESC",
+        "SELECT * FROM users WHERE user_id = 12345 (user_id IS the shard key)",
+        "SELECT AVG(salary) FROM employees"
+      ],
+      "answerIndex": 2,
+      "explanation": "Query by shard key (user_id = 12345) routes to exactly ONE shard — fast. Queries without the shard key (COUNT(*), AVG, range on non-shard field) must hit ALL shards and aggregate results — scatter-gather. Design your most common queries to filter by shard key.",
+      "tags": [
+        "sharding",
+        "query-routing",
+        "shard-key"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "shard-fc1",
+      "front": "Sharding vs Replication purpose",
+      "back": "Sharding: different data on each server. Purpose: scale WRITES and STORAGE beyond one machine. Replication: same data on each server. Purpose: scale READS + high availability. Production: shard data + replicate each shard.",
       "tags": [
         "sharding",
         "replication"
       ]
     },
     {
-      "id": "sh-q2",
-      "type": "mcq",
-      "prompt": "Why is consistent hashing preferred over modular hashing (key % N) for sharding?",
-      "choices": [
-        "Consistent hashing is faster",
-        "Modular hashing: adding a shard changes hash(key) % N for most keys \u2014 mass data migration. Consistent hashing: adding a node only moves ~1/N of keys (adjacent ones) \u2014 minimal resharding cost",
-        "Same cost",
-        "Consistent hashing requires more servers"
-      ],
-      "answerIndex": 1,
-      "explanation": "hash(key) % 3 vs hash(key) % 4: most keys map to different shards. Consistent hashing places keys and nodes on a ring \u2014 adding a node only affects keys between the new node and its neighbor.",
+      "id": "shard-fc2",
+      "front": "Good shard key checklist",
+      "back": "1. High cardinality (many unique values). 2. Even distribution (no value dominates). 3. Appears in most common query WHERE clause. 4. Immutable (changing it moves the record). Bad: status, boolean, timestamp for sequential writes.",
+      "tags": [
+        "sharding",
+        "shard-key"
+      ]
+    },
+    {
+      "id": "shard-fc3",
+      "front": "Consistent hashing vs modulo hashing",
+      "back": "hash(key) % N: adding a node reshuffles ~(N-1)/N of data. Consistent hashing ring: adding a node moves only ~1/N data (just adjacent range). Use consistent hashing for any system where nodes add/remove dynamically.",
       "tags": [
         "sharding",
         "consistent-hashing"
       ]
     },
     {
-      "id": "sh-q3",
-      "type": "mcq",
-      "prompt": "Best solution for cross-shard JOIN queries?",
-      "choices": [
-        "Global broadcast queries",
-        "Co-locate related data on the same shard by choosing a shard key that keeps related entities together (e.g., shard by userId for users + orders \u2014 all of user X's data on one shard)",
-        "Avoid JOINs entirely",
-        "Always denormalize"
-      ],
-      "answerIndex": 1,
-      "explanation": "Co-location is the architectural solution: if userId is the shard key for both users and orders tables, a specific user's data is co-located. Application only needs to query one shard for user + their orders.",
+      "id": "shard-fc4",
+      "front": "Cross-shard transaction options",
+      "back": "2-Phase Commit: coordinator asks all shards to prepare, then commit. Slow, coordinator = bottleneck. Saga: each step has compensation (rollback) action. Eventual consistency. Best: design to avoid cross-shard transactions.",
       "tags": [
         "sharding",
-        "cross-shard"
-      ]
-    }
-  ],
-  "flashcards": [
-    {
-      "id": "sh-fc1",
-      "front": "Sharding strategies",
-      "back": "Range: easy range queries, hotspot risk. Hash: even distribution, expensive range queries. Directory: flexible lookup table, bottleneck risk. Geographic: latency/compliance, may be uneven.",
-      "tags": [
-        "sharding"
+        "transactions"
       ]
     },
     {
-      "id": "sh-fc2",
-      "front": "Consistent hashing",
-      "back": "Keys and nodes on a hash ring. Key routes to next node clockwise. Adding a node: only the next clockwise node's keys move (~1/N). Normal modular hash: adding server moves most keys.",
+      "id": "shard-fc5",
+      "front": "Do these BEFORE sharding",
+      "back": "1. Add missing indexes. 2. Read replicas (for read-heavy load). 3. Redis caching. 4. Vertical scale. 5. Table partitioning (within one DB). Only shard when single-master write throughput or single-machine storage is truly exhausted.",
       "tags": [
         "sharding",
+        "alternatives"
+      ]
+    },
+    {
+      "id": "shard-fc6",
+      "front": "Scatter-gather pattern",
+      "back": "Query without shard key -> must query ALL N shards -> merge results in app. Slow: N round trips. Fix: ensure common queries include shard key in WHERE. Unavoidable aggregates (COUNT, SUM) require scatter-gather.",
+      "tags": [
+        "sharding",
+        "scatter-gather"
+      ]
+    },
+    {
+      "id": "shard-fc7",
+      "front": "Resharding with consistent hashing",
+      "back": "Simple hash % N: adding shard reshuffles ~75% of data. Consistent hashing: adding shard moves ~1/N data (only adjacent ring range). Virtual nodes (vnodes): each physical shard = 100 ring positions -> even distribution.",
+      "tags": [
+        "sharding",
+        "resharding",
         "consistent-hashing"
       ]
     },
     {
-      "id": "sh-fc3",
-      "front": "Cross-shard JOINs \u2014 solutions",
-      "back": "1. Co-locate (same shard key \u2192 related data on same shard). 2. Denormalize (duplicate data). 3. Application join (fetch separately). 4. Cross-shard engine (Vitess, Citus PG).",
+      "id": "shard-fc8",
+      "front": "Operational sharding challenges",
+      "back": "Schema migrations: apply to every shard (backward-compatible, rolling). Monitoring: N dashboards. Backup: N databases. Debug: which shard has the bad row? Cross-shard queries: in-app aggregation. Rebalancing: hardest live operation.",
       "tags": [
-        "sharding"
+        "sharding",
+        "operations"
       ]
     }
   ],

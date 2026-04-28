@@ -1,0 +1,478 @@
+{
+  "id": "python-fundamentals",
+  "unit": 12,
+  "order": 115,
+  "title": "Python Fundamentals",
+  "summary": "Python for AI/ML engineers: list comprehensions, decorators, generators, async/await, dataclasses, and Pydantic.",
+  "prereqs": [
+    "git-fundamentals"
+  ],
+  "guide": "# Python Fundamentals for AI/ML Engineers\n\n## Why Python? (For Java/TypeScript Developers)\n\nYou already know Java and TypeScript. Python feels easy at first (no types, no semicolons)\nbut has deep features that make it uniquely powerful for AI/ML, scripting, and automation.\n\n```\nJava:   Person p = new Person('Alice', 30);\nPython: p = Person('Alice', 30)         # no type declaration\n\nTypeScript: const add = (a: number, b: number): number => a + b;\nPython:     def add(a, b): return a + b   # or with hints: def add(a: int, b: int) -> int\n\nPython philosophy: 'Batteries included'\n  Standard library has everything: HTTP, JSON, CSV, regex, DB, testing, zip, email\n  Third-party: NumPy, Pandas, PyTorch, FastAPI, LangChain — the AI/ML world\n```\n\n---\n\n## Python Basics — Core Syntax\n\n```python\n# Variables and types (dynamic, no declarations)\nname = 'Alice'         # str\nage = 30               # int\nscore = 97.5           # float\nactive = True          # bool (note: True/False with capital)\n\n# f-strings (like TypeScript template literals)\nprint(f'Hello {name}, you are {age} years old')\nprint(f'Score: {score:.2f}')  # 97.50 — format spec after colon\n\n# Lists (like TypeScript arrays)\nfruits = ['apple', 'banana', 'cherry']\nfruits.append('date')\nfruits[0]      # 'apple'\nfruits[-1]     # 'date'  ← negative index from end\nfruits[1:3]    # ['banana', 'cherry']  ← slice [start:end exclusive]\n\n# Dicts (like TypeScript objects/Maps)\nperson = {'name': 'Alice', 'age': 30}\nperson['age']  # 30\nperson.get('email', 'N/A')  # 'N/A' — safe get with default\n\n# Sets (unique values, unordered — like Java Set)\nunique_ids = {1, 2, 3, 2, 1}  # {1, 2, 3}\n\n# Tuples (immutable list)\ncoords = (51.5, -0.12)  # immutable: can't change coords[0]\n\n# None (like null/undefined)\nresult = None\nif result is None:  # use 'is' not == for None check\n    print('No result yet')\n```\n\n---\n\n## List Comprehensions — Pythonic Loops\n\n```python\n# Regular loop:\nsquares = []\nfor i in range(10):\n    squares.append(i ** 2)\n\n# List comprehension (preferred Python style):\nsquares = [i ** 2 for i in range(10)]\n# [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]\n\n# With condition (filter):\nevens = [i for i in range(20) if i % 2 == 0]\n\n# Dict comprehension:\nword_lengths = {word: len(word) for word in ['cat', 'elephant', 'ox']}\n# {'cat': 3, 'elephant': 8, 'ox': 2}\n\n# Set comprehension:\nunique_lengths = {len(word) for word in ['cat', 'dog', 'elephant']}\n# {3, 8}\n\n# Generator expression (lazy, memory efficient):\ntotal = sum(i ** 2 for i in range(1_000_000))  # doesn't create list in memory\n```\n\n---\n\n## Functions — Args, Kwargs, Defaults\n\n```python\n# Default arguments\ndef greet(name, greeting='Hello'):\n    return f'{greeting}, {name}!'\n\ngreet('Alice')              # 'Hello, Alice!'\ngreet('Alice', 'Hi')        # 'Hi, Alice!'\ngreet('Alice', greeting='Hey')  # keyword argument\n\n# *args: variable positional arguments (tuple)\ndef add_all(*numbers):\n    return sum(numbers)\n\nadd_all(1, 2, 3, 4)  # 10\n\n# **kwargs: variable keyword arguments (dict)\ndef create_user(**fields):\n    return fields\n\ncreate_user(name='Alice', age=30, role='admin')\n# {'name': 'Alice', 'age': 30, 'role': 'admin'}\n\n# Type hints (Python 3.5+, not enforced by default)\ndef process(text: str, max_tokens: int = 100) -> list[str]:\n    return text.split()[:max_tokens]\n```\n\n---\n\n## Decorators — Functions That Wrap Functions\n\n```\nA decorator is a function that takes a function and returns a modified version.\nUsed extensively in: FastAPI routes, Flask routes, pytest fixtures, caching, logging.\n```\n\n```python\n# Creating a decorator:\nimport time\nfrom functools import wraps\n\ndef timer(func):\n    @wraps(func)  # preserves original function name/docstring\n    def wrapper(*args, **kwargs):\n        start = time.time()\n        result = func(*args, **kwargs)  # call original function\n        elapsed = time.time() - start\n        print(f'{func.__name__} took {elapsed:.3f}s')\n        return result\n    return wrapper\n\n# Using the decorator:\n@timer\ndef slow_function():\n    time.sleep(1)\n    return 'done'\n\n# @timer is syntactic sugar for:\n# slow_function = timer(slow_function)\n\nslow_function()  # prints: 'slow_function took 1.001s'\n\n# Decorator with arguments:\ndef retry(max_attempts=3):\n    def decorator(func):\n        @wraps(func)\n        def wrapper(*args, **kwargs):\n            for attempt in range(max_attempts):\n                try:\n                    return func(*args, **kwargs)\n                except Exception as e:\n                    if attempt == max_attempts - 1:\n                        raise\n                    print(f'Attempt {attempt+1} failed: {e}')\n        return wrapper\n    return decorator\n\n@retry(max_attempts=3)\ndef call_api():\n    # might fail\n    pass\n\n# FastAPI route decorator (how it works internally):\n@app.get('/users/{user_id}')  # marks function as HTTP handler\ndef get_user(user_id: int):   # FastAPI reads type hints for validation\n    return {'id': user_id}\n```\n\n---\n\n## Generators — Lazy Computation\n\n```python\n# Regular function: computes and returns all at once\ndef squares_list(n):\n    return [i**2 for i in range(n)]\n# squares_list(1_000_000) creates list of 1M items in memory!\n\n# Generator: computes one item at a time (lazy)\ndef squares_gen(n):\n    for i in range(n):\n        yield i**2  # yield pauses function, returns value, resumes next call\n\ngen = squares_gen(1_000_000)\nnext(gen)  # 0  (computed just this one)\nnext(gen)  # 1\nnext(gen)  # 4\n# 1M items, zero memory\n\n# Use in for loop:\nfor sq in squares_gen(10):\n    print(sq)\n\n# Generator pipeline (streaming data processing):\ndef read_large_file(path):\n    with open(path) as f:\n        for line in f:       # Python file objects are generators!\n            yield line.strip()\n\ndef filter_errors(lines):\n    for line in lines:\n        if 'ERROR' in line:\n            yield line\n\n# Process 10GB log file without loading into memory:\nerrors = filter_errors(read_large_file('app.log'))\nfor error in errors:\n    print(error)\n```\n\n---\n\n## Dataclasses — Modern Python Data Models\n\n```python\nfrom dataclasses import dataclass, field\nfrom typing import Optional\n\n# Old way (verbose):\nclass PersonOld:\n    def __init__(self, name, age, email=None):\n        self.name = name\n        self.age = age\n        self.email = email\n    def __repr__(self):\n        return f'Person(name={self.name!r}, age={self.age})'\n\n# Dataclass way (auto-generates __init__, __repr__, __eq__):\n@dataclass\nclass Person:\n    name: str\n    age: int\n    email: Optional[str] = None\n    tags: list[str] = field(default_factory=list)  # mutable default\n\np = Person('Alice', 30)\nprint(p)          # Person(name='Alice', age=30, email=None, tags=[])\np == Person('Alice', 30)  # True — __eq__ auto-generated\n\n# Frozen dataclass (immutable, hashable):\n@dataclass(frozen=True)\nclass Point:\n    x: float\n    y: float\n\n# Pydantic (popular in FastAPI — runtime validation):\nfrom pydantic import BaseModel\n\nclass UserRequest(BaseModel):\n    name: str\n    age: int\n    email: str\n\nreq = UserRequest(name='Alice', age='30', email='a@b.com')\n# age='30' → automatically coerced to int 30\n# Invalid email → raises ValidationError\n```\n\n---\n\n## Async — asyncio and await\n\n```python\nimport asyncio\nimport httpx  # async HTTP client\n\n# Sync (blocking): fetches one at a time\ndef fetch_all_sync(urls):\n    results = []\n    for url in urls:              # 100 URLs × 500ms = 50 seconds\n        results.append(fetch(url))\n    return results\n\n# Async (concurrent): all requests in-flight simultaneously\nasync def fetch_one(client, url):\n    response = await client.get(url)  # await = give control back while waiting\n    return response.json()\n\nasync def fetch_all(urls):\n    async with httpx.AsyncClient() as client:\n        tasks = [fetch_one(client, url) for url in urls]\n        results = await asyncio.gather(*tasks)  # run all concurrently\n    return results                              # 100 URLs × 500ms = ~0.5 seconds\n\n# Run top-level:\nasyncio.run(fetch_all(urls))\n\n# Key rules:\n# async def function = coroutine, must be awaited\n# await = pause and let other tasks run\n# asyncio.gather = run multiple coroutines concurrently\n# asyncio is NOT threading — single thread, cooperative multitasking\n# Use asyncio for I/O-bound work (HTTP, DB, file)\n# Use multiprocessing for CPU-bound work (ML training, image processing)\n```\n\n---\n\n## Context Managers — with Statement\n\n```python\n# You use them already: with open('file') as f:\n# Context manager = setup + teardown guaranteed, even if exception\n\n# Creating your own:\nfrom contextlib import contextmanager\n\n@contextmanager\ndef timer_ctx(name):\n    start = time.time()\n    try:\n        yield  # code inside 'with' block runs here\n    finally:\n        print(f'{name}: {time.time()-start:.3f}s')\n\nwith timer_ctx('My operation') as _:\n    time.sleep(0.5)\n# prints: My operation: 0.500s (even if exception raised inside)\n```\n\n---\n\n## Mind Map\n\n```\nPYTHON FUNDAMENTALS\n|\n+-- BASICS\n|   +-- Dynamic typing, no declarations\n|   +-- list/dict/set/tuple comprehensions\n|   +-- f-strings, slice notation, negative indexing\n|\n+-- FUNCTIONS\n|   +-- *args (tuple), **kwargs (dict)\n|   +-- Default args, keyword args\n|   +-- Type hints (PEP 484)\n|\n+-- DECORATORS\n|   +-- Function that wraps function\n|   +-- @functools.wraps preserves metadata\n|   +-- Used in: FastAPI, Flask, pytest, logging\n|\n+-- GENERATORS\n|   +-- yield = lazy evaluation\n|   +-- Memory efficient for large data\n|   +-- File reading, data pipelines\n|\n+-- DATA CLASSES (pydantic)\n|   +-- @dataclass auto-gen __init__ __repr__\n|   +-- Pydantic: runtime validation + coercion\n|\n+-- ASYNC\n    +-- async/await = cooperative multitasking\n    +-- asyncio.gather = concurrent I/O\n    +-- Use for: HTTP calls, DB queries\n```\n\n---\n\n## References\n\n### Videos\n- **Python for Beginners** by Corey Schafer: https://www.youtube.com/playlist?list=PL-osiE80TeTskrapNbzXhwoFUiLCjGgY7\n- **Python Decorators** by Corey Schafer: https://www.youtube.com/watch?v=FsAPt_9Bf3U\n\n### Articles\n- **Real Python**: https://realpython.com — best practical Python tutorials\n- **Python Docs**: https://docs.python.org/3/ — especially dataclasses, asyncio\n\n### Practice\n- **Exercism Python track**: https://exercism.org/tracks/python\n- **LeetCode Python mode** — solve DSA problems in Python to learn idiomatic style",
+  "questions": [
+    {
+      "id": "py-q1",
+      "type": "mcq",
+      "prompt": "Python list [1,2,3,4,5][-2:] returns what?",
+      "choices": [
+        "[4,5]",
+        "[1,2]",
+        "[3,4]",
+        "Error — negative slice invalid"
+      ],
+      "answerIndex": 0,
+      "explanation": "Negative index: -2 = 2nd from end = index 3 (value 4). Slice [-2:] = from index 3 to end = [4, 5]. Python slices are [start:end_exclusive]. Negative indexes count from end.",
+      "tags": [
+        "python",
+        "slicing"
+      ]
+    },
+    {
+      "id": "py-q2",
+      "type": "mcq",
+      "prompt": "What does a generator function (yield) return when called?",
+      "choices": [
+        "The return value immediately",
+        "List of all yielded values",
+        "A generator object — execution is suspended. Call next() to advance. Values computed lazily one at a time.",
+        "None"
+      ],
+      "answerIndex": 2,
+      "explanation": "Calling a generator function doesn't execute it. It returns a generator object (iterator). next() advances execution to the next yield, pauses, returns value. Resumes from that point on the next next() call. This lazy evaluation saves memory.",
+      "tags": [
+        "python",
+        "generators"
+      ]
+    },
+    {
+      "id": "py-q3",
+      "type": "mcq",
+      "prompt": "What is the difference between *args and **kwargs?",
+      "choices": [
+        "*args is for dictionaries",
+        "*args: collects extra positional args into a tuple. **kwargs: collects extra keyword args into a dict. Both allow functions to accept variable number of arguments.",
+        "**kwargs is deprecated",
+        "They are identical"
+      ],
+      "answerIndex": 1,
+      "explanation": "def f(*args, **kwargs): args = (1,2,3) if called as f(1,2,3). kwargs = {'a':1,'b':2} if called as f(a=1,b=2). Common in decorators: def wrapper(*args, **kwargs): return func(*args, **kwargs) to pass all args through unchanged.",
+      "tags": [
+        "python",
+        "functions",
+        "args"
+      ]
+    },
+    {
+      "id": "py-q4",
+      "type": "codeOutput",
+      "prompt": "What does this print?",
+      "code": "@lambda f: lambda x: f(x) * 2\ndef square(n):\n    return n * n\nprint(square(3))",
+      "choices": [
+        "9",
+        "18",
+        "6",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda decorator: takes square function, returns lambda x: square(x)*2. square(3) = 9. Decorator wraps it: 9*2 = 18. Decorators are applied at definition time: square = (lambda f: lambda x: f(x)*2)(square).",
+      "tags": [
+        "python",
+        "decorators"
+      ]
+    },
+    {
+      "id": "py-q5",
+      "type": "mcq",
+      "prompt": "Why use functools.wraps when writing a decorator?",
+      "choices": [
+        "Performance boost",
+        "wraps copies the wrapped function's __name__, __doc__, and other metadata to the wrapper function — without it, all decorated functions appear to have the name 'wrapper' which breaks debugging and introspection",
+        "Required for async decorators",
+        "wraps validates the function signature"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without @wraps: decorated function.__name__ = 'wrapper', decorated function.__doc__ = None. Debugging, logging, and docstring tools get confused. @wraps(func) copies metadata. Always use it in decorators.",
+      "tags": [
+        "python",
+        "decorators",
+        "functools"
+      ]
+    },
+    {
+      "id": "py-q6",
+      "type": "mcq",
+      "prompt": "asyncio.gather([task1, task2, task3]) — what happens?",
+      "choices": [
+        "Runs tasks sequentially",
+        "Runs all three coroutines concurrently — all are started immediately, gather waits for all to complete, returns list of results. Total time ≈ max(task times), not sum.",
+        "Only runs the first task",
+        "Runs tasks on multiple threads"
+      ],
+      "answerIndex": 1,
+      "explanation": "asyncio.gather is the key for concurrent I/O. If task1=1s, task2=2s, task3=1.5s: sequential = 4.5s, gather ≈ 2s. All tasks make progress concurrently. NOT parallel — single thread, but all I/O wait time is shared.",
+      "tags": [
+        "python",
+        "asyncio"
+      ]
+    },
+    {
+      "id": "py-q7",
+      "type": "mcq",
+      "prompt": "What is a Python dataclass vs a regular class?",
+      "choices": [
+        "Dataclasses are immutable",
+        "@dataclass auto-generates boilerplate: __init__ (from annotated fields), __repr__ (nice printing), __eq__ (comparison). You only write field declarations. Dramatically reduces code.",
+        "Dataclasses are faster",
+        "Dataclass fields must be type annotated only in 3.12+"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without dataclass: write __init__, __repr__, __eq__ for each class manually. With @dataclass: name: str age: int → those three methods generated. frozen=True makes it immutable (also hashable — can be used as dict key or in sets).",
+      "tags": [
+        "python",
+        "dataclasses"
+      ]
+    },
+    {
+      "id": "py-q8",
+      "type": "mcq",
+      "prompt": "Python comprehension [x for x in range(10) if x % 2 == 0] returns?",
+      "choices": [
+        "[1,3,5,7,9]",
+        "[0,2,4,6,8]",
+        "[True,False,...]",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Range(10) = 0..9. Filter: x % 2 == 0 keeps even numbers. Result: [0,2,4,6,8]. Comprehension syntax: [expression for variable in iterable if condition]. The if condition is optional filtering.",
+      "tags": [
+        "python",
+        "comprehension"
+      ]
+    },
+    {
+      "id": "py-q9",
+      "type": "mcq",
+      "prompt": "When should you use a generator instead of a list?",
+      "choices": [
+        "Always — generators are faster",
+        "When processing large datasets where creating the full list in memory would be expensive or impossible — streaming files, API pagination, infinite sequences",
+        "Only for numbers",
+        "When list would be empty"
+      ],
+      "answerIndex": 1,
+      "explanation": "Generator: O(1) memory (one item at a time). List: O(n) memory. For processing a 10GB log file: list comprehension tries to load all lines into RAM. Generator reads one line at a time. Also for infinite sequences you only partially consume.",
+      "tags": [
+        "python",
+        "generators",
+        "memory"
+      ]
+    },
+    {
+      "id": "py-q10",
+      "type": "mcq",
+      "prompt": "What does 'yield from iterable' do in a generator?",
+      "choices": [
+        "Returns the entire iterable at once",
+        "Delegates to another iterable — yields each item from the sub-iterable one by one. Equivalent to: for item in iterable: yield item. Cleaner syntax for generator chaining.",
+        "Imports from the iterable",
+        "Creates nested generators"
+      ],
+      "answerIndex": 1,
+      "explanation": "yield from is syntactic sugar for yielding all items from a sub-iterable. def chain(*iterables): for i in iterables: yield from i. This is how itertools.chain works internally.",
+      "tags": [
+        "python",
+        "generators",
+        "yield-from"
+      ]
+    },
+    {
+      "id": "py-q11",
+      "type": "mcq",
+      "prompt": "Python dict.get(key, default) vs dict[key] — when to use each?",
+      "choices": [
+        "Always use []",
+        "dict[key] raises KeyError if key doesn't exist. dict.get(key, default) returns default value (or None) if key missing — never raises. Use get() when key may be absent.",
+        "get() is deprecated",
+        "They are identical"
+      ],
+      "answerIndex": 1,
+      "explanation": "user['email'] → KeyError if user has no 'email' key. user.get('email', 'N/A') → 'N/A' safely. In AI/ML: JSON API responses often have optional fields — always use .get() for optional keys.",
+      "tags": [
+        "python",
+        "dict"
+      ]
+    },
+    {
+      "id": "py-q12",
+      "type": "codeOutput",
+      "prompt": "What does this print?",
+      "code": "def make_counter():\n    count = 0\n    def increment():\n        nonlocal count\n        count += 1\n        return count\n    return increment\n\nc = make_counter()\nprint(c(), c(), c())",
+      "choices": [
+        "1 1 1",
+        "0 1 2",
+        "1 2 3",
+        "Error"
+      ],
+      "answerIndex": 2,
+      "explanation": "Closure: increment() captures count from outer scope. nonlocal allows modifying it. Each call to c() increments count: 1, 2, 3. Without nonlocal: UnboundLocalError (Python treats count as local to increment if assigned).",
+      "tags": [
+        "python",
+        "closures",
+        "nonlocal"
+      ]
+    },
+    {
+      "id": "py-q13",
+      "type": "mcq",
+      "prompt": "Pydantic BaseModel validates input at runtime. What happens when you pass age='30' to a model with age: int?",
+      "choices": [
+        "TypeError raised",
+        "Pydantic coerces '30' to integer 30 automatically — string to int conversion is a built-in coercion. If it can't coerce (e.g., age='abc'), raises ValidationError.",
+        "None returned",
+        "Name becomes 'thirty'"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pydantic does runtime type coercion by default (Pydantic v1) or strict mode in v2. '30' → 30 is valid coercion. 'thirty' → ValidationError. FastAPI uses Pydantic for request validation: all path params, query params, and request bodies are auto-validated.",
+      "tags": [
+        "python",
+        "pydantic",
+        "validation"
+      ]
+    },
+    {
+      "id": "py-q14",
+      "type": "mcq",
+      "prompt": "What is the GIL (Global Interpreter Lock) in Python?",
+      "choices": [
+        "A variable locking mechanism",
+        "CPython's mutex that allows only ONE thread to execute Python bytecode at a time — effectively making Python threads single-core for CPU-bound work. I/O-bound threads release GIL during I/O wait, so asyncio/threading help there.",
+        "A Python 2 feature",
+        "Related to file locking"
+      ],
+      "answerIndex": 1,
+      "explanation": "GIL: even with 16 CPU cores, CPython can only execute Python bytecode on one at a time. For CPU-bound tasks: use multiprocessing (each process has own GIL). For I/O-bound: asyncio or threading (threads release GIL during I/O). Python 3.13+ has experimental 'no-GIL' mode.",
+      "tags": [
+        "python",
+        "gil",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "py-q15",
+      "type": "mcq",
+      "prompt": "Python context manager (with statement) purpose?",
+      "choices": [
+        "Performance optimization",
+        "Guarantees __enter__ (setup) runs before the block and __exit__ (teardown) runs after — even if an exception occurs. Use for: file closing, DB transactions, locking, timer.",
+        "Required for file operations only",
+        "Replaces try/except"
+      ],
+      "answerIndex": 1,
+      "explanation": "with open('f') as f: guarantees f.close() even if exception. with db.transaction(): commits or rolls back. The 'with' statement calls __enter__ at start and __exit__ at end (exception or not). @contextmanager decorator makes writing context managers easy.",
+      "tags": [
+        "python",
+        "context-manager"
+      ]
+    },
+    {
+      "id": "py-q16",
+      "type": "mcq",
+      "prompt": "What is the difference between asyncio and multiprocessing?",
+      "choices": [
+        "asyncio uses multiple CPUs",
+        "asyncio: single thread, multiple coroutines — concurrent I/O, zero CPU parallelism. multiprocessing: multiple processes, each with own Python interpreter — true CPU parallelism, no GIL sharing. Use asyncio for I/O, multiprocessing for CPU.",
+        "multiprocessing is deprecated",
+        "asyncio is faster"
+      ],
+      "answerIndex": 1,
+      "explanation": "asyncio: concurrent HTTP calls, DB queries. multiprocessing: ML model training, image processing, heavy computations. Mistake: using asyncio for CPU-bound work (doesn't help — single thread). Mistake: using multiprocessing for network requests (overkill, spawning processes is expensive).",
+      "tags": [
+        "python",
+        "asyncio",
+        "multiprocessing"
+      ]
+    },
+    {
+      "id": "py-q17",
+      "type": "mcq",
+      "prompt": "Python's `if __name__ == '__main__':` guard — why use it?",
+      "choices": [
+        "Improves performance",
+        "Code under this block only runs when the file is executed directly (python script.py), NOT when imported as a module. Prevents side effects (running servers, printing) when the file is imported elsewhere.",
+        "Required by Python 3",
+        "Style preference only"
+      ],
+      "answerIndex": 1,
+      "explanation": "When Python imports a module, all top-level code runs. Without this guard, starting a server or running tests on import causes bugs. With the guard: import my_module safely, run it directly to execute main logic. Essential for any script that also has reusable functions.",
+      "tags": [
+        "python",
+        "modules",
+        "main"
+      ]
+    },
+    {
+      "id": "py-q18",
+      "type": "mcq",
+      "prompt": "What does this comprehension produce: {k: v for k, v in d.items() if v is not None}?",
+      "choices": [
+        "Filtered list of keys",
+        "New dict with None values removed — dict comprehension iterates key-value pairs, keeps only pairs where value is not None",
+        "List of non-None values",
+        "Set of keys"
+      ],
+      "answerIndex": 1,
+      "explanation": "d.items() returns (key, value) pairs. k, v = tuple unpacking per pair. Comprehension builds new dict with only non-None values. Common pattern for cleaning API responses before sending or storing.",
+      "tags": [
+        "python",
+        "comprehension",
+        "dict"
+      ]
+    },
+    {
+      "id": "py-q19",
+      "type": "mcq",
+      "prompt": "Python's enumerate() function:",
+      "choices": [
+        "Converts to enum type",
+        "Wraps an iterable to provide (index, value) pairs — avoids manual counter variable. for i, item in enumerate(items): instead of i=0; i+=1 pattern.",
+        "Sorts by index",
+        "Creates numbered list"
+      ],
+      "answerIndex": 1,
+      "explanation": "for i, name in enumerate(['Alice','Bob','Carol']): gives (0,'Alice'), (1,'Bob'), (2,'Carol'). Optional start parameter: enumerate(items, start=1) gives 1-based. Pythonic alternative to range(len(items)) pattern.",
+      "tags": [
+        "python",
+        "iteration",
+        "enumerate"
+      ]
+    },
+    {
+      "id": "py-q20",
+      "type": "mcq",
+      "prompt": "What does @dataclass(frozen=True) provide that regular @dataclass doesn't?",
+      "choices": [
+        "Faster instantiation",
+        "Immutability (attempting to set fields after creation raises FrozenInstanceError) AND hashability (can be used as dict key or in sets) — because __hash__ is generated from fields.",
+        "Automatic serialization",
+        "Database integration"
+      ],
+      "answerIndex": 1,
+      "explanation": "Regular @dataclass fields can be mutated. frozen=True prevents all mutation. As a side effect: the dataclass becomes hashable (like a tuple). Use for: value objects, cache keys, set membership. Pydantic models are similar in concept.",
+      "tags": [
+        "python",
+        "dataclasses",
+        "immutability"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "py-fc1",
+      "front": "List comprehension syntax",
+      "back": "[expression for var in iterable if condition]. Dict: {k:v for...}. Set: {x for...}. Generator (lazy): (expression for...). Use generator when result is used only once or dataset is large.",
+      "tags": [
+        "python",
+        "comprehension"
+      ]
+    },
+    {
+      "id": "py-fc2",
+      "front": "Decorator pattern",
+      "back": "decorator = function that takes function, returns wrapper function. @wraps(func) preserves metadata. @decorator is syntactic sugar for func = decorator(func). Used in: FastAPI routes, caching, retry logic, auth checks.",
+      "tags": [
+        "python",
+        "decorators"
+      ]
+    },
+    {
+      "id": "py-fc3",
+      "front": "Generator vs List",
+      "back": "List: O(n) memory, all computed at once. Generator: O(1) memory, lazy on-demand. Use generators for: large files, API pagination, infinite sequences, data pipelines. yield pauses, resumes on next().",
+      "tags": [
+        "python",
+        "generators"
+      ]
+    },
+    {
+      "id": "py-fc4",
+      "front": "async/await rules",
+      "back": "async def = coroutine. Must be awaited. await = give up control while waiting for I/O. asyncio.gather(*coros) = run concurrently. asyncio.run(main()) = entry point. NOT threads — single thread. Doesn't help CPU-bound work.",
+      "tags": [
+        "python",
+        "asyncio"
+      ]
+    },
+    {
+      "id": "py-fc5",
+      "front": "*args and **kwargs",
+      "back": "*args: extra positional args → tuple. **kwargs: extra keyword args → dict. Decorator passthrough: def wrapper(*args, **kwargs): return func(*args, **kwargs). Caller-side: spread list with *list, spread dict with **dict.",
+      "tags": [
+        "python",
+        "functions"
+      ]
+    },
+    {
+      "id": "py-fc6",
+      "front": "Dataclass vs Pydantic",
+      "back": "@dataclass: auto __init__/__repr__/__eq__, no runtime validation. Pydantic BaseModel: runtime type validation + coercion, serialisation, JSON schema. Use dataclass for internal data structures, Pydantic for API schemas (FastAPI uses Pydantic).",
+      "tags": [
+        "python",
+        "dataclasses",
+        "pydantic"
+      ]
+    },
+    {
+      "id": "py-fc7",
+      "front": "GIL — when it matters",
+      "back": "GIL prevents true CPU parallelism in CPython. I/O-bound: threads and asyncio work fine (GIL released during I/O). CPU-bound: use multiprocessing (each process bypasses GIL). Alternative: use PyPy, numba, or C extensions for CPU-heavy work.",
+      "tags": [
+        "python",
+        "gil",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "py-fc8",
+      "front": "Context manager usage",
+      "back": "with statement calls __enter__ before block, __exit__ after (even on exception). @contextmanager decorator + yield simplifies writing them. Use for: files (auto-close), DB transactions (auto-commit/rollback), timers, locks.",
+      "tags": [
+        "python",
+        "context-manager"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Build a data pipeline in Python that reads a large log file (simulate with 100K lines), filters ERROR lines, extracts timestamp and message, aggregates error counts by hour, and writes a summary CSV. Use generators throughout to keep memory usage O(1) regardless of file size. Add a decorator for timing each pipeline stage.",
+    "checklist": [
+      {
+        "id": "p1",
+        "text": "read_lines(path) — generator that yields one line at a time (never loads full file)",
+        "weight": 20
+      },
+      {
+        "id": "p2",
+        "text": "filter_errors(lines) — generator that yields only ERROR lines",
+        "weight": 20
+      },
+      {
+        "id": "p3",
+        "text": "parse_log(lines) — generator yielding dataclasses: LogEntry(timestamp, level, message)",
+        "weight": 20
+      },
+      {
+        "id": "p4",
+        "text": "@timer decorator on each stage function using functools.wraps",
+        "weight": 20
+      },
+      {
+        "id": "p5",
+        "text": "aggregate(entries) — dict comprehension or defaultdict to count errors per hour, write CSV with csv.DictWriter",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Generator composition: errors = filter_errors(read_lines('app.log')). No data processed until you iterate.",
+      "from collections import defaultdict: counts = defaultdict(int); counts[hour] += 1",
+      "Dataclass for log entry: @dataclass class LogEntry: timestamp: datetime; level: str; message: str"
+    ]
+  }
+}

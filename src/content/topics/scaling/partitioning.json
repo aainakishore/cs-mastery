@@ -7,85 +7,437 @@
   "prereqs": [
     "sharding"
   ],
-  "guide": "# Database Partitioning\n\nPartitioning splits a large table into smaller **physical pieces** while appearing as a single logical table, improving query performance and manageability.\n\n## Partitioning vs Sharding\n\n```\nPartitioning:\n  Single database server\n  Table split into partitions internally\n  Transparent to the application (same query to same table)\n  Goal: query performance (skip irrelevant partitions)\n\nSharding:\n  Multiple database servers\n  Data distributed across different machines\n  Application must know which shard to query\n  Goal: write scalability and scale beyond single machine\n```\n\n## Partition Types\n\n```\nRange Partitioning:\n  orders_2024_q1 (Jan-Mar 2024)\n  orders_2024_q2 (Apr-Jun 2024)\n  orders_2024_q3 (Jul-Sep 2024)\n  Pruning: WHERE order_date BETWEEN '2024-01-01' AND '2024-03-31'\n     \u2192 only scans orders_2024_q1 partition\n\nList Partitioning:\n  users_us (country = 'US')\n  users_eu (country IN ('DE', 'FR', 'GB'))\n  users_other (DEFAULT)\n\nHash Partitioning:\n  hash(user_id) % 8 \u2192 8 partitions\n  Even distribution, no hotspots, good for bulk data\n\nComposite:\n  Range by year \u2192 Hash by userId within each year\n```\n\n## PostgreSQL Example\n\n```sql\n-- Partitioned table declaration\nCREATE TABLE orders (\n  id         BIGINT NOT NULL,\n  user_id    BIGINT,\n  amount     DECIMAL,\n  created_at TIMESTAMPTZ NOT NULL\n) PARTITION BY RANGE (created_at);\n\n-- Partition for each quarter\nCREATE TABLE orders_2024_q1\n  PARTITION OF orders\n  FOR VALUES FROM ('2024-01-01') TO ('2024-04-01');\n\nCREATE TABLE orders_2024_q2\n  PARTITION OF orders\n  FOR VALUES FROM ('2024-04-01') TO ('2024-07-01');\n\n-- Index on each partition (auto-inherited)\nCREATE INDEX ON orders_2024_q1 (user_id);\n\n-- Query uses same table name \u2014 planner auto-prunes\nSELECT * FROM orders WHERE created_at > '2024-06-01' AND created_at < '2024-07-01';\n-- Scans only orders_2024_q2 \u2190 partition pruning\n```\n\n## Partition Pruning\n\nThe optimizer skips irrelevant partitions when the WHERE clause includes the partition key. This is the primary performance benefit \u2014 query scans 1/N of the data instead of the whole table.\n\n## Common Pitfalls\n- **Partition key not in WHERE** \u2014 without the partition key in WHERE, ALL partitions are scanned (worse than no partitioning due to overhead).\n- **Too many partitions** \u2014 each partition has overhead. Planning cost grows. Keep a reasonable number (100s, not 10,000s).\n- **Not automating new partitions** \u2014 for time-based partitioning, create future partitions ahead of time (pg_partman handles this automatically).\n",
+  "guide": "# Database Partitioning\n\n## What Is Partitioning? (Start From Zero)\n\nImagine an office filing cabinet with 10,000 folders. To find a folder, you search\nall 10,000. Now imagine the cabinet has 12 drawers labelled by month (January-December).\nEach drawer holds ~833 folders. To find a folder, you open the right drawer and search\n833 — 12x faster.\n\nDatabase partitioning does the same. A table with 1 billion rows is split into\nsmaller physical pieces (partitions) that the query engine can skip over entirely.\n\n**Key difference from sharding:**\n```\nPARTITIONING:\n  Still ONE database server\n  Table appears as one logical table to applications\n  DB engine manages which physical partition data goes into\n  Transparent: your SQL doesn't change\n  Goal: query performance + manageability\n\nSHARDING:\n  MULTIPLE database servers\n  Each server has its own DB\n  Application must route queries to the right shard\n  Not transparent: you must shard-aware code\n  Goal: scale beyond single machine\n```\n\n---\n\n## Types of Partitioning\n\n### Range Partitioning\n```\nSplit rows based on a value range of a column.\n\nCREATE TABLE orders (\n    id       BIGINT,\n    user_id  BIGINT,\n    amount   DECIMAL,\n    created  DATE\n) PARTITION BY RANGE (created);\n\nCREATE TABLE orders_2024 PARTITION OF orders\n    FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');\n\nCREATE TABLE orders_2025 PARTITION OF orders\n    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');\n\nQuery: SELECT * FROM orders WHERE created > '2025-01-01'\n  Database: skips orders_2024 entirely (partition pruning)\n  Scans only orders_2025 -> 2x less data scanned\n\nBest for: time-series data, date-based queries\nRisk: hotspot on the latest partition (all new writes go there)\n```\n\n### List Partitioning\n```\nSplit rows based on discrete values of a column.\n\nPARTITION BY LIST (country);\n  Partition USA:    country IN ('US', 'CA', 'MX')\n  Partition EU:     country IN ('DE', 'FR', 'UK', 'IT')\n  Partition ASIA:   country IN ('JP', 'KR', 'CN', 'IN')\n\nQuery: SELECT * FROM users WHERE country = 'DE'\n  Only scans EU partition\n\nBest for: data categorised by region, status, category\nUse with: column that has known, limited set of values\n```\n\n### Hash Partitioning\n```\nApply hash function to a column, modulo by partition count.\n\nPARTITION BY HASH (user_id) PARTITIONS 8;\n\nuser_id=1   -> hash(1) % 8 = 1 -> Partition 1\nuser_id=10  -> hash(10) % 8 = 2 -> Partition 2\nuser_id=100 -> hash(100) % 8 = 4 -> Partition 4\n\nEvenly distributes rows even if user_id is sequential.\nGood for: distributing write load evenly within one server\nBad for: range queries (must scan all partitions for range)\n```\n\n### Composite Partitioning\n```\nCombine multiple partitioning strategies.\n\nFirst divide by year (range), then by country (list):\n  Partition 2024_US, Partition 2024_EU\n  Partition 2025_US, Partition 2025_EU\n\nFine-grained pruning: query for US users in 2025\nonly scans Partition 2025_US — skips all others.\n```\n\n---\n\n## Partition Pruning — Why It Is Powerful\n\n```\nPARTITION PRUNING = query optimizer eliminates irrelevant partitions.\n\nWITHOUT partitioning:\n  SELECT * FROM orders WHERE created > '2025-01-01'\n  Scans: 10 billion rows, all years\n  Time: 5 minutes\n\nWITH range partitioning by year:\n  Query planner: created > '2025-01-01' -> only need orders_2025\n  Skips: orders_2024, orders_2023, orders_2022... (9 out of 10 partitions)\n  Scans: 1 billion rows (only 2025 partition)\n  Time: 30 seconds\n\nREQUIREMENT for pruning to work:\n  The partition column MUST appear in the WHERE clause.\n  SELECT * FROM orders WHERE user_id = 123 <- no date filter\n  -> must scan ALL partitions (no pruning, possibly WORSE than no partitioning)\n\nCheck your queries use EXPLAIN ANALYZE in PostgreSQL:\n  EXPLAIN ANALYZE SELECT * FROM orders WHERE created > '2025-01-01';\n  Look for \"Partitions scanned: 1 of 10\" in the output.\n```\n\n---\n\n## Partitioning vs Indexing — When to Use Which\n\n```\nINDEXES:\n  Find specific rows by value quickly (O(log N) search)\n  Good for: varied queries on different columns\n  Bad for: deleting large date ranges, archiving old data\n\nPARTITIONING:\n  Remove entire partitions in milliseconds (DROP PARTITION = instant)\n  Good for: time-series data with rolling deletion, bulk operations\n  Good for: queries always filtered by the partition column\n\nCOMBINE BOTH (common pattern):\n  Partition by month (range)\n  Index by user_id within each partition\n  Query: WHERE created BETWEEN '2025-01-01' AND '2025-01-31' AND user_id = 123\n    -> pruned to January 2025 partition\n    -> index on user_id narrows to exact rows\n    -> extremely fast even on huge tables\n```\n\n---\n\n## Data Archival — The Killer Use Case for Partitioning\n\n```\nPROBLEM:\n  orders table has 10 years of data: 10 billion rows.\n  Most queries are for the last 30 days.\n  9.7 years of old data sits there, slowing every query.\n\nSOLUTION WITH PARTITIONING:\n  Partition by month.\n  After 12 months: 'detach' old partition from the table (instant).\n  Move old partition to cold storage (S3, Glacier).\n  Main table: only current year's data — fast again.\n\n  ALTER TABLE orders DETACH PARTITION orders_2020_jan;\n  -- Now orders_2020_jan is a standalone table\n  -- orders table no longer contains 2020 data\n  -- This operation is INSTANT (no data movement)\n\n  Contrast with: DELETE FROM orders WHERE created < '2020-01-01'\n  -- Must delete 1 billion rows, one by one\n  -- Locks table, fills transaction log, takes hours\n\nPARTITIONING + ARCHIVAL IS O(1) = instant.\nDELETE old rows IS O(N) = takes hours.\n```\n\n---\n\n## Horizontal vs Vertical Partitioning\n\n```\nHORIZONTAL PARTITIONING (most common, what we've discussed):\n  Split ROWS into different partitions.\n  All partitions have same columns.\n  users_1-1000, users_1001-2000, users_2001-3000\n\nVERTICAL PARTITIONING:\n  Split COLUMNS into different tables.\n  Hot columns (accessed frequently) in one table.\n  Cold columns (rarely accessed) in another.\n\n  users_core:  user_id, name, email, login_count  <- read often\n  users_detail: user_id, bio, settings, preferences <- read rarely\n\n  SELECT user_id, name FROM users_core  <- 4 columns, small rows, fast\n  vs\n  SELECT * FROM users  <- 50 columns, huge rows, slow\n\n  Works like projected storage / columnar storage concept.\n  Used in: database normalisation, columnar DBs (BigQuery, Redshift)\n```\n\n---\n\n## Mind Map\n\n```\nDATABASE PARTITIONING\n|\n+-- TYPES\n|   +-- Range (date ranges, number ranges)\n|   +-- List  (country, category, region)\n|   +-- Hash  (even distribution)\n|   +-- Composite (range + list, two levels)\n|\n+-- PARTITION PRUNING\n|   +-- Query skips irrelevant partitions\n|   +-- Requires partition column in WHERE clause\n|   +-- EXPLAIN ANALYZE shows partitions scanned\n|\n+-- USE CASES\n|   +-- Time-series data (logs, events, orders by date)\n|   +-- Rolling archival (DROP PARTITION = instant)\n|   +-- Even write distribution (hash partitioning)\n|   +-- Regional data separation (list partitioning)\n|\n+-- vs SHARDING\n|   +-- Same server vs multiple servers\n|   +-- Transparent to app vs requires shard routing\n|   +-- Query performance vs horizontal scale\n|\n+-- vs INDEXING\n    +-- Index: find rows by value (B-tree)\n    +-- Partition: skip entire data chunks\n    +-- Combine: partition by date + index by user_id\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Database Partitioning Explained** by Hussein Nasser:\n  https://www.youtube.com/watch?v=QA25cL_vDeo\n  - PostgreSQL partitioning demo, partition pruning explained.\n- **Partitioning vs Sharding vs Indexing** by ByteByteGo:\n  https://www.youtube.com/watch?v=wXvljefXyEo\n  - Clear comparison of all three approaches.\n\n### Free Books and Articles\n- **PostgreSQL Partitioning Docs**: https://www.postgresql.org/docs/current/ddl-partitioning.html\n- **MySQL Partitioning**: https://dev.mysql.com/doc/refman/8.0/en/partitioning.html\n\n### Practice\n- Create a large orders table in PostgreSQL, add range partitions by month,\n  run EXPLAIN ANALYZE before and after — see partition pruning in action.\n",
   "questions": [
     {
       "id": "part-q1",
       "type": "mcq",
-      "prompt": "How does partition pruning improve query performance?",
+      "prompt": "What is database partitioning?",
       "choices": [
-        "Partitions are stored in faster storage",
-        "Query planner skips partitions that cannot contain matching rows based on the WHERE clause. Scanning 1 of 12 monthly partitions instead of the full table = near 12x speedup",
-        "Indexing is replaced",
-        "Partitions use less memory"
+        "Splitting a database across multiple servers",
+        "Splitting a large table into smaller physical pieces within the same database server — still appears as one logical table to applications",
+        "Encrypting database columns",
+        "Creating read replicas"
       ],
       "answerIndex": 1,
-      "explanation": "Partition pruning = compile-time optimization. SELECT ... WHERE created_at BETWEEN Jan-Mar \u2192 planner reads only the Q1 partition. Critical: WHERE must include the partition key for pruning to activate.",
+      "explanation": "Partitioning = one DB server, one logical table, split into physical partitions. App SQL doesn't change. DB engine routes queries to relevant partitions. Goal: query performance and manageability, not horizontal scale (that's sharding).",
       "tags": [
         "partitioning",
-        "partition-pruning"
+        "basics"
       ]
     },
     {
       "id": "part-q2",
       "type": "mcq",
-      "prompt": "Main difference between partitioning and sharding?",
+      "prompt": "What is the key difference between partitioning and sharding?",
       "choices": [
-        "Partitioning is newer",
-        "Partitioning: within a single DB server, transparent to app (pruning benefit). Sharding: across multiple DB servers, app must route queries, enables horizontal write scaling",
-        "Both distribute across servers",
-        "Sharding is partitioning plus replication"
+        "Partitioning is for NoSQL, sharding for SQL",
+        "Partitioning: same server, transparent to app, improves query performance. Sharding: multiple servers, app must route queries, scales beyond one machine.",
+        "Sharding is always better",
+        "They are the same concept"
       ],
       "answerIndex": 1,
-      "explanation": "Partitioning is a single-server optimization technique. Sharding distributes across machines for capacity. They combine: 3 shards each with range-partitioned tables.",
+      "explanation": "Partitioning keeps all data on one machine — simpler, transparent, great for performance. Sharding spreads data across multiple machines — complex, app-aware, needed when one machine's capacity is exhausted. Choose partitioning first.",
       "tags": [
         "partitioning",
-        "sharding"
+        "sharding",
+        "comparison"
       ]
     },
     {
       "id": "part-q3",
       "type": "mcq",
-      "prompt": "For a time-series `events` table queried mostly by date range, best partition strategy?",
+      "prompt": "What is partition pruning?",
       "choices": [
-        "Hash partitioning",
-        "Range partitioning by date (e.g., monthly) \u2014 queries with date range WHERE clauses prune to 1-2 partitions. Old data can be archived by dropping old partitions (DROP PARTITION = instantaneous, vs DELETE which is slow)",
-        "List partitioning",
-        "No partitioning needed"
+        "Deleting old partitions",
+        "The query optimizer skipping irrelevant partitions entirely — if query filters by date and data is partitioned by date, only the relevant date partition is scanned",
+        "Compressing partitions",
+        "Merging small partitions"
       ],
       "answerIndex": 1,
-      "explanation": "Time-series + range queries = range partitioning by date. Bonus: DROP TABLE orders_2022_q1 is instant O(1) archival. Deleting rows from a huge table requires writing a DELETE that scans indexes.",
+      "explanation": "Pruning = skip partitions. ORDER BY date, partitioned by year: query for 2025 data? DB skips 2020-2024 partitions entirely. 10 partitions, query touches 1 = 10x less scanning. Requires partition column to appear in WHERE clause.",
       "tags": [
         "partitioning",
+        "partition-pruning",
+        "performance"
+      ]
+    },
+    {
+      "id": "part-q4",
+      "type": "mcq",
+      "prompt": "You have an orders table with 10 years of data. Most queries are for the last 30 days. What partitioning strategy helps most?",
+      "choices": [
+        "Hash partitioning on order_id",
+        "Range partitioning by month — queries for recent orders only scan 1-2 partitions, old data can be archived by detaching old partitions instantly",
+        "List partitioning by status",
+        "No partitioning — add more indexes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Range by month: SELECT for last 30 days touches only 1-2 partitions out of 120 (10 years). 60x less data scanned. Old months can be detached (instant) and archived — vs DELETE which takes hours on billions of rows.",
+      "tags": [
+        "partitioning",
+        "range",
         "time-series"
+      ]
+    },
+    {
+      "id": "part-q5",
+      "type": "mcq",
+      "prompt": "Why is DROP PARTITION much faster than DELETE WHERE for archiving old data?",
+      "choices": [
+        "DROP is a newer SQL command",
+        "DROP PARTITION detaches the physical file instantly (metadata operation). DELETE removes rows one by one, creates transaction logs, holds locks — takes hours for billions of rows.",
+        "DELETE doesn't work on partitioned tables",
+        "They are the same speed"
+      ],
+      "answerIndex": 1,
+      "explanation": "DROP/DETACH PARTITION: O(1) — just removes a pointer. No data movement. Instant. DELETE FROM table WHERE date < '2020': O(N) — touches every qualifying row, writes WAL logs, may lock. On 1B rows: hours. Partitioning makes archival instant.",
+      "tags": [
+        "partitioning",
+        "archival",
+        "performance"
+      ]
+    },
+    {
+      "id": "part-q6",
+      "type": "mcq",
+      "prompt": "What type of partitioning evenly distributes rows even when the partition key is sequential?",
+      "choices": [
+        "Range partitioning",
+        "List partitioning",
+        "Hash partitioning — applies hash(key) % N to determine partition, spreading sequential keys across all partitions evenly",
+        "Composite partitioning"
+      ],
+      "answerIndex": 2,
+      "explanation": "Range on sequential keys creates hotspots (all new rows in latest partition). Hash partitioning: hash(user_id) % 8 -> uniform distribution regardless of key sequence. Trade-off: range queries must scan all partitions (no pruning for range on hash-partitioned column).",
+      "tags": [
+        "partitioning",
+        "hash",
+        "distribution"
+      ]
+    },
+    {
+      "id": "part-q7",
+      "type": "mcq",
+      "prompt": "What is list partitioning used for?",
+      "choices": [
+        "Distributing rows by numeric range",
+        "Partitioning rows by discrete known category values — e.g., country IN ('US','CA','MX') -> North America partition",
+        "Time-based archival",
+        "Even distribution by hash"
+      ],
+      "answerIndex": 1,
+      "explanation": "List partitioning: explicitly map values to partitions. country='DE' -> EU partition. Queries filtering by country skip all non-EU partitions. Best for: region-based data, categorical data with known values. Not good for high-cardinality columns.",
+      "tags": [
+        "partitioning",
+        "list",
+        "categorical"
+      ]
+    },
+    {
+      "id": "part-q8",
+      "type": "mcq",
+      "prompt": "For partition pruning to work, what must be true about your query?",
+      "choices": [
+        "Query must use SELECT *",
+        "The partition column must appear in the WHERE clause of the query",
+        "Query must use ORDER BY",
+        "Joins are not allowed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partition pruning only works if the query filters by the partition key. SELECT * FROM orders WHERE user_id = 123 (partitioned by date): no date filter -> must scan ALL partitions. SELECT WHERE created > '2025-01-01': pruning works, skips older partitions.",
+      "tags": [
+        "partitioning",
+        "partition-pruning",
+        "query-design"
+      ]
+    },
+    {
+      "id": "part-q9",
+      "type": "mcq",
+      "prompt": "What is vertical partitioning?",
+      "choices": [
+        "Partitioning rows into multiple tables",
+        "Splitting COLUMNS — frequently accessed columns in one table, rarely accessed in another — reduces row size for hot queries",
+        "Partitioning across multiple servers",
+        "Range-based row partitioning"
+      ],
+      "answerIndex": 1,
+      "explanation": "Vertical partitioning splits columns. users_core (user_id, name, email) + users_detail (user_id, bio, settings). Queries on users_core read smaller rows (faster). Only join with users_detail when needed. Similar to database normalisation / columnar storage concept.",
+      "tags": [
+        "partitioning",
+        "vertical",
+        "columns"
+      ]
+    },
+    {
+      "id": "part-q10",
+      "type": "mcq",
+      "prompt": "You need country-specific queries AND year-based archival on an orders table. What partitioning approach combines both?",
+      "choices": [
+        "Two separate tables",
+        "Composite partitioning: first by year (range), then by country (list) — query for US orders in 2025 scans only the 2025_US partition",
+        "Sharding by country",
+        "Multiple databases"
+      ],
+      "answerIndex": 1,
+      "explanation": "Composite (sub-partitioning): first dimension by year range, second by country list. Orders_2025 -> Orders_2025_US, Orders_2025_EU, Orders_2025_ASIA. Query with both filters: only one sub-partition scanned. Without composite: range prune works but must still scan all country slices.",
+      "tags": [
+        "partitioning",
+        "composite",
+        "design"
+      ]
+    },
+    {
+      "id": "part-q11",
+      "type": "mcq",
+      "prompt": "Should you partition a table with 10,000 rows?",
+      "choices": [
+        "Yes, always partition for future growth",
+        "No — partitioning adds overhead. Only partition tables with millions+ rows where query scans are genuinely slow. Small tables are faster without partitioning.",
+        "Only hash partition small tables",
+        "Always range partition"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partitioning has overhead: partition metadata, partition checking for every query, more complex EXPLAIN plans. For small tables, a good index is far better. Partition when: full table scan on large table is slow AND queries naturally filter by a good partition column.",
+      "tags": [
+        "partitioning",
+        "when-to-use"
+      ]
+    },
+    {
+      "id": "part-q12",
+      "type": "mcq",
+      "prompt": "How does partitioning help with database maintenance (VACUUM in PostgreSQL)?",
+      "choices": [
+        "Partitioning breaks VACUUM",
+        "VACUUM and ANALYZE can run per-partition in parallel instead of on the entire table — reducing lock duration and maintenance windows",
+        "Partitioning replaces VACUUM",
+        "Partitions never need VACUUM"
+      ],
+      "answerIndex": 1,
+      "explanation": "VACUUM on a 10TB table: hours, holds locks on the whole table. VACUUM on 10 x 1TB partitions: can run concurrently on each partition, much shorter per-partition lock, can be scheduled rolling. Partitioning makes all maintenance operations more manageable.",
+      "tags": [
+        "partitioning",
+        "maintenance",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "part-q13",
+      "type": "mcq",
+      "prompt": "What is 'partition key' selection rule similar to sharding?",
+      "choices": [
+        "Any column works equally well",
+        "Choose partition key that appears in most WHERE clauses, has enough cardinality for good pruning, and matches your archival/deletion patterns",
+        "Always use primary key",
+        "Use the largest column"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partition key selection: appears in most query filters (for pruning), sufficient cardinality (date has 365 values/year, status has 3 values = poor), aligns with data lifecycle (partition by month for monthly archival). Bad partition key = full table scans every query.",
+      "tags": [
+        "partitioning",
+        "partition-key"
+      ]
+    },
+    {
+      "id": "part-q14",
+      "type": "mcq",
+      "prompt": "What SQL command would you use to instantly remove a month's worth of old time-series data from a partitioned table?",
+      "choices": [
+        "DELETE FROM orders WHERE month = '2020-01'",
+        "DROP TABLE orders_2020_01",
+        "ALTER TABLE orders DETACH PARTITION orders_2020_01; DROP TABLE orders_2020_01;",
+        "TRUNCATE TABLE orders WHERE partition = '2020-01'"
+      ],
+      "answerIndex": 2,
+      "explanation": "DETACH PARTITION: removes the partition from the parent table (instant, no data moved). Then DROP TABLE the detached partition (instant, deletes the file). Total: 2 metadata operations, takes milliseconds. The rows are gone but no row-by-row deletion needed.",
+      "tags": [
+        "partitioning",
+        "archival",
+        "sql"
+      ]
+    },
+    {
+      "id": "part-q15",
+      "type": "mcq",
+      "prompt": "How can you verify partition pruning is happening in PostgreSQL?",
+      "choices": [
+        "Check the pg_partitions table",
+        "Run EXPLAIN ANALYZE on the query and look for 'Partitions scanned' — it shows how many partitions the planner chose to scan vs total partitions",
+        "Count rows in each partition",
+        "Run ANALYZE TABLE"
+      ],
+      "answerIndex": 1,
+      "explanation": "EXPLAIN ANALYZE SELECT ... shows 'Partitions: scanned 1 of 120'. If it shows scanned 120 of 120, pruning is NOT happening (check your WHERE clause includes the partition key with a constant, not a variable or subquery).",
+      "tags": [
+        "partitioning",
+        "postgresql",
+        "explain"
+      ]
+    },
+    {
+      "id": "part-q16",
+      "type": "mcq",
+      "prompt": "What happens to a global index on a partitioned table when you drop a partition?",
+      "choices": [
+        "The index self-heals automatically",
+        "Global indexes must be rebuilt after dropping a partition — this is one reason LOCAL indexes (one per partition) are preferred for most scenarios",
+        "Dropping a partition drops all data",
+        "Global indexes are unaffected"
+      ],
+      "answerIndex": 1,
+      "explanation": "PostgreSQL: detaching/dropping a partition marks global indexes as INVALID — must run REINDEX. This is expensive on large tables. Prefer LOCAL indexes (each partition has its own index, only that partition's index affected when partition is dropped).",
+      "tags": [
+        "partitioning",
+        "indexes",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "part-q17",
+      "type": "mcq",
+      "prompt": "Can you add a partition to a running production database without downtime?",
+      "choices": [
+        "No — requires full table lock",
+        "Yes — adding a new partition is a metadata-only DDL operation in PostgreSQL 12+ that does not lock the table",
+        "Only during maintenance windows",
+        "Requires application restart"
+      ],
+      "answerIndex": 1,
+      "explanation": "PostgreSQL 12+: CREATE TABLE new_partition PARTITION OF parent FOR VALUES FROM (...) TO (...) acquires a brief metadata lock, not a full table lock. The table remains readable and writable during partition creation. Zero downtime partition management.",
+      "tags": [
+        "partitioning",
+        "operations",
+        "zero-downtime"
+      ]
+    },
+    {
+      "id": "part-q18",
+      "type": "mcq",
+      "prompt": "What is the 'default partition' in PostgreSQL?",
+      "choices": [
+        "The first partition created",
+        "Catches rows that don't match any defined partition — prevents insert failures when new values appear (e.g., new country code not in any list partition)",
+        "The most queried partition",
+        "A partition on the primary key"
+      ],
+      "answerIndex": 1,
+      "explanation": "CREATE TABLE orders_default PARTITION OF orders DEFAULT. Any row whose partition key doesn't match an existing partition goes here. Without it: INSERT fails for unmapped values. With it: rows are captured for later investigation/redistribution.",
+      "tags": [
+        "partitioning",
+        "default-partition",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "part-q19",
+      "type": "mcq",
+      "prompt": "What is the relationship between partitioning and query parallelism?",
+      "choices": [
+        "Partitioning prevents parallelism",
+        "Multiple partitions can be scanned in parallel by different worker threads/processes — a query scanning 10 partitions may use 10 parallel workers, dramatically reducing query time",
+        "Parallelism only works without partitioning",
+        "Only hash partitions support parallel scans"
+      ],
+      "answerIndex": 1,
+      "explanation": "PostgreSQL parallel query: one worker per partition (or sub-group of partitions). Aggregate on 10 partitions with 10 workers: 10x faster than sequential scan. Enable with max_parallel_workers_per_gather. Sharding extends this further across machines.",
+      "tags": [
+        "partitioning",
+        "parallelism",
+        "performance"
+      ]
+    },
+    {
+      "id": "part-q20",
+      "type": "mcq",
+      "prompt": "Which scenario is BEST suited for list partitioning?",
+      "choices": [
+        "Orders table with 10 years of data",
+        "User table partitioned by continent — queries almost always filter by continent (Europe, North America, Asia)",
+        "Sensor readings arriving every second",
+        "Users table with random UUID primary key"
+      ],
+      "answerIndex": 1,
+      "explanation": "List partitioning: partition by discrete known categories. Continent has 7 values — perfect. User queries WHERE continent = 'Europe' -> only Europe partition scanned. Archiving: detach continent partitions easily. Range suits time-series. Hash suits uniform distribution needs.",
+      "tags": [
+        "partitioning",
+        "list",
+        "use-cases"
       ]
     }
   ],
   "flashcards": [
     {
       "id": "part-fc1",
-      "front": "Partition types",
-      "back": "Range: ordered ranges (dates, IDs). List: discrete values (country, category). Hash: hash(key) % N = even distribution. Composite: range + hash layered.",
+      "front": "Partitioning vs Sharding one-liner",
+      "back": "Partitioning: ONE server, split within DB, transparent to app, improves query speed. Sharding: MULTIPLE servers, app routes queries, scales beyond one machine. Do partitioning first before considering sharding.",
       "tags": [
-        "partitioning"
+        "partitioning",
+        "sharding"
       ]
     },
     {
       "id": "part-fc2",
-      "front": "Partition pruning",
-      "back": "Planner skips irrelevant partitions. Requires partition key in WHERE clause. Scanning 1/12 partition for monthly queries = ~12x speedup. Key: WHERE must use partition column.",
+      "front": "Range vs List vs Hash partition strategy",
+      "back": "Range: date/time ranges (time-series, archival). List: discrete categories (country, region, status). Hash: even distribution for sequential keys. Composite: range then list for two-dimensional filtering.",
       "tags": [
         "partitioning",
-        "pruning"
+        "strategy"
       ]
     },
     {
       "id": "part-fc3",
-      "front": "Partitioning vs sharding",
-      "back": "Partitioning: single server, transparent to app, pruning benefit. Sharding: multi-server, app routes, write scaling. Combined: shards each with partitioned tables.",
+      "front": "Partition pruning requirement",
+      "back": "Partition column MUST appear in WHERE clause for pruning to work. Check with EXPLAIN ANALYZE: look for 'Partitions scanned: 1 of 10'. If all partitions scanned, pruning failed — check query does not use variable or subquery on partition column.",
       "tags": [
         "partitioning",
-        "sharding"
+        "partition-pruning"
+      ]
+    },
+    {
+      "id": "part-fc4",
+      "front": "Archival: DROP PARTITION vs DELETE",
+      "back": "DROP/DETACH PARTITION: O(1) metadata operation, instant. DELETE WHERE old_date: O(N) row-by-row, hours on billions of rows, fills WAL logs. Partition for time-series data specifically to enable instant archival.",
+      "tags": [
+        "partitioning",
+        "archival"
+      ]
+    },
+    {
+      "id": "part-fc5",
+      "front": "Composite partitioning benefit",
+      "back": "Two dimensions of pruning. Orders partitioned by year (range) then country (list): query WHERE created > '2025' AND country = 'US' -> scans ONLY 2025_US partition. All other years and countries skipped.",
+      "tags": [
+        "partitioning",
+        "composite"
+      ]
+    },
+    {
+      "id": "part-fc6",
+      "front": "Partitioning maintenance benefit",
+      "back": "VACUUM/ANALYZE: run per-partition independently, shorter locks. Index rebuilds: per-partition LOCAL indexes. Backup: pg_dump one partition at a time. Schema migrations: migrate one partition at a time for rolling changes.",
+      "tags": [
+        "partitioning",
+        "maintenance"
+      ]
+    },
+    {
+      "id": "part-fc7",
+      "front": "Local vs Global partitioned indexes",
+      "back": "LOCAL index: one index per partition. Dropping partition only affects that partition's index. GLOBAL index: one index across all partitions. Dropping partition = marks global index INVALID, REINDEX needed. Prefer LOCAL indexes.",
+      "tags": [
+        "partitioning",
+        "indexes"
+      ]
+    },
+    {
+      "id": "part-fc8",
+      "front": "When to partition",
+      "back": "Partition WHEN: table has millions+ rows, full-table scans are slow, queries naturally filter by partition column, you need rolling archival. Do NOT partition: small tables (<100K rows), unclear query patterns, complex joins required.",
+      "tags": [
+        "partitioning",
+        "when-to-use"
       ]
     }
   ],

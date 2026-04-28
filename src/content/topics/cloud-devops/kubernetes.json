@@ -7,7 +7,7 @@
   "prereqs": [
     "docker"
   ],
-  "guide": "# Kubernetes\n\nKubernetes (K8s) is an **open-source container orchestration system** that automates deployment, scaling, and management of containerized applications.\n\n## Core Objects\n\n```\nPod:         Smallest deployable unit \u2014 1+ containers sharing network/storage\nDeployment:  Manages ReplicaSet \u2014 declares desired pod count + rolling updates\nService:     Stable network endpoint for a set of pods (load balances across pods)\nIngress:     HTTP routing from outside cluster \u2192 services (L7 routing)\nConfigMap:   Non-secret configuration (key/value or files)\nSecret:      Sensitive data (passwords, tokens) \u2014 base64 encoded in etcd\nNamespace:   Virtual cluster isolation (dev/staging/prod in same cluster)\n```\n\n## Deployment Example\n\n```yaml\n# deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-server\nspec:\n  replicas: 3                     # 3 pods running\n  selector:\n    matchLabels:\n      app: api-server\n  template:\n    metadata:\n      labels:\n        app: api-server\n    spec:\n      containers:\n      - name: api\n        image: myrepo/api:v1.2.3  # always pin a tag, never 'latest' in prod\n        ports:\n        - containerPort: 3000\n        resources:\n          requests: { cpu: \"100m\", memory: \"128Mi\" }\n          limits:   { cpu: \"500m\", memory: \"512Mi\" }\n        readinessProbe:\n          httpGet: { path: /health, port: 3000 }\n          initialDelaySeconds: 5\n        livenessProbe:\n          httpGet: { path: /health, port: 3000 }\n          periodSeconds: 10\n```\n\n## Service + Ingress\n\n```yaml\n# ClusterIP service \u2014 internal load balancer across pods\napiVersion: v1\nkind: Service\nmetadata: { name: api-service }\nspec:\n  selector: { app: api-server }\n  ports: [{ port: 80, targetPort: 3000 }]\n---\n# Ingress \u2014 external HTTP routing\napiVersion: networking.k8s.io/v1\nkind: Ingress\nspec:\n  rules:\n  - host: api.example.com\n    http:\n      paths:\n      - path: /api\n        backend:\n          service: { name: api-service, port: { number: 80 } }\n```\n\n## Key Concepts\n\n```\nRolling update (default):\n  Update pods one at a time \u2014 zero downtime.\n  New pod starts \u2192 health check passes \u2192 old pod terminated.\n\nHorizontal Pod Autoscaler (HPA):\n  Scale pods based on CPU/memory or custom metrics.\n  kubectl autoscale deployment api-server --min=2 --max=20 --cpu-percent=70\n\nNode vs Pod:\n  Node: physical/VM machine running kubelet\n  Pod: one or more containers on a node\n  Cluster: collection of nodes managed by control plane\n```\n\n## Common Pitfalls\n- **Using image:latest** \u2014 latest is mutable. Always pin to an immutable tag (git SHA or semver). Same tag, different image breaks reproducibility.\n- **No resource requests/limits** \u2014 noisy neighbor problem. One pod starves others. Always set CPU/memory requests.\n- **Missing readiness probe** \u2014 K8s sends traffic to pods that are starting up. Readiness probe says \"pod is ready to receive traffic.\"\n- **Storage in pods** \u2014 pod storage is ephemeral. Use PersistentVolumeClaim for stateful data.\n",
+  "guide": "# Kubernetes\n\n## What Is Kubernetes? (No Prior Knowledge Assumed)\n\nImagine you are running a popular food delivery app. On Friday evenings, traffic spikes\n10x. You need 50 servers. At 3am Sunday, you need 2 servers. Manually spinning servers\nup and down, restarting crashed apps, and distributing traffic is a full-time job.\n\n**Kubernetes (K8s) automates all of that.** It is an orchestration system that:\n- Runs your containerised apps across a cluster of machines\n- Automatically restarts crashed containers\n- Scales up (more containers) when traffic is high, scales down when quiet\n- Distributes traffic evenly across healthy containers\n- Rolls out new versions without downtime\n- Rolls back automatically if a new version is broken\n\n**Analogy:** Kubernetes is like the manager of a huge restaurant kitchen.\nYou tell the manager: 'I need 5 chefs making pizza at all times.'\nThe manager hires them, replaces any who quit, and adjusts staffing for rush hour —\nwithout you micromanaging each chef individually.\n\n```\nWithout Kubernetes:                 With Kubernetes:\n  You manually SSH into servers       kubectl apply -f deployment.yaml\n  Restart crashed apps manually       K8s restarts crashed pods automatically\n  Scale servers by hand               K8s auto-scales based on CPU/memory\n  Roll out updates carefully          K8s does rolling updates (zero downtime)\n  Stay up at 3am for incidents        K8s self-heals 24/7\n```\n\n---\n\n## Cluster Architecture — The Big Picture\n\nA Kubernetes cluster has two types of machines:\n\n```\n+-------------------------------------------+\n|           CONTROL PLANE (Master)           |\n|                                           |\n|  +----------+  +---------+  +----------+ |\n|  | API       |  | Sched-  |  | etcd     | |\n|  | Server    |  | uler    |  | (cluster | |\n|  | (the hub) |  |         |  |  state)  | |\n|  +----------+  +---------+  +----------+ |\n|  +-----------+                            |\n|  | Controller|  (watches desired vs       |\n|  | Manager   |   actual state, fixes gaps)|\n|  +-----------+                            |\n+-------------------------------------------+\n         |            |            |\n   +-----+----+  +----+-----+  +--+-------+\n   |  WORKER  |  |  WORKER  |  |  WORKER  |\n   |  NODE 1  |  |  NODE 2  |  |  NODE 3  |\n   |          |  |          |  |          |\n   | [Pod][Pod|  | [Pod][Pod|  | [Pod]    |\n   |  kubelet |  |  kubelet |  |  kubelet |\n   |  kube-   |  |  kube-   |  |  kube-  |\n   |  proxy   |  |  proxy   |  |  proxy  |\n   +----------+  +----------+  +---------+\n\nControl Plane = the brain (decides what runs where)\nWorker Nodes  = the muscles (actually run your containers)\n```\n\n**Control Plane components:**\n- **API Server** — the front door. All kubectl commands hit this. `kubectl apply` talks to API Server.\n- **etcd** — a distributed key-value store. Stores ALL cluster state. If etcd is lost, the cluster is lost.\n- **Scheduler** — decides which worker node to place a new Pod on (based on resources, rules).\n- **Controller Manager** — watches actual vs desired state and fixes gaps (restarts crashed pods, etc.).\n\n**Worker Node components:**\n- **kubelet** — agent on each node. Receives instructions from API Server, starts/stops containers.\n- **kube-proxy** — handles networking rules so Pods can talk to each other and to Services.\n- **Container Runtime** — usually containerd (runs the actual containers, formerly Docker).\n\n---\n\n## Core Objects — The Building Blocks\n\n### Pod — The Smallest Unit\n\n```\nA Pod is one or more containers that:\n  - Share the same network namespace (same IP address)\n  - Share storage volumes\n  - Are always scheduled together on the same node\n\n+-----------------------------------+\n|              POD                  |\n|  +----------+  +---------------+ |\n|  | Main      |  | Sidecar       | |\n|  | Container |  | Container     | |\n|  | (app)     |  | (log shipper) | |\n|  +----------+  +---------------+ |\n|  Shared: IP address, volumes      |\n+-----------------------------------+\n\n99% of Pods contain just ONE container.\nMulti-container Pods are for tightly coupled helpers (sidecars).\n```\n\n**You almost never create Pods directly.** You create Deployments which manage Pods.\n\n### Deployment — Managing Replicas\n\n```yaml\n# deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\nspec:\n  replicas: 3             # keep 3 Pods running at all times\n  selector:\n    matchLabels:\n      app: my-app\n  template:\n    metadata:\n      labels:\n        app: my-app       # Pods get this label\n    spec:\n      containers:\n        - name: my-app\n          image: myregistry/myapp:v1.2.3   # NEVER use :latest in production\n          ports:\n            - containerPort: 8080\n          resources:\n            requests:         # minimum guaranteed resources\n              cpu: '100m'     # 100 milliCPU = 0.1 CPU core\n              memory: '256Mi'\n            limits:           # maximum allowed\n              cpu: '500m'\n              memory: '512Mi'\n```\n\n```bash\nkubectl apply -f deployment.yaml    # create or update the deployment\nkubectl get deployments             # list deployments\nkubectl get pods                    # list pods\nkubectl describe deployment my-app  # detailed status\nkubectl rollout status deployment my-app  # watch rollout progress\n```\n\n### Service — Stable Network Access\n\nPods are temporary — they die and restart with new IP addresses.\nA Service is a stable endpoint that always points to healthy Pods.\n\n```\nClient                Service                 Pods\n                     (stable IP/DNS)      (ephemeral IPs)\n\nbrowser -------> my-app-service -----> Pod 10.0.0.5\n  :80            10.96.0.100:80  \\---> Pod 10.0.0.8\n                                 \\---> Pod 10.0.0.12\n\nEven when Pods restart with new IPs, the Service IP stays the same.\nThe Service load-balances across healthy Pods automatically.\n```\n\n```yaml\n# service.yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: my-app-service\nspec:\n  selector:\n    app: my-app          # routes traffic to Pods with label app=my-app\n  ports:\n    - port: 80           # Service port\n      targetPort: 8080   # Pod port\n  type: ClusterIP        # internal only (default)\n  # type: NodePort       # accessible on each node's IP:nodePort\n  # type: LoadBalancer   # creates a cloud load balancer (AWS ELB, GCP LB)\n```\n\n### ConfigMap and Secret\n\n```yaml\n# ConfigMap: non-sensitive config\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\ndata:\n  DATABASE_HOST: 'postgres-service'\n  LOG_LEVEL: 'INFO'\n\n# Secret: sensitive data (base64 encoded, use external secrets manager in prod)\napiVersion: v1\nkind: Secret\nmetadata:\n  name: app-secrets\ntype: Opaque\ndata:\n  DB_PASSWORD: c3VwZXJzZWNyZXQ=   # base64 of 'supersecret'\n```\n\n```yaml\n# Use in a Pod spec:\nenv:\n  - name: DATABASE_HOST\n    valueFrom:\n      configMapKeyRef:\n        name: app-config\n        key: DATABASE_HOST\n  - name: DB_PASSWORD\n    valueFrom:\n      secretKeyRef:\n        name: app-secrets\n        key: DB_PASSWORD\n```\n\n---\n\n## kubectl — The Command Line Tool\n\n```bash\n# VIEWING RESOURCES\nkubectl get pods                         # list pods in current namespace\nkubectl get pods -n production           # list pods in 'production' namespace\nkubectl get pods -o wide                 # more detail (node, IP)\nkubectl get all                          # pods, services, deployments etc.\nkubectl describe pod my-pod-abc12        # detailed info including events (debug here!)\n\n# LOGS\nkubectl logs my-pod-abc12                # logs from a pod\nkubectl logs my-pod-abc12 -f             # follow live logs\nkubectl logs my-pod-abc12 --previous     # logs from crashed previous container\n\n# SHELL INTO A RUNNING POD\nkubectl exec -it my-pod-abc12 -- bash    # interactive shell (like docker exec)\nkubectl exec -it my-pod-abc12 -- sh      # use sh if bash not available\n\n# APPLY / DELETE\nkubectl apply -f deployment.yaml         # create or update resource\nkubectl delete -f deployment.yaml        # delete resource\nkubectl delete pod my-pod-abc12          # delete specific pod (Deployment restarts it)\n\n# SCALING\nkubectl scale deployment my-app --replicas=10  # scale to 10 pods\n\n# ROLLOUTS\nkubectl rollout status deployment my-app       # watch current rollout\nkubectl rollout history deployment my-app      # see revision history\nkubectl rollout undo deployment my-app         # roll back to previous version\nkubectl rollout undo deployment my-app --to-revision=3  # roll back to specific revision\n\n# PORT FORWARDING (debug locally)\nkubectl port-forward pod/my-pod-abc12 8080:8080  # access pod port locally\nkubectl port-forward service/my-app-service 8080:80\n\n# NAMESPACES\nkubectl get namespaces\nkubectl create namespace staging\nkubectl config set-context --current --namespace=staging  # set default namespace\n```\n\n---\n\n## Health Checks — Readiness vs Liveness Probes\n\n```\nLiveness Probe:   Is this container ALIVE? Should K8s restart it?\nReadiness Probe:  Is this container READY to receive traffic?\n\nBoth are checked periodically by kubelet.\n\nLIVENESS failure  -> container killed and restarted\nREADINESS failure -> container removed from Service endpoints (no traffic sent)\n                     but NOT restarted\n```\n\n```yaml\nlivenessProbe:\n  httpGet:\n    path: /healthz    # your app must return 200 on this path\n    port: 8080\n  initialDelaySeconds: 30  # wait 30s before first check (app needs time to start)\n  periodSeconds: 10         # check every 10 seconds\n  failureThreshold: 3       # restart after 3 consecutive failures\n\nreadinessProbe:\n  httpGet:\n    path: /ready      # return 200 when app is ready to serve traffic\n    port: 8080\n  initialDelaySeconds: 10\n  periodSeconds: 5\n  failureThreshold: 3\n```\n\n**Why both?**\n- App starts but crashes in a loop -> **liveness** probe detects -> K8s restarts.\n- App starts but DB connection not ready yet -> **readiness** probe returns 500 -> K8s holds\n  traffic until DB is connected -> then starts sending traffic. Zero dropped requests.\n\n---\n\n## Rolling Updates — Zero Downtime Deployments\n\nWhen you update an image tag in a Deployment, K8s rolls it out gradually:\n\n```\nStrategy: RollingUpdate (default)\n  maxUnavailable: 1   <- at most 1 pod down at a time\n  maxSurge: 1         <- at most 1 extra pod created during update\n\nStep 1:  [v1] [v1] [v1]       (3 old pods running)\nStep 2:  [v1] [v1] [v2]       (1 new pod started, readiness checked)\nStep 3:  [v1] [v2] [v2]       (1 old pod removed, 1 more new)\nStep 4:  [v2] [v2] [v2]       (rollout complete!)\n\nAt every step, at least 2 pods are serving traffic.\nTraffic is only sent to pods that pass readiness probe.\n```\n\n```bash\n# Update image version (triggers rolling update)\nkubectl set image deployment/my-app my-app=myregistry/myapp:v1.3.0\n\n# Watch it happen\nkubectl rollout status deployment my-app\n\n# Something wrong? Roll back instantly\nkubectl rollout undo deployment my-app\n```\n\n---\n\n## Namespaces — Logical Isolation\n\n```\nNamespaces partition one cluster into virtual clusters.\nUse them to separate environments and teams.\n\ncluster/\n+-- namespace: default         (where things go if you don't specify)\n+-- namespace: kube-system     (K8s internal components)\n+-- namespace: production      (your prod workloads)\n+-- namespace: staging         (your staging workloads)\n+-- namespace: team-payments   (payments team's stuff)\n\nBenefits:\n  - Resource quotas per namespace (production gets more CPU budget)\n  - RBAC per namespace (staging team can't touch production)\n  - Clear separation, easier to manage\n```\n\n---\n\n## Resource Requests and Limits\n\n```\nrequests: what the Pod is GUARANTEED to get (scheduler uses this to place Pod)\nlimits:   maximum the Pod can USE (kernel enforces this)\n\nCPU:    measured in millicores. 1000m = 1 CPU core.\nMemory: measured in Mi (mebibytes) or Gi (gibibytes).\n\nIf Pod exceeds memory LIMIT -> OOMKilled (Out Of Memory killed, then restarted)\nIf Pod exceeds CPU LIMIT    -> throttled (slowed down, not killed)\n\nBest practice: set both requests and limits.\nrequests too low  = Pod gets scheduled on overloaded node\nlimits too low    = Pod OOMKilled frequently\nno limits at all  = one bad Pod can starve all others on the node\n```\n\n---\n\n## Ingress — HTTP Routing into the Cluster\n\n```\nWithout Ingress:\n  Each Service needs its own LoadBalancer -> expensive (one cloud LB per service)\n\nWith Ingress:\n  One LoadBalancer -> Ingress Controller -> routes to Services by host/path\n\n  External          Ingress            Services\n  Traffic    ->  Controller  ->  api.myapp.com  -> api-service\n                              ->  myapp.com/app -> frontend-service\n                              ->  myapp.com/pay -> payment-service\n```\n\n```yaml\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: my-ingress\n  annotations:\n    nginx.ingress.kubernetes.io/rewrite-target: /\nspec:\n  rules:\n    - host: myapp.com\n      http:\n        paths:\n          - path: /api\n            pathType: Prefix\n            backend:\n              service:\n                name: api-service\n                port:\n                  number: 80\n```\n\n---\n\n## Mind Map\n\n```\nKUBERNETES\n|\n+-- CLUSTER\n|   +-- Control Plane (API Server, etcd, Scheduler, Controller Manager)\n|   +-- Worker Nodes  (kubelet, kube-proxy, container runtime)\n|\n+-- CORE OBJECTS\n|   +-- Pod          (smallest unit: 1+ containers)\n|   +-- Deployment   (manages replicas + rolling updates)\n|   +-- Service      (stable network endpoint, load balancer)\n|   +-- ConfigMap    (non-sensitive config)\n|   +-- Secret       (sensitive config, base64 encoded)\n|   +-- Namespace    (logical cluster partition)\n|   +-- Ingress      (HTTP routing from outside)\n|\n+-- HEALTH\n|   +-- Liveness probe  (restart if dead)\n|   +-- Readiness probe (hold traffic if not ready)\n|\n+-- OPERATIONS (kubectl)\n|   +-- apply/delete     (create/remove resources)\n|   +-- get/describe     (view state)\n|   +-- logs/exec        (debug pods)\n|   +-- scale            (change replicas)\n|   +-- rollout undo     (rollback)\n|\n+-- RESOURCES\n    +-- requests (guaranteed minimum)\n    +-- limits   (enforced maximum)\n    +-- OOMKill  (memory limit breach)\n```\n\n---\n\n## How Kubernetes Connects to Other Topics\n\n- **Docker**: K8s runs Docker (or containerd) container images. Every app deployed to K8s\n  is a Docker image built and pushed to a registry.\n- **CI/CD**: Pipelines build images, push to registry, then `kubectl apply` to deploy.\n  GitOps tools (ArgoCD, Flux) watch git repos and auto-sync K8s state.\n- **Cloud/AWS**: AWS EKS is managed Kubernetes. GCP has GKE, Azure has AKS.\n  The control plane is managed for you — you only manage worker nodes.\n- **Linux**: Every K8s node is a Linux machine. When you `kubectl exec` into a pod,\n  you are in a Linux shell. Linux process/network skills apply.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Using `image:latest`** — breaks reproducibility. Always pin: `myapp:v1.2.3`.\n2. **No resource requests/limits** — one runaway pod starves the entire node.\n3. **No readiness probe** — K8s sends traffic to pods before app is ready -> 502 errors during deploys.\n4. **Deleting pods to 'restart' them** — the correct way is `kubectl rollout restart deployment my-app`. Deleting pods in a Deployment just causes K8s to create new ones anyway.\n5. **Storing secrets in ConfigMaps** — ConfigMaps are not encrypted. Use Secrets (or better: External Secrets Operator + AWS Secrets Manager).\n6. **Everything in the default namespace** — use namespaces to separate environments and teams.\n7. **No liveness probe** — deadlocked pods keep running, serving no traffic, eating resources.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Kubernetes Tutorial for Beginners** by TechWorld with Nana:\n  https://www.youtube.com/watch?v=X48VuDVv0do\n  - 4 hours. Complete K8s beginner course. Architecture, commands, real deployments.\n- **Kubernetes Explained in 100 Seconds** by Fireship:\n  https://www.youtube.com/watch?v=PziYflu8cB8\n  - 2 minutes. Perfect mental model overview.\n\n### Free Books and Articles\n- **Kubernetes official docs - Learn Kubernetes Basics interactive tutorial**:\n  https://kubernetes.io/docs/tutorials/kubernetes-basics/\n  - Browser-based interactive minikube tutorial. No install needed.\n- **Kubernetes the Hard Way** by Kelsey Hightower:\n  https://github.com/kelseyhightower/kubernetes-the-hard-way\n  - Advanced: build K8s from scratch to truly understand it.\n\n### Diagrams and Cheatsheets\n- **kubectl cheatsheet (official)**: https://kubernetes.io/docs/reference/kubectl/cheatsheet/\n- **Kubernetes architecture diagram**: search 'Kubernetes architecture diagram' — the official\n  CNCF diagram is the best visual reference.\n\n### Practice\n- **Killer Shell** (CKA/CKAD exam simulator): https://killer.sh/\n- **KodeKloud Kubernetes for Beginners** (browser labs, free tier):\n  https://kodekloud.com/courses/kubernetes-for-the-absolute-beginners-hands-on/\n- **Play with Kubernetes** (free browser K8s lab): https://labs.play-with-k8s.com/",
   "questions": [
     {
       "id": "k8s-q1",
@@ -15,12 +15,12 @@
       "prompt": "Difference between a K8s Deployment and a Pod?",
       "choices": [
         "Same thing",
-        "Deployment: controller that manages a ReplicaSet of pods \u2014 declares desired count, handles rolling updates, restarts crashed pods. Pod: actual running container. You almost never create bare pods in production",
+        "Deployment: controller that manages a ReplicaSet of pods — declares desired count, handles rolling updates, restarts crashed pods. Pod: actual running container. You almost never create bare pods in production",
         "Deployments are for databases only",
         "Pods are larger"
       ],
       "answerIndex": 1,
-      "explanation": "A Deployment is the management layer. It creates a ReplicaSet that maintains the desired number of pods. Pod crashes \u2192 Deployment-managed ReplicaSet recreates it. Bare pods don't self-heal.",
+      "explanation": "A Deployment is the management layer. It creates a ReplicaSet that maintains the desired number of pods. Pod crashes → Deployment-managed ReplicaSet recreates it. Bare pods don't self-heal.",
       "tags": [
         "kubernetes",
         "deployment",
@@ -33,7 +33,7 @@
       "prompt": "Why should you never use image:latest in production?",
       "choices": [
         "latest is slower",
-        "latest is a mutable tag \u2014 different engineers or CI runs can pull different images with the same tag. This makes deployments non-reproducible and debugging impossible. Always pin: myimage:v1.2.3 or git-sha",
+        "latest is a mutable tag — different engineers or CI runs can pull different images with the same tag. This makes deployments non-reproducible and debugging impossible. Always pin: myimage:v1.2.3 or git-sha",
         "K8s rejects latest",
         "latest lacks security"
       ],
@@ -47,18 +47,311 @@
     {
       "id": "k8s-q3",
       "type": "mcq",
-      "prompt": "Readiness probe vs liveness probe \u2014 difference?",
+      "prompt": "Readiness probe vs liveness probe — difference?",
       "choices": [
         "Same thing",
-        "Readiness: is the pod ready to receive traffic? (excludes from service LB until ready). Liveness: is the pod still alive? (restarts it if unhealthy). Both are needed \u2014 readiness prevents premature traffic; liveness prevents stuck pods",
+        "Readiness: is the pod ready to receive traffic? (excludes from service LB until ready). Liveness: is the pod still alive? (restarts it if unhealthy). Both are needed — readiness prevents premature traffic; liveness prevents stuck pods",
         "Liveness is newer",
         "Only liveness is needed"
       ],
       "answerIndex": 1,
-      "explanation": "Readiness probe: pod is starting/loading cache \u2192 not ready \u2192 no traffic until health check passes. Liveness probe: pod is deadlocked (running but broken) \u2192 K8s kills and restarts. Both protect users.",
+      "explanation": "Readiness probe: pod is starting/loading cache → not ready → no traffic until health check passes. Liveness probe: pod is deadlocked (running but broken) → K8s kills and restarts. Both protect users.",
       "tags": [
         "kubernetes",
         "probes"
+      ]
+    },
+    {
+      "id": "k8s-q4",
+      "type": "mcq",
+      "prompt": "What is a Kubernetes Pod?",
+      "choices": [
+        "A virtual machine",
+        "A physical server in a cluster",
+        "The smallest deployable unit — one or more containers sharing a network namespace and storage",
+        "A load balancer"
+      ],
+      "answerIndex": 2,
+      "explanation": "A Pod is K8s smallest deployable unit. Containers in a Pod share an IP address and can share volumes. 99% of Pods contain a single container.",
+      "tags": [
+        "pods",
+        "k8s-basics"
+      ]
+    },
+    {
+      "id": "k8s-q5",
+      "type": "mcq",
+      "prompt": "What is the role of a Kubernetes Deployment?",
+      "choices": [
+        "Handles HTTP routing",
+        "Stores cluster configuration",
+        "Declares desired state: how many Pod replicas to run, which image, rolling update strategy",
+        "Provides persistent storage"
+      ],
+      "answerIndex": 2,
+      "explanation": "A Deployment manages a ReplicaSet which ensures the specified number of Pod replicas are always running. It also handles rolling updates and rollbacks.",
+      "tags": [
+        "deployment",
+        "k8s-core"
+      ]
+    },
+    {
+      "id": "k8s-q6",
+      "type": "mcq",
+      "prompt": "Why do Pods need a Service in front of them?",
+      "choices": [
+        "Pods cannot run without a Service",
+        "Pods have dynamic IP addresses that change when they restart — a Service provides a stable IP/DNS name that always routes to healthy Pods",
+        "Services provide persistent storage",
+        "Services make Pods faster"
+      ],
+      "answerIndex": 1,
+      "explanation": "When a Pod restarts, it gets a new IP address. A Service is a stable network endpoint with a fixed IP/DNS that automatically routes to current healthy Pods via label selectors.",
+      "tags": [
+        "services",
+        "networking"
+      ]
+    },
+    {
+      "id": "k8s-q7",
+      "type": "mcq",
+      "prompt": "What happens when a liveness probe fails repeatedly?",
+      "choices": [
+        "The node is restarted",
+        "Traffic is stopped to the Pod",
+        "The container is killed and restarted by kubelet",
+        "The Deployment is deleted"
+      ],
+      "answerIndex": 2,
+      "explanation": "Liveness probe failure = container is not alive/responsive. kubelet kills and restarts the container. This handles deadlocks and infinite loops that don't crash but stop responding.",
+      "tags": [
+        "probes",
+        "health"
+      ]
+    },
+    {
+      "id": "k8s-q8",
+      "type": "mcq",
+      "prompt": "A Pod passes its liveness probe but fails its readiness probe. What does Kubernetes do?",
+      "choices": [
+        "Restarts the Pod",
+        "Deletes the Pod",
+        "Removes the Pod from the Service's endpoint list — no traffic is sent to it",
+        "Nothing — both probes must fail"
+      ],
+      "answerIndex": 2,
+      "explanation": "Readiness failure means the container is alive but not ready for traffic. K8s removes it from Service endpoints. Traffic is only sent to ready Pods. The container is NOT restarted.",
+      "tags": [
+        "probes",
+        "readiness"
+      ]
+    },
+    {
+      "id": "k8s-q9",
+      "type": "mcq",
+      "prompt": "What does `kubectl rollout undo deployment my-app` do?",
+      "choices": [
+        "Deletes the deployment",
+        "Scales the deployment to zero",
+        "Rolls back to the previous image version using Deployment revision history",
+        "Pauses the rollout"
+      ],
+      "answerIndex": 2,
+      "explanation": "K8s Deployments keep a rollout history. rollout undo reverts to the previous revision — changing the image tag back and doing a rolling update in reverse. Fast and safe.",
+      "tags": [
+        "rollout",
+        "updates"
+      ]
+    },
+    {
+      "id": "k8s-q10",
+      "type": "mcq",
+      "prompt": "What is the difference between resource `requests` and `limits` in K8s?",
+      "choices": [
+        "They are identical",
+        "requests = minimum guaranteed resources (scheduler uses to place Pod); limits = maximum allowed (enforced by kernel — OOMKill if exceeded)",
+        "requests = maximum; limits = minimum",
+        "limits only apply to CPU"
+      ],
+      "answerIndex": 1,
+      "explanation": "requests guarantees the Pod gets at least that much CPU/memory. The scheduler uses requests to decide which node can fit the Pod. limits caps usage — memory overuse causes OOMKill; CPU overuse causes throttling.",
+      "tags": [
+        "resources",
+        "scheduling"
+      ]
+    },
+    {
+      "id": "k8s-q11",
+      "type": "mcq",
+      "prompt": "What does a Kubernetes Namespace provide?",
+      "choices": [
+        "Network isolation between nodes",
+        "DNS resolution",
+        "Logical partitioning of cluster resources — lets different teams/environments share one cluster without interfering",
+        "Container image versioning"
+      ],
+      "answerIndex": 2,
+      "explanation": "Namespaces partition a cluster logically. production and staging namespaces can coexist on the same cluster with separate resource quotas and RBAC policies.",
+      "tags": [
+        "namespaces",
+        "organization"
+      ]
+    },
+    {
+      "id": "k8s-q12",
+      "type": "mcq",
+      "prompt": "What is the role of `etcd` in the Kubernetes control plane?",
+      "choices": [
+        "Schedules Pods to nodes",
+        "Runs containers",
+        "Distributed key-value store that holds ALL cluster state — the source of truth",
+        "Load balances services"
+      ],
+      "answerIndex": 2,
+      "explanation": "etcd is K8s database. Every object (Pods, Deployments, Services, Secrets) is stored in etcd. If etcd is lost, the cluster state is lost. This is why etcd backups are critical.",
+      "tags": [
+        "control-plane",
+        "etcd"
+      ]
+    },
+    {
+      "id": "k8s-q13",
+      "type": "mcq",
+      "prompt": "You deploy a new image version and it is broken. Traffic is dropping. Fastest safe fix?",
+      "choices": [
+        "kubectl delete deployment my-app and recreate",
+        "kubectl rollout undo deployment my-app",
+        "Manually edit each Pod",
+        "kubectl apply a ConfigMap change"
+      ],
+      "answerIndex": 1,
+      "explanation": "kubectl rollout undo immediately reverts to the previous working revision using K8s rollout history. No downtime — it does a rolling update back to the old version.",
+      "tags": [
+        "rollout",
+        "incident-response"
+      ]
+    },
+    {
+      "id": "k8s-q14",
+      "type": "mcq",
+      "prompt": "What is the purpose of a Kubernetes Ingress?",
+      "choices": [
+        "Internal pod-to-pod communication",
+        "Provides persistent volumes",
+        "Single entry point for HTTP/HTTPS traffic with host/path-based routing to multiple Services",
+        "Encrypts etcd data"
+      ],
+      "answerIndex": 2,
+      "explanation": "Ingress routes external HTTP traffic to internal Services by hostname and path. Instead of one LoadBalancer per Service (expensive), one Ingress Controller handles all HTTP routing.",
+      "tags": [
+        "ingress",
+        "networking"
+      ]
+    },
+    {
+      "id": "k8s-q15",
+      "type": "mcq",
+      "prompt": "What is the difference between a ConfigMap and a Secret in Kubernetes?",
+      "choices": [
+        "Secrets are bigger",
+        "ConfigMaps are for non-sensitive config (env vars, properties); Secrets are for sensitive data (passwords, tokens) and are base64-encoded",
+        "Secrets are encrypted at rest by default",
+        "They are identical"
+      ],
+      "answerIndex": 1,
+      "explanation": "ConfigMaps store plain non-sensitive configuration. Secrets store sensitive data in base64 encoding (not encryption!). For true security, use external secrets managers (AWS Secrets Manager + External Secrets Operator).",
+      "tags": [
+        "configmap",
+        "secrets"
+      ]
+    },
+    {
+      "id": "k8s-q16",
+      "type": "multi",
+      "prompt": "Which kubectl commands are useful for debugging a crashing Pod? (Select all that apply)",
+      "choices": [
+        "kubectl logs pod-name --previous",
+        "kubectl describe pod pod-name",
+        "kubectl exec -it pod-name -- bash",
+        "kubectl scale deployment my-app --replicas=0"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "logs --previous shows logs from the last crashed container. describe shows events and probe failures. exec drops you in for interactive debugging. Scaling to 0 just stops pods — not debugging.",
+      "tags": [
+        "debugging",
+        "kubectl"
+      ]
+    },
+    {
+      "id": "k8s-q17",
+      "type": "mcq",
+      "prompt": "Why is `image:latest` dangerous in Kubernetes production deployments?",
+      "choices": [
+        "latest is not cached by Docker",
+        "latest tag makes rolling updates impossible",
+        "latest always pulls the newest version — a new image push could change your running app unpredictably, and K8s cannot tell old from new for rollout tracking",
+        "latest is not valid in K8s"
+      ],
+      "answerIndex": 2,
+      "explanation": "If you use latest, any time K8s pulls the image it might get a different version. K8s also tracks rollout history by image digest — two 'latest' images may be different internally, breaking rollback.",
+      "tags": [
+        "best-practices",
+        "image-tags"
+      ]
+    },
+    {
+      "id": "k8s-q18",
+      "type": "mcq",
+      "prompt": "What does `kubectl port-forward pod/my-pod 8080:8080` do?",
+      "choices": [
+        "Exposes the pod to the internet",
+        "Creates a temporary tunnel from your local port 8080 to port 8080 inside the pod — for local debugging",
+        "Changes the Service port",
+        "Scales the pod"
+      ],
+      "answerIndex": 1,
+      "explanation": "port-forward creates a local tunnel directly to a Pod's port. You can access http://localhost:8080 and it tunnels to the Pod. No Service or Ingress needed. Great for debugging without exposing publicly.",
+      "tags": [
+        "kubectl",
+        "debugging"
+      ]
+    },
+    {
+      "id": "k8s-q19",
+      "type": "mcq",
+      "prompt": "In a rolling update with maxUnavailable=1 and maxSurge=1, starting from 3 replicas, what is the minimum number of Pods available during the update?",
+      "choices": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "answerIndex": 2,
+      "explanation": "maxUnavailable=1 means at most 1 pod can be down. Starting from 3, minimum available = 3-1 = 2. This ensures traffic continues flowing during the update.",
+      "tags": [
+        "rollout",
+        "availability"
+      ]
+    },
+    {
+      "id": "k8s-q20",
+      "type": "mcq",
+      "prompt": "What is kubelet's primary responsibility on a worker node?",
+      "choices": [
+        "Routes external traffic",
+        "Stores cluster state",
+        "Watches the API Server for Pod assignments and ensures containers are running as specified on that node",
+        "Handles DNS resolution"
+      ],
+      "answerIndex": 2,
+      "explanation": "kubelet is the K8s agent on each node. It watches the API Server for Pods assigned to its node, then starts/stops/restarts containers accordingly via the container runtime.",
+      "tags": [
+        "control-plane",
+        "kubelet"
       ]
     }
   ],
@@ -87,6 +380,51 @@
       "tags": [
         "kubernetes",
         "resources"
+      ]
+    },
+    {
+      "id": "k8s-fc4",
+      "front": "Deployment vs Pod — when to create each",
+      "back": "Never create bare Pods in production. Always use Deployments. Deployments manage replicas, handle rolling updates, and restart crashed Pods automatically. Bare Pods are not restarted if they crash.",
+      "tags": [
+        "deployment",
+        "pods"
+      ]
+    },
+    {
+      "id": "k8s-fc5",
+      "front": "Service types: ClusterIP / NodePort / LoadBalancer",
+      "back": "ClusterIP = internal only (default). NodePort = accessible on node IP:port (dev). LoadBalancer = creates cloud load balancer (production external traffic). Use Ingress + ClusterIP for HTTP at scale.",
+      "tags": [
+        "services",
+        "networking"
+      ]
+    },
+    {
+      "id": "k8s-fc6",
+      "front": "OOMKilled — cause and fix",
+      "back": "Pod exceeded its memory LIMIT. Kubernetes kills and restarts it. Fix: increase memory limit, profile memory leak in code, or set limit closer to actual usage. CPU overuse = throttled (slowed), not killed.",
+      "tags": [
+        "resources",
+        "debugging"
+      ]
+    },
+    {
+      "id": "k8s-fc7",
+      "front": "Rolling update safety rule",
+      "back": "Always set readiness probe. K8s only sends traffic to pods that pass readiness. Without it, pods get traffic before app is ready -> 502 errors. With it: seamless zero-downtime deploys.",
+      "tags": [
+        "rollout",
+        "probes"
+      ]
+    },
+    {
+      "id": "k8s-fc8",
+      "front": "kubectl debug workflow",
+      "back": "1. kubectl get pods (find the pod name) 2. kubectl describe pod <name> (see events, probe failures) 3. kubectl logs <name> --previous (crashed container logs) 4. kubectl exec -it <name> -- bash (interactive debug)",
+      "tags": [
+        "debugging",
+        "kubectl"
       ]
     }
   ],

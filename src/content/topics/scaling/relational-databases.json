@@ -7,98 +7,445 @@
   "prereqs": [
     "linux-essentials"
   ],
-  "guide": "# Relational Databases\n\nRelational databases store data in tables with rows and columns, enforce ACID properties, and use SQL for querying. They are the backbone of most transactional applications.\n\n## ACID Properties\n\n```\nAtomicity:   Transaction completes fully or not at all\n             (debit user AND credit account \u2014 no half-transfer)\n\nConsistency: DB always moves from one valid state to another\n             (foreign keys, constraints honored after every transaction)\n\nIsolation:   Concurrent transactions behave as if sequential\n             (no dirty reads, phantom reads with appropriate level)\n\nDurability:  Committed transaction persists even through crash\n             (written to WAL, disk \u2014 not just memory)\n```\n\n## Isolation Levels (Weakest \u2192 Strongest)\n\n```\nRead Uncommitted:  See uncommitted changes from other txns (dirty reads) \u2014 almost never use\nRead Committed:    Only see committed data \u2014 prevents dirty reads (PostgreSQL default)\nRepeatable Read:   Same rows same values throughout transaction \u2014 prevents non-repeatable reads\nSerializable:      Fully isolated, as if run sequentially \u2014 prevents phantom reads (slowest)\n\nPhantom read example:\n  Txn A: SELECT * FROM orders WHERE status='pending' \u2014 5 rows\n  Txn B: INSERT INTO orders ... (new pending order)  \u2014 commits\n  Txn A: SELECT * WHERE status='pending' \u2014 6 rows!   \u2190 phantom\n  Serializable prevents this.\n```\n\n## Indexing\n\n```sql\n-- B-Tree index (default) \u2014 range queries, equality, ORDER BY\nCREATE INDEX idx_orders_user_id ON orders(user_id);\nCREATE INDEX idx_orders_date ON orders(created_at);\n\n-- Composite index \u2014 order matters (leftmost prefix rule)\nCREATE INDEX idx_orders_user_date ON orders(user_id, created_at);\n-- Efficient: WHERE user_id = 1                       (leftmost prefix)\n-- Efficient: WHERE user_id = 1 AND created_at > '2024'\n-- Inefficient: WHERE created_at > '2024'             (skips leftmost!)\n\n-- Covering index \u2014 all needed columns in index (no table lookup)\nCREATE INDEX idx_covering ON orders(user_id) INCLUDE (amount, status);\n\n-- Explain plan\nEXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 123;\n-- Look for: \"Index Scan\" (good) vs \"Seq Scan\" (bad for large tables)\n```\n\n## N+1 Query Problem\n\n```javascript\n// BAD \u2014 N+1\nconst orders = await db.query('SELECT * FROM orders LIMIT 100');\nfor (const order of orders) {\n  order.user = await db.query('SELECT * FROM users WHERE id = $1', [order.userId]);\n  // 100 orders = 101 total queries!\n}\n\n// GOOD \u2014 JOIN\nconst orders = await db.query(`\n  SELECT o.*, u.name, u.email\n  FROM orders o\n  JOIN users u ON u.id = o.user_id\n  LIMIT 100\n`);\n// 1 query\n```\n\n## Common Pitfalls\n- **No indexes on foreign keys or frequent WHERE columns** \u2014 full table scan on every query.\n- **N+1 queries** \u2014 ORM lazy loading silently creates N+1 patterns. Use eager loading or explicit JOINs.\n- **Ignoring EXPLAIN ANALYZE** \u2014 run EXPLAIN on slow queries before adding indexes blindly.\n- **Too many indexes** \u2014 indexes slow DOWN writes (index must be updated on every INSERT/UPDATE/DELETE). Only index what's queried.\n",
+  "guide": "# Relational Databases & SQL\n\n## What Is a Relational Database?\n\nA relational database organises data into **tables** (rows and columns), enforces\nrelationships between tables, and uses SQL (Structured Query Language) to query it.\n\n**Why relational?** Because most real-world data IS relational:\n- A user HAS MANY orders\n- An order HAS MANY line items\n- A line item BELONGS TO a product\n\nThe \"relational\" part means these connections are formal, enforced, and queryable.\n\n```\nusers table:            orders table:         products table:\n+----+-------+          +----+---------+      +----+---------+-------+\n| id | name  |          | id | user_id |      | id | name    | price |\n+----+-------+          +----+---------+      +----+---------+-------+\n|  1 | Alice |          |  1 |       1 |      |  1 | Laptop  |  999  |\n|  2 | Bob   |          |  2 |       1 |      |  2 | Mouse   |   29  |\n+----+-------+          |  3 |       2 |      +----+---------+-------+\n                        +----+---------+\n\nJOIN: \"Show me Alice's orders with product names\"\nSELECT users.name, products.name, products.price\nFROM users\nJOIN orders ON users.id = orders.user_id\nJOIN order_items ON orders.id = order_items.order_id\nJOIN products ON order_items.product_id = products.id\nWHERE users.name = 'Alice';\n```\n\n---\n\n## ACID Properties — The Foundation of Reliability\n\nEvery relational database guarantees ACID properties. These are why banks, payment\nsystems, and any system where data integrity matters use relational databases.\n\n```\nATOMICITY:\n  A transaction is ALL or NOTHING.\n  Transfer $100 from Alice to Bob:\n    UPDATE accounts SET balance = balance - 100 WHERE user_id = 1  (Alice)\n    UPDATE accounts SET balance = balance + 100 WHERE user_id = 2  (Bob)\n  If the second UPDATE fails (crash, error), the FIRST is also undone.\n  You can never debit Alice without crediting Bob. Partial transactions don't exist.\n\nCONSISTENCY:\n  The database always moves from one VALID state to another VALID state.\n  Constraints (NOT NULL, UNIQUE, FOREIGN KEY, CHECK) are enforced.\n  No transaction can leave the database in an invalid state.\n  Constraint: balance >= 0. Withdrawing $200 from balance of $100 -> rejected.\n\nISOLATION:\n  Concurrent transactions don't interfere with each other.\n  Transaction 1 and Transaction 2 running simultaneously see a consistent view.\n  Isolation levels (READ COMMITTED, REPEATABLE READ, SERIALIZABLE) control this.\n  Default in PostgreSQL: READ COMMITTED (reads see other committed transactions).\n\nDURABILITY:\n  Once committed, data SURVIVES crashes.\n  After COMMIT, even if the server loses power 1ms later, your data is safe.\n  Achieved via: Write-Ahead Log (WAL) — changes written to log before the actual data file.\n  On restart: replay WAL to recover any committed but not yet written data.\n```\n\n---\n\n## SQL Fundamentals — The Language\n\n```sql\n-- DDL (Data Definition Language) — structure\nCREATE TABLE users (\n    id         SERIAL PRIMARY KEY,          -- auto-increment integer\n    email      TEXT NOT NULL UNIQUE,        -- NOT NULL + unique constraint\n    name       TEXT NOT NULL,\n    created_at TIMESTAMP DEFAULT NOW(),\n    age        INT CHECK (age >= 0 AND age <= 150)  -- check constraint\n);\n\nCREATE INDEX idx_users_email ON users(email);  -- speeds up WHERE email = ...\n\n-- DML (Data Manipulation Language) — data\nINSERT INTO users (email, name) VALUES ('alice@example.com', 'Alice');\n\nUPDATE users SET name = 'Alice Smith' WHERE id = 1;\n\nDELETE FROM users WHERE id = 1;\n\n-- DQL (Data Query Language) — reads\nSELECT id, name FROM users WHERE age > 18 ORDER BY name LIMIT 10;\n\n-- Aggregation\nSELECT country, COUNT(*) AS user_count, AVG(age) AS avg_age\nFROM users\nGROUP BY country\nHAVING COUNT(*) > 1000  -- HAVING filters AFTER GROUP BY (vs WHERE which filters before)\nORDER BY user_count DESC;\n\n-- JOIN types\nSELECT u.name, o.total\nFROM users u\nINNER JOIN orders o ON u.id = o.user_id;       -- only matching rows\n\nSELECT u.name, o.total\nFROM users u\nLEFT JOIN orders o ON u.id = o.user_id;        -- all users, NULL for no orders\n\nSELECT u.name, o.total\nFROM users u\nRIGHT JOIN orders o ON u.id = o.user_id;       -- all orders, NULL for no user\n\n-- Subquery\nSELECT name FROM users\nWHERE id IN (SELECT user_id FROM orders WHERE total > 1000);\n\n-- CTE (Common Table Expression — cleaner than subquery)\nWITH high_value_users AS (\n    SELECT user_id FROM orders GROUP BY user_id HAVING SUM(total) > 10000\n)\nSELECT u.name FROM users u\nJOIN high_value_users h ON u.id = h.user_id;\n```\n\n---\n\n## Indexes — Making Queries Fast\n\n```\nWithout index: SELECT * FROM users WHERE email = 'alice@example.com'\n  Full table scan: reads every row, checks every email\n  O(N) — slow on large tables\n\nWith index on email: same query\n  Index lookup: B-tree traversal to find the row\n  O(log N) — fast regardless of table size\n\nINDEX TYPES:\n  B-tree (default): balanced tree, good for =, <, >, BETWEEN, ORDER BY, LIKE 'prefix%'\n  Hash:         exact equality only (=), faster than B-tree for pure lookup\n  GIN:          for arrays, JSONB, full-text search (PostgreSQL)\n  GiST:         for geometric data, range types\n  Partial index: only index rows matching a condition (smaller, faster)\n                 CREATE INDEX ON users(email) WHERE active = true;\n\nCOMPOUND INDEX:\n  CREATE INDEX idx_orders_user_date ON orders(user_id, created_at);\n  Good for: WHERE user_id = ? AND created_at > ?\n  Index order matters: (user_id, created_at) cannot be used for WHERE created_at > ? alone\n  Use the leftmost column(s) prefix rule.\n\nWHEN TO ADD AN INDEX:\n  Slow query appears in EXPLAIN ANALYZE showing 'Seq Scan' on large table\n  Column appears in WHERE, JOIN ON, ORDER BY, GROUP BY\n  Column has high cardinality (many unique values)\n\nWHEN NOT TO ADD AN INDEX:\n  Write-heavy tables (every write must update all indexes)\n  Small tables (full scan faster than index for < 1000 rows)\n  Low cardinality (boolean column: index not selective enough)\n```\n\n---\n\n## Transactions and Isolation Levels\n\n```\nTransaction:\nBEGIN;\n  INSERT INTO orders (user_id, total) VALUES (1, 99.99);\n  UPDATE inventory SET quantity = quantity - 1 WHERE product_id = 42;\nCOMMIT;  -- both succeed atomically\n-- or ROLLBACK; to undo both\n\nISOLATION LEVELS (from weakest to strongest):\n\nREAD UNCOMMITTED: can see other transactions' UNCOMMITTED changes (dirty read)\n  Problem: dirty read (read data that gets rolled back = never existed)\n  Almost never used\n\nREAD COMMITTED (PostgreSQL default):\n  Only sees COMMITTED data from other transactions\n  Problem: non-repeatable read (read same row twice, different result if other txn committed between reads)\n\nREPEATABLE READ:\n  Reads within same transaction see a snapshot of data as of transaction start\n  Problem: phantom read (new rows inserted by other txn appear in range queries)\n\nSERIALIZABLE:\n  Transactions appear to execute one after another (no concurrency anomalies)\n  Most expensive: serialisation failures possible, must retry\n  Use for: complex transactions that must be correct (financial operations)\n\nPostgreSQL default: READ COMMITTED\n  Good enough for: most web application queries\n  Use REPEATABLE READ or SERIALIZABLE for: multi-step financial transactions\n```\n\n---\n\n## N+1 Query Problem — The Silent Performance Killer\n\n```\nTHE PROBLEM:\n  Fetch 100 users + their orders:\n\n  WRONG (N+1):\n    users = db.query(\"SELECT * FROM users LIMIT 100\")  -- 1 query\n    for user in users:\n        orders = db.query(\"SELECT * FROM orders WHERE user_id = ?\", user.id)  -- 100 queries\n    TOTAL: 101 queries! (1 + N where N=100)\n\n  RIGHT (1 query with JOIN):\n    db.query('SELECT u.*, o.* FROM users u LEFT JOIN orders o ON u.id = o.user_id LIMIT 100')  -- 1 query, same data\n\n  OR (2 queries with IN clause):\n    users = db.query(\"SELECT * FROM users LIMIT 100\")  -- 1 query\n    user_ids = [u.id for u in users]\n    orders = db.query(\"SELECT * FROM orders WHERE user_id = ANY(?)\", user_ids)  -- 1 query\n\n  N+1 is the #1 ORM performance issue. ORMs like Hibernate, SQLAlchemy\n  can generate N+1 if you don't use eager loading:\n    Java Hibernate: @OneToMany fetch = EAGER or JOIN FETCH\n    Python SQLAlchemy: joinedload() or selectinload()\n```\n\n---\n\n## EXPLAIN ANALYZE — Reading Query Plans\n\n```sql\nEXPLAIN ANALYZE\nSELECT * FROM orders WHERE user_id = 123 AND created_at > '2025-01-01';\n\n-- Example output:\n-- Bitmap Heap Scan on orders  (cost=93.45..5432.12 rows=1234 width=64)\n--   Recheck Cond: ((user_id = 123) AND (created_at > '2025-01-01'))\n--   -> Bitmap Index Scan on idx_orders_user_date  (cost=0.00..93.14 rows=1234)\n\nKEY THINGS TO LOOK FOR:\n  Seq Scan: full table scan — usually bad on large tables, means missing index\n  Index Scan: good — using an index\n  Index Only Scan: best — only reads index, not actual table rows\n  Nested Loop: joining two small tables, usually fine\n  Hash Join: joining larger tables, generally good\n  Merge Join: sorted data join, can be very efficient\n\ncost=START..TOTAL: planner's estimated cost (arbitrary units)\nrows=N: estimated row count\nactual time=X..Y ms: actual execution time (from ANALYZE)\nactual rows=N: actual rows returned\n```\n\n---\n\n## Normalisation and Denormalisation\n\n```\nNORMALISATION (reduce redundancy):\n  Split data into related tables, no duplicated data.\n  1NF: atomic values (no arrays in columns)\n  2NF: non-key attributes depend on whole key\n  3NF: no transitive dependencies\n\n  Orders: order_id, user_id, product_id, quantity\n  NOT: order_id, customer_name, customer_email, product_name, product_price\n  (name/email/price duplicated in every order row)\n\n  Benefits: no anomalies (update user email in ONE place, not every order row)\n  Costs: more JOINs required for queries\n\nDENORMALISATION (intentional redundancy for performance):\n  Store computed or related data together to avoid expensive JOINs.\n  orders table: also store user_email, product_name (duplicated intentionally)\n  Fast reads (no JOIN), fast for reporting.\n  Trade-off: must keep denormalised copies in sync on write.\n\nWHEN TO DENORMALISE:\n  Read-heavy reporting tables (data warehouse)\n  Caching computed results that are expensive to recalculate\n  NoSQL databases denormalise by default (document store puts everything together)\n```\n\n---\n\n## PostgreSQL vs MySQL — Key Differences\n\n```\n+------------------+------------------------+------------------------+\n| Feature          | PostgreSQL             | MySQL (InnoDB)         |\n+------------------+------------------------+------------------------+\n| ACID             | Full ACID              | Full ACID (InnoDB)     |\n| JSON support     | JSONB (indexed, fast)  | JSON (limited indexing)|\n| Full-text search | Built-in, powerful     | Basic                  |\n| Replication      | Streaming replication  | Binary log replication |\n| Extensions       | PostGIS, pg_vector, etc| Fewer                  |\n| Concurrency      | MVCC (excellent)       | MVCC (good)            |\n| Default auth     | Trust (local) / md5   | Password required      |\n| License          | PostgreSQL License     | GPL / Commercial       |\n| Cloud managed    | RDS, Aurora, Supabase  | RDS, Aurora            |\n+------------------+------------------------+------------------------+\n\nFor new projects: PostgreSQL is generally recommended.\nMySQL is fine if your team knows it or you're using pre-existing MySQL infrastructure.\n```\n\n---\n\n## Mind Map\n\n```\nRELATIONAL DATABASES\n|\n+-- ACID\n|   +-- Atomicity (all or nothing)\n|   +-- Consistency (constraints enforced)\n|   +-- Isolation (concurrent transaction safety)\n|   +-- Durability (committed data survives crash)\n|\n+-- SQL\n|   +-- DDL (CREATE TABLE, INDEX, ALTER)\n|   +-- DML (INSERT, UPDATE, DELETE)\n|   +-- DQL (SELECT, JOIN, GROUP BY, HAVING)\n|   +-- Transactions (BEGIN/COMMIT/ROLLBACK)\n|\n+-- INDEXES\n|   +-- B-tree (default — =, <, >, BETWEEN)\n|   +-- Hash (equality only)\n|   +-- Compound (leftmost prefix rule)\n|   +-- Partial (WHERE condition)\n|   +-- EXPLAIN ANALYZE to verify\n|\n+-- PERFORMANCE\n|   +-- N+1 query (use JOIN or selectinload)\n|   +-- Missing indexes (Seq Scan in EXPLAIN)\n|   +-- Normalise for integrity, denormalise for speed\n|\n+-- ISOLATION LEVELS\n    +-- Read Committed (default, most cases)\n    +-- Repeatable Read\n    +-- Serializable (financial, critical operations)\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **SQL Tutorial - Full Database Course for Beginners** by freeCodeCamp:\n  https://www.youtube.com/watch?v=HXV3zeQKqGY\n  - 4 hours. Complete beginner SQL course with PostgreSQL.\n- **Database Indexing Explained** by hussein nasser:\n  https://www.youtube.com/watch?v=-qNSXK7s7_w\n  - B-tree, hash, composite indexes with real query plan examples.\n\n### Free Books and Articles\n- **PostgreSQL official tutorial**: https://www.postgresql.org/docs/current/tutorial.html\n- **Use The Index, Luke** (free book on SQL indexing): https://use-the-index-luke.com/\n  - The best resource for understanding SQL indexes deeply.\n\n### Practice\n- **SQLZoo** (interactive SQL): https://sqlzoo.net/\n- **pgexercises** (PostgreSQL exercises): https://pgexercises.com/\n- **Explain.dalibo.com** (visualise PostgreSQL EXPLAIN plans): https://explain.dalibo.com/\n",
   "questions": [
     {
       "id": "rdb-q1",
       "type": "mcq",
-      "prompt": "ACID atomicity in a bank transfer means:",
+      "prompt": "What does ACID stand for in database transactions?",
       "choices": [
-        "The transfer is fast",
-        "BOTH debit from sender AND credit to recipient happen or neither does \u2014 no partial transfer that leaves money in limbo",
-        "Only one account is updated",
-        "Transfers are queued"
+        "Automated, Concurrent, Integrated, Distributed",
+        "Atomicity, Consistency, Isolation, Durability — the four properties that guarantee reliable transaction processing",
+        "Asynchronous, Cached, Indexed, Distributed",
+        "Atomic, Consistent, Indexed, Durable"
       ],
       "answerIndex": 1,
-      "explanation": "Atomicity: all-or-nothing. A transfer that debits but never credits is worse than doing nothing. The database guarantees both operations succeed or both roll back.",
+      "explanation": "A=Atomicity (all or nothing). C=Consistency (constraints maintained). I=Isolation (concurrent transactions don't interfere). D=Durability (committed data survives crashes). These four guarantee data integrity even with failures and concurrency.",
       "tags": [
-        "RDBMS",
-        "ACID",
-        "atomicity"
+        "acid",
+        "transactions",
+        "basics"
       ]
     },
     {
       "id": "rdb-q2",
       "type": "mcq",
-      "prompt": "N+1 query problem: 100 blog posts, fetch author for each \u2014 how many queries?",
+      "prompt": "What does Atomicity in ACID guarantee?",
       "choices": [
-        "1",
-        "101 \u2014 1 for posts + 1 per post for the author. This is N+1",
-        "100",
-        "2"
+        "Each operation runs in a separate thread",
+        "A transaction is either FULLY completed or FULLY rolled back — no partial execution. If the power goes out mid-transaction, all changes are undone.",
+        "Transactions run faster",
+        "Data is compressed atomically"
       ],
       "answerIndex": 1,
-      "explanation": "If author is lazily loaded: 1 SELECT * FROM posts + 100 SELECT * FROM users WHERE id=? = 101 queries. Fix: JOIN posts with users, or ORM eager loading (.include(['author'])).",
+      "explanation": "Atomicity: debit Alice AND credit Bob happen together or neither happens. You can't have Alice's balance reduced without Bob's being increased. Even a crash mid-transaction is safe — PostgreSQL WAL replay undoes incomplete transactions on recovery.",
       "tags": [
-        "RDBMS",
-        "N+1",
-        "performance"
+        "acid",
+        "atomicity"
       ]
     },
     {
       "id": "rdb-q3",
       "type": "mcq",
-      "prompt": "Composite index on (user_id, created_at). When is it NOT used efficiently?",
+      "prompt": "What is a foreign key constraint?",
       "choices": [
-        "WHERE user_id = 1 AND created_at > '2024'",
-        "WHERE user_id = 1",
-        "WHERE created_at > '2024' (without user_id filter)",
-        "ORDER BY user_id, created_at"
+        "An encryption key",
+        "A constraint that ensures a value in one table references a valid value in another table — prevents orphaned records",
+        "An index on a primary key",
+        "A unique identifier generated by the database"
+      ],
+      "answerIndex": 1,
+      "explanation": "FOREIGN KEY (user_id) REFERENCES users(id): ensures every order.user_id points to a real user in the users table. Trying to insert an order with user_id=999 (no such user) -> constraint violation. Deleting a user with orders -> violation (unless CASCADE is set).",
+      "tags": [
+        "relational",
+        "foreign-key",
+        "constraints"
+      ]
+    },
+    {
+      "id": "rdb-q4",
+      "type": "mcq",
+      "prompt": "What is an N+1 query problem?",
+      "choices": [
+        "Using more than N indexes",
+        "Fetching 1 collection then making N additional queries — one per item — instead of a single JOIN query. 100 users = 101 queries instead of 1.",
+        "Joining more than N tables",
+        "Having N+1 columns in a table"
+      ],
+      "answerIndex": 1,
+      "explanation": "N+1: SELECT users (1 query) -> for each user: SELECT orders WHERE user_id = ? (N queries) = N+1 total. Fix: JOIN in one query, or use ORM eager loading (Hibernate JOIN FETCH, SQLAlchemy joinedload). N+1 causes the most ORM performance issues.",
+      "tags": [
+        "sql",
+        "n+1",
+        "performance"
+      ]
+    },
+    {
+      "id": "rdb-q5",
+      "type": "mcq",
+      "prompt": "What does EXPLAIN ANALYZE 'Seq Scan' mean?",
+      "choices": [
+        "A fast sequential read",
+        "A full table scan — reading every row in the table. Usually means a missing index on a large table.",
+        "A sequential index scan",
+        "Scan of sequence objects"
+      ],
+      "answerIndex": 1,
+      "explanation": "Seq Scan = full table scan. On a table of 1M rows, Seq Scan reads all 1M rows even if only 1 matches. If you see Seq Scan on a large table with low selectivity, add an index on the WHERE clause column. Index Scan or Index Only Scan is what you want.",
+      "tags": [
+        "sql",
+        "explain",
+        "indexes"
+      ]
+    },
+    {
+      "id": "rdb-q6",
+      "type": "mcq",
+      "prompt": "What is the difference between WHERE and HAVING in SQL?",
+      "choices": [
+        "They are identical",
+        "WHERE filters BEFORE grouping (individual rows). HAVING filters AFTER grouping (aggregated results). WHERE cannot reference aggregate functions (COUNT, SUM, etc.).",
+        "HAVING is older syntax for WHERE",
+        "WHERE is for joins, HAVING for subqueries"
+      ],
+      "answerIndex": 1,
+      "explanation": "WHERE: SELECT ... FROM orders WHERE total > 100 — filters individual order rows before GROUP BY. HAVING: SELECT user_id, COUNT(*) FROM orders GROUP BY user_id HAVING COUNT(*) > 5 — filters groups after aggregation. You cannot use SUM/COUNT in WHERE clause.",
+      "tags": [
+        "sql",
+        "where",
+        "having"
+      ]
+    },
+    {
+      "id": "rdb-q7",
+      "type": "mcq",
+      "prompt": "What is the 'leftmost prefix rule' for compound indexes?",
+      "choices": [
+        "Use the first column often",
+        "A compound index (a, b, c) can be used for queries filtering on (a), (a,b), or (a,b,c) — but NOT for queries that skip the leftmost column (b alone, c alone, or b,c without a)",
+        "Always sort by leftmost column",
+        "Leftmost column must be the primary key"
+      ],
+      "answerIndex": 1,
+      "explanation": "Index (user_id, created_at): WHERE user_id = 5 AND created_at > '2025' -> uses full index. WHERE user_id = 5 -> uses index (partial). WHERE created_at > '2025' -> CANNOT use this index (skips user_id). Create a separate index (created_at) if you need that query.",
+      "tags": [
+        "sql",
+        "indexes",
+        "compound-index"
+      ]
+    },
+    {
+      "id": "rdb-q8",
+      "type": "mcq",
+      "prompt": "What is database normalisation?",
+      "choices": [
+        "Encrypting sensitive columns",
+        "Organising a database into separate related tables to reduce data duplication — each fact stored in one place, reducing update anomalies",
+        "Creating indexes on all columns",
+        "Scaling the database horizontally"
+      ],
+      "answerIndex": 1,
+      "explanation": "Normalisation: don't repeat yourself in the database. User's email in orders.customer_email AND users.email = problem (update in one place, other becomes stale). Solution: store email only in users, use foreign key from orders. Single source of truth.",
+      "tags": [
+        "relational",
+        "normalisation",
+        "design"
+      ]
+    },
+    {
+      "id": "rdb-q9",
+      "type": "mcq",
+      "prompt": "What SQL isolation level should you use for a multi-step financial transaction (debit + credit)?",
+      "choices": [
+        "READ UNCOMMITTED (fastest)",
+        "READ COMMITTED (default)",
+        "REPEATABLE READ or SERIALIZABLE to prevent concurrent transactions from interfering with the complete debit+credit sequence",
+        "Isolation level doesn't matter for this"
       ],
       "answerIndex": 2,
-      "explanation": "Leftmost prefix rule: composite index (A, B) supports queries on A alone, or A+B together. Queries on B alone cannot use the index (no A prefix). Solution: add a separate index on created_at if needed.",
+      "explanation": "READ COMMITTED: another transaction's committed change can be visible WITHIN your transaction. For debit+credit: if another transaction modifies the same account between your two updates, READ COMMITTED may produce incorrect results. SERIALIZABLE: transactions appear sequential, correct by definition.",
       "tags": [
-        "RDBMS",
-        "indexing",
-        "composite-index"
+        "sql",
+        "isolation",
+        "transactions",
+        "financial"
+      ]
+    },
+    {
+      "id": "rdb-q10",
+      "type": "mcq",
+      "prompt": "What does a LEFT JOIN return vs INNER JOIN?",
+      "choices": [
+        "They return the same rows",
+        "LEFT JOIN: all rows from left table + matching rows from right (NULL if no match). INNER JOIN: only rows with matches in BOTH tables. LEFT JOIN includes users with no orders.",
+        "LEFT JOIN is faster",
+        "INNER JOIN returns more rows"
+      ],
+      "answerIndex": 1,
+      "explanation": "INNER JOIN users u JOIN orders o: only users who HAVE at least one order. LEFT JOIN users u LEFT JOIN orders o: ALL users (orders columns = NULL for users with no orders). Use LEFT JOIN for 'show me all X, and their Y if they have any'.",
+      "tags": [
+        "sql",
+        "join",
+        "left-join"
+      ]
+    },
+    {
+      "id": "rdb-q11",
+      "type": "mcq",
+      "prompt": "What is a CTE (Common Table Expression) and why use it?",
+      "choices": [
+        "A type of join",
+        "WITH clause creates a named temporary result set used within the same query — improves readability over nested subqueries, can make complex queries understandable",
+        "A database constraint",
+        "A replication technique"
+      ],
+      "answerIndex": 1,
+      "explanation": "WITH high_value AS (SELECT user_id FROM orders WHERE total > 1000) SELECT u.name FROM users u JOIN high_value h ON u.id = h.user_id. Same as subquery but readable. Recursive CTEs (WITH RECURSIVE) enable tree/graph queries.",
+      "tags": [
+        "sql",
+        "cte",
+        "readability"
+      ]
+    },
+    {
+      "id": "rdb-q12",
+      "type": "mcq",
+      "prompt": "What is denormalisation and when is it appropriate?",
+      "choices": [
+        "Removing all indexes for performance",
+        "Intentionally adding redundant data (duplicating from other tables) to avoid JOINs — trading write overhead for faster reads",
+        "Converting to NoSQL",
+        "Changing column data types"
+      ],
+      "answerIndex": 1,
+      "explanation": "Denormalise: store product_name in order_items even though products table exists. Reads are faster (no JOIN), reporting is simpler. Trade-off: when product name changes, must update both places. Use for: read-heavy reporting, analytics tables, caching computed values.",
+      "tags": [
+        "sql",
+        "denormalisation",
+        "performance"
+      ]
+    },
+    {
+      "id": "rdb-q13",
+      "type": "mcq",
+      "prompt": "What is the PostgreSQL SERIAL type?",
+      "choices": [
+        "A serialised column",
+        "Auto-incrementing INTEGER — equivalent to INTEGER with a sequence that generates unique IDs automatically. Modern PostgreSQL prefers: id BIGINT GENERATED ALWAYS AS IDENTITY",
+        "A unique index type",
+        "A replication identifier"
+      ],
+      "answerIndex": 1,
+      "explanation": "SERIAL = creates a sequence, sets default to nextval(sequence). Each insert auto-gets next ID. Modern syntax: id BIGINT GENERATED ALWAYS AS IDENTITY (SQL standard). BIGSERIAL for 64-bit. Use BIGSERIAL for tables that might exceed 2 billion rows.",
+      "tags": [
+        "postgresql",
+        "serial",
+        "primary-key"
+      ]
+    },
+    {
+      "id": "rdb-q14",
+      "type": "mcq",
+      "prompt": "What is a partial index in PostgreSQL?",
+      "choices": [
+        "An index on a subset of columns",
+        "An index with a WHERE condition — only rows matching the condition are indexed. Smaller, faster than full index.",
+        "An incomplete index build",
+        "An index on NULL values only"
+      ],
+      "answerIndex": 1,
+      "explanation": "CREATE INDEX idx_active_users ON users(email) WHERE active = true. Only active users in index. If 90% of users are inactive, full index has 10x more entries than partial index. Smaller index = fits in memory = faster. Use when: most queries filter by a stable condition (email lookup only for active users).",
+      "tags": [
+        "postgresql",
+        "partial-index",
+        "performance"
+      ]
+    },
+    {
+      "id": "rdb-q15",
+      "type": "mcq",
+      "prompt": "What does VACUUM do in PostgreSQL?",
+      "choices": [
+        "Deletes old backups",
+        "Reclaims storage from dead rows (rows updated/deleted but not yet physically removed by MVCC) and updates statistics for the query planner",
+        "Compresses the database",
+        "Reorganises indexes"
+      ],
+      "answerIndex": 1,
+      "explanation": "PostgreSQL MVCC: UPDATE creates a new row version, marks old version as dead (not immediately deleted). VACUUM: physically removes dead rows, reclaims disk space, updates planner statistics. AUTOVACUUM runs automatically — but heavily updated tables may need manual tuning.",
+      "tags": [
+        "postgresql",
+        "vacuum",
+        "mvcc"
+      ]
+    },
+    {
+      "id": "rdb-q16",
+      "type": "mcq",
+      "prompt": "What is the PostgreSQL JSONB type and when should you use it?",
+      "choices": [
+        "JSON stored as text with no indexing",
+        "Binary JSON that supports indexing (GIN index), efficient storage, and query operators — good for semi-structured data that varies per row",
+        "JSON only for legacy compatibility",
+        "JSONB is deprecated"
+      ],
+      "answerIndex": 1,
+      "explanation": "JSONB: binary JSON stored efficiently. CREATE INDEX ON products USING GIN(attributes). Query: WHERE attributes @> '{\"color\": \"red\"}'. Use for: product attributes that vary by category, user preferences, metadata. Not a replacement for proper relational tables — use when schema genuinely varies per row.",
+      "tags": [
+        "postgresql",
+        "jsonb",
+        "semi-structured"
+      ]
+    },
+    {
+      "id": "rdb-q17",
+      "type": "mcq",
+      "prompt": "What is MVCC (Multi-Version Concurrency Control)?",
+      "choices": [
+        "Multiple database versions",
+        "Readers never block writers, writers never block readers — each transaction sees a snapshot of the database at the time it started",
+        "Multi-core CPU optimisation",
+        "A replication protocol"
+      ],
+      "answerIndex": 1,
+      "explanation": "MVCC: instead of locking rows for reads, every transaction sees a 'snapshot' of the database. Writer creates new version, old version stays for ongoing readers. Result: Readers never block writers (no shared locks). High concurrency. PostgreSQL, MySQL InnoDB both use MVCC.",
+      "tags": [
+        "postgresql",
+        "mvcc",
+        "concurrency"
+      ]
+    },
+    {
+      "id": "rdb-q18",
+      "type": "mcq",
+      "prompt": "What is the EXPLAIN ANALYZE 'Index Only Scan'?",
+      "choices": [
+        "Same as Index Scan",
+        "The most efficient scan — query answered entirely from the index without touching the table. Requires that all needed columns are in the index.",
+        "Full table scan using index",
+        "Deprecated feature"
+      ],
+      "answerIndex": 1,
+      "explanation": "Index Only Scan: all required data is in the index itself. No table heap access. Fastest possible read. Example: SELECT user_id FROM orders WHERE user_id = 123 with index on user_id. The index contains the user_id value — no need to look up the actual row.",
+      "tags": [
+        "postgresql",
+        "explain",
+        "index-only-scan"
+      ]
+    },
+    {
+      "id": "rdb-q19",
+      "type": "mcq",
+      "prompt": "When should you NOT add a database index?",
+      "choices": [
+        "Never — always add indexes",
+        "Small tables (<1000 rows), columns with very low cardinality (boolean), heavily write-dominated tables where index maintenance overhead exceeds read benefit",
+        "Tables with more than 10 columns",
+        "Never add indexes to foreign key columns"
+      ],
+      "answerIndex": 1,
+      "explanation": "Index overhead: every INSERT/UPDATE/DELETE must also update all indexes on that table. For write-heavy tables with millions of inserts/sec, too many indexes can SLOW DOWN writes more than they help reads. For small tables, full scan is faster than index. Balance read gain vs write cost.",
+      "tags": [
+        "sql",
+        "indexes",
+        "when-not-to-index"
+      ]
+    },
+    {
+      "id": "rdb-q20",
+      "type": "mcq",
+      "prompt": "What does RETURNING do in PostgreSQL INSERT/UPDATE?",
+      "choices": [
+        "Returns the number of rows affected",
+        "Returns specified column values of the inserted/updated rows — avoids a second SELECT to get the generated ID",
+        "Returns an error code",
+        "Returns the query plan"
+      ],
+      "answerIndex": 1,
+      "explanation": "INSERT INTO users (name) VALUES ('Alice') RETURNING id, created_at. Returns the auto-generated id and timestamp immediately without a second round-trip query. Very useful with ORM frameworks. Standard PostgreSQL extension (MySQL equivalent: LAST_INSERT_ID()).",
+      "tags": [
+        "postgresql",
+        "returning",
+        "dml"
       ]
     }
   ],
   "flashcards": [
     {
       "id": "rdb-fc1",
-      "front": "ACID explained",
-      "back": "Atomicity: all-or-nothing. Consistency: valid state transitions only. Isolation: concurrent txns don't interfere (levels). Durability: committed = persisted to disk (WAL).",
+      "front": "ACID mnemonic",
+      "back": "A=Atomicity (all or nothing). C=Consistency (constraints enforced). I=Isolation (concurrent transactions safe). D=Durability (committed data survives crash). WAL (Write-Ahead Log) is the mechanism that provides C and D. MVCC provides I.",
       "tags": [
-        "RDBMS",
-        "ACID"
+        "acid",
+        "transactions"
       ]
     },
     {
       "id": "rdb-fc2",
-      "front": "Isolation levels",
-      "back": "Read uncommitted: dirty reads. Read committed: no dirty reads (PG default). Repeatable read: no non-repeatable reads. Serializable: no phantoms. Higher = more consistent, lower throughput.",
+      "front": "N+1 fix strategies",
+      "back": "1. JOIN in one query. 2. ORM eager loading (Hibernate: JOIN FETCH, SQLAlchemy: joinedload). 3. Batch load with IN clause. N+1 is the #1 ORM performance killer. Use EXPLAIN ANALYZE to spot it: N identical queries with different ID values.",
       "tags": [
-        "RDBMS",
-        "isolation"
+        "sql",
+        "n+1",
+        "orm"
       ]
     },
     {
       "id": "rdb-fc3",
-      "front": "Composite index leftmost prefix rule",
-      "back": "Index (A, B, C) works for: A, A+B, A+B+C queries. Does NOT work for: B alone, C alone, B+C. Order columns by query frequency and filter selectivity.",
+      "front": "Compound index leftmost prefix rule",
+      "back": "Index (a, b, c) works for: WHERE a=?, WHERE a=? AND b=?, WHERE a=? AND b=? AND c=?. Does NOT work for: WHERE b=?, WHERE c=?, WHERE b=? AND c=? (skips leftmost). Order columns by most-selective and most-common-in-queries.",
       "tags": [
-        "RDBMS",
-        "indexing"
+        "sql",
+        "indexes",
+        "compound-index"
       ]
     },
     {
       "id": "rdb-fc4",
-      "front": "N+1 fix",
-      "back": "Use JOIN (single query returns all data). ORM: eager/include loading. GraphQL: dataloader batching. N+1 = 100 posts \u2192 101 queries. JOIN = 1 query. Always check query count in development.",
+      "front": "EXPLAIN ANALYZE scan types",
+      "back": "Seq Scan = full table scan (bad on large tables, add index). Index Scan = uses index, accesses table. Index Only Scan = uses index only (best). Bitmap Heap Scan = multiple index matches, batches heap access.",
       "tags": [
-        "RDBMS",
-        "N+1"
+        "sql",
+        "explain",
+        "performance"
+      ]
+    },
+    {
+      "id": "rdb-fc5",
+      "front": "JOIN types cheat sheet",
+      "back": "INNER JOIN: only matching rows in both tables. LEFT JOIN: all left rows + matching right (NULL if none). RIGHT JOIN: all right + matching left. FULL OUTER JOIN: all rows from both, NULLs where no match. Most common: INNER and LEFT.",
+      "tags": [
+        "sql",
+        "joins"
+      ]
+    },
+    {
+      "id": "rdb-fc6",
+      "front": "Isolation levels — practical choice",
+      "back": "READ COMMITTED (default): good for most web queries. REPEATABLE READ: safe for multi-step read then write in same transaction. SERIALIZABLE: use for financial transactions where intermediate state must be consistent. Always start with default, upgrade if anomaly occurs.",
+      "tags": [
+        "sql",
+        "isolation",
+        "transactions"
+      ]
+    },
+    {
+      "id": "rdb-fc7",
+      "front": "Normalise vs denormalise decision",
+      "back": "Normalise: data integrity, single source of truth, complex queries with JOINs. Denormalise: read performance, reporting, analytics. Rule: normalise first. Denormalise specific hot read paths when profiling shows JOINs are the bottleneck.",
+      "tags": [
+        "sql",
+        "normalisation",
+        "performance"
+      ]
+    },
+    {
+      "id": "rdb-fc8",
+      "front": "PostgreSQL distinctive features",
+      "back": "JSONB + GIN index (fast JSON queries). VACUUM/AUTOVACUUM (MVCC cleanup). RETURNING (get inserted rows without second query). Partial indexes (WHERE condition in index). PostGIS extension (geospatial). pg_vector (embeddings/AI). Extensions ecosystem.",
+      "tags": [
+        "postgresql",
+        "features"
       ]
     }
   ],

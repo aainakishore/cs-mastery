@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Question } from '../content/schema'
 
@@ -12,21 +12,63 @@ interface Props {
 export function QuizCard({ question, index, total, onAnswer }: Props) {
   const [selected, setSelected] = useState<unknown>(null)
   const [submitted, setSubmitted] = useState(false)
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
+
+  // Reset state whenever the question changes (index changes)
+  useEffect(() => {
+    setSelected(null)
+    setSubmitted(false)
+    setIsCorrect(null)
+  }, [question.id, index])
+
+  const checkCorrect = (ans: unknown): boolean => {
+    if (question.type === 'mcq' || question.type === 'codeOutput') {
+      return ans === question.answerIndex
+    }
+    if (question.type === 'multi') {
+      const a = [...((ans as number[]) ?? [])].sort()
+      const b = [...question.answerIndexes].sort()
+      return a.length === b.length && a.every((v, i) => v === b[i])
+    }
+    if (question.type === 'fillBlank') {
+      const norm = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '')
+      return question.accepted.some(acc => norm(acc) === norm((ans as string) ?? ''))
+    }
+    if (question.type === 'order') {
+      const a = (ans as number[]) ?? []
+      return a.length === question.correctOrder.length && a.every((v, i) => v === question.correctOrder[i])
+    }
+    if (question.type === 'match') {
+      const a = (ans as [number, number][]) ?? []
+      const b = question.pairs
+      if (a.length !== b.length) return false
+      return b.every(([l, r]) => a.some(([al, ar]) => al === l && ar === r))
+    }
+    return false
+  }
 
   const handleSubmit = () => {
     if (selected === null && question.type !== 'fillBlank') return
+    if (submitted) return
+    const correct = checkCorrect(selected)
+    setIsCorrect(correct)
     setSubmitted(true)
-    setTimeout(() => onAnswer(selected), 500)
+    // Show result briefly then advance
+    setTimeout(() => onAnswer(selected), 1200)
   }
+
+  const feedbackBorder = submitted
+    ? isCorrect ? 'border-2 border-emerald-500' : 'border-2 border-red-500'
+    : ''
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={question.id}
+        key={`${question.id}-${index}`}
         initial={{ opacity: 0, x: 40 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -40 }}
-        className="bg-slate-800 rounded-2xl p-6 shadow-xl"
+        className={`bg-slate-800 rounded-2xl p-6 shadow-xl transition-all ${feedbackBorder}`}
       >
         <div className="text-xs text-slate-400 mb-3">
           Question {index + 1} / {total}
@@ -45,6 +87,7 @@ export function QuizCard({ question, index, total, onAnswer }: Props) {
             selected={selected as number | null}
             onSelect={(i) => !submitted && setSelected(i)}
             disabled={submitted}
+            correctIndex={submitted ? question.answerIndex : undefined}
           />
         )}
 
@@ -90,12 +133,33 @@ export function QuizCard({ question, index, total, onAnswer }: Props) {
 
         <button
           onClick={handleSubmit}
-          disabled={submitted}
-          className="mt-6 w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50
-            text-white font-bold py-3 rounded-xl transition-all"
+          disabled={submitted || (selected === null && question.type !== 'fillBlank')}
+          className={`mt-6 w-full font-bold py-3 rounded-xl transition-all
+            ${submitted
+              ? isCorrect
+                ? 'bg-emerald-600 text-white'
+                : 'bg-red-600 text-white'
+              : 'bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white'
+            }`}
         >
-          {submitted ? 'Next...' : 'Submit Answer'}
+          {submitted ? (isCorrect ? '✓ Correct!' : '✗ Wrong') : 'Submit Answer'}
         </button>
+
+        {/* Explanation shown after submit */}
+        {submitted && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mt-4 rounded-xl p-4 text-sm ${
+              isCorrect
+                ? 'bg-emerald-900/40 border border-emerald-700 text-emerald-200'
+                : 'bg-red-900/40 border border-red-700 text-red-200'
+            }`}
+          >
+            <span className="font-bold">{isCorrect ? '💡 ' : '📖 '}</span>
+            {question.explanation}
+          </motion.div>
+        )}
       </motion.div>
     </AnimatePresence>
   )
@@ -106,28 +170,39 @@ function MCQInput({
   selected,
   onSelect,
   disabled,
+  correctIndex,
 }: {
   choices: string[]
   selected: number | null
   onSelect: (i: number) => void
   disabled: boolean
+  correctIndex?: number
 }) {
   return (
     <div className="space-y-2">
-      {choices.map((c, i) => (
-        <button
-          key={i}
-          onClick={() => onSelect(i)}
-          disabled={disabled}
-          className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all
-            ${selected === i
-              ? 'bg-indigo-700 border-indigo-400 text-white'
-              : 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'
-            } disabled:opacity-70`}
-        >
-          {c}
-        </button>
-      ))}
+      {choices.map((c, i) => {
+        let cls = 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'
+        if (disabled && correctIndex !== undefined) {
+          if (i === correctIndex) cls = 'bg-emerald-800 border-emerald-500 text-white'
+          else if (i === selected && i !== correctIndex) cls = 'bg-red-800 border-red-500 text-white'
+          else cls = 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+        } else if (selected === i) {
+          cls = 'bg-indigo-700 border-indigo-400 text-white'
+        }
+        return (
+          <button
+            key={i}
+            onClick={() => onSelect(i)}
+            disabled={disabled}
+            className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${cls}`}
+          >
+            <span className="font-mono text-slate-500 mr-2">{String.fromCharCode(65 + i)}.</span>
+            {c}
+            {disabled && i === correctIndex && <span className="float-right">✓</span>}
+            {disabled && i === selected && i !== correctIndex && <span className="float-right">✗</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }

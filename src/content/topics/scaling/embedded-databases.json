@@ -7,87 +7,440 @@
   "prereqs": [
     "relational-databases"
   ],
-  "guide": "# Embedded Databases (SQLite)\n\nAn embedded database runs **within the application process** \u2014 no server, no network, no authentication. SQLite is the most deployed database engine in the world (every smartphone, browser, desktop app).\n\n## SQLite Architecture\n\n```\nTraditional DB:           Embedded DB (SQLite):\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510          \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502   Your App   \u2502          \u2502   Your App + SQLite Library       \u2502\n\u2502      \u2195 TCP   \u2502          \u2502                                   \u2502\n\u2502  DB Server   \u2502          \u2502   myapp.db  \u2190 single file         \u2502\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500          \u2502   No server, no auth, no network  \u2502\n                           \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nDeployment: zero-config, copy the .db file = full backup\n```\n\n## When to Use SQLite\n\n```\nIdeal use cases:\n\u2713 Local embedded apps (notes, desktop apps, offline-first)\n\u2713 Mobile apps (iOS/Android use SQLite natively)\n\u2713 Device-local caching (browser Cache API uses SQLite)\n\u2713 Single-user applications\n\u2713 Development and testing (swap prod DB \u2192 SQLite test)\n\u2713 Edge computing (Cloudflare D1 uses SQLite)\n\u2713 CLI tools and scripts with structured data\n\nNot ideal:\n\u2717 High concurrent writes (SQLite locks the file on write)\n\u2717 Multi-server applications (can't share a file across servers)\n\u2717 Very large datasets (100GB+ starts showing limitations)\n\u2717 Network access (no client/server model)\n```\n\n## SQLite in Node.js (better-sqlite3)\n\n```javascript\nconst Database = require('better-sqlite3');\nconst db = new Database('myapp.db');\n\n// Schema\ndb.exec(`\n  CREATE TABLE IF NOT EXISTS users (\n    id    INTEGER PRIMARY KEY AUTOINCREMENT,\n    email TEXT UNIQUE NOT NULL,\n    name  TEXT NOT NULL,\n    created_at DATETIME DEFAULT (datetime('now'))\n  )\n`);\n\n// Prepared statements (safe against SQL injection)\nconst insert = db.prepare('INSERT INTO users (email, name) VALUES (?, ?)');\nconst findByEmail = db.prepare('SELECT * FROM users WHERE email = ?');\n\n// Better-sqlite3 is SYNCHRONOUS (unlike most Node DB libs)\ninsert.run('alice@example.com', 'Alice');\nconst user = findByEmail.get('alice@example.com');  // returns row or undefined\n\n// Transaction\nconst transfer = db.transaction((from, to, amount) => {\n  db.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').run(amount, from);\n  db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').run(amount, to);\n});\ntransfer(1, 2, 100);   // atomic\n```\n\n## WAL Mode (Write-Ahead Logging)\n\n```sql\nPRAGMA journal_mode=WAL;\n-- WAL allows concurrent reads + ONE writer simultaneously\n-- Default mode: writer blocks all readers\n-- WAL: dramatically better for read-heavy workloads with occasional writes\n```\n\n## Common Pitfalls\n- **Concurrent writes from multiple processes** \u2014 SQLite allows only one writer at a time (file lock). Use WAL mode + pooling for concurrent scenarios.\n- **Not using WAL mode** \u2014 default journal mode locks out readers during writes. Almost always enable WAL.\n- **Not using prepared statements** \u2014 string interpolation in queries = SQL injection risk.\n- **Storing large blobs in DB** \u2014 store file paths/references, keep files on disk. Large blobs slow down the DB file.\n",
+  "guide": "# Embedded Databases (SQLite & RocksDB)\n\n## What Is an Embedded Database?\n\nA traditional database like PostgreSQL is a separate server process. Your app connects\nto it over a network socket, sends SQL, gets results. Two processes, network overhead,\nauthentication, connection pooling.\n\nAn **embedded database** runs INSIDE your application process. No server to start.\nNo network connection. No authentication. Just a library you link against.\nYour app reads and writes through function calls — microseconds, not milliseconds.\n\n```\nTraditional (Client-Server):         Embedded:\n  App Process                           App Process\n    |                                     +-- SQLite library\n    | TCP socket                          |     +-- Reads/writes file\n    v                                     |         directly\n  Postgres Process                        v\n    + data files on disk              data.db file on disk\n\n  Overhead: network + IPC               Overhead: function call only\n  Latency: 1-5ms                        Latency: <1µs (microseconds!)\n  Setup: install + config server        Setup: include one .c file\n```\n\nSQLite is the world's most deployed database — more instances than all other\ndatabases combined. Every Android phone, iPhone, macOS machine, Windows PC,\nweb browser, and millions of embedded devices run SQLite.\n\n---\n\n## SQLite — The Reliable Workhorse\n\nSQLite is a full SQL database engine in a single C source file (about 200KB).\n\n```\nWHAT SQLITE IS:\n  Full SQL support (SELECT, INSERT, UPDATE, DELETE, JOIN, triggers, views)\n  ACID transactions\n  Single file database (or :memory: for in-memory)\n  Zero configuration\n  Cross-platform (same .db file works on Mac, Windows, Linux, iOS, Android)\n  Thread-safe modes: serialised, multi-thread, single-thread\n\nWHAT SQLITE IS NOT:\n  NOT designed for multiple concurrent writers (serialised writes)\n  NOT for client-server deployments over a network\n  NOT for large write-heavy multi-user systems\n\nSQLITE SWEET SPOTS:\n  Mobile apps (iOS CoreData uses SQLite, Android Room uses SQLite)\n  Desktop apps (Firefox profile, Chrome history, Slack's local cache)\n  Embedded systems (IoT devices, routers)\n  Testing (use :memory: for blazing fast test suites)\n  Small to medium web apps (SQLite handles surprisingly high load for reads)\n  Config/state files that need querying (replacing CSV/JSON with SQL power)\n```\n\n---\n\n## SQLite in Practice\n\n```python\n# Python SQLite (built into stdlib, no pip install needed)\nimport sqlite3\n\n# Open database (creates file if not exists)\nconn = sqlite3.connect('myapp.db')\n\n# Or in-memory (for tests — much faster, no file I/O)\nconn = sqlite3.connect(':memory:')\n\n# Create table\nconn.execute('''\n    CREATE TABLE IF NOT EXISTS users (\n        id      INTEGER PRIMARY KEY AUTOINCREMENT,\n        name    TEXT NOT NULL,\n        email   TEXT UNIQUE NOT NULL,\n        created TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n    )\n''')\n\n# Insert with parameterised query (prevents SQL injection)\nconn.execute(\n    'INSERT INTO users (name, email) VALUES (?, ?)',\n    ('Alice', 'alice@example.com')\n)\nconn.commit()  # Writes are only durable after commit\n\n# Query\ncursor = conn.execute('SELECT * FROM users WHERE email = ?', ('alice@example.com',))\nrow = cursor.fetchone()\nprint(row)  # (1, 'Alice', 'alice@example.com', '2026-04-28...')\n\n# Context manager (auto-commit or auto-rollback)\nwith conn:\n    conn.execute('UPDATE users SET name = ? WHERE id = ?', ('Bob', 1))\n    # Auto-commits on exit, auto-rollbacks on exception\n```\n\n---\n\n## SQLite WAL Mode — The Performance Unlock\n\n```\nDEFAULT JOURNAL MODE (DELETE):\n  Write: acquire EXCLUSIVE lock on entire database file\n  All readers BLOCKED during write\n  Write-heavy workloads: readers starve\n\nWAL (Write-Ahead Log) MODE:\n  Writers write to a separate WAL file\n  Readers read from the main database file concurrently\n  Readers never block writers, writers never block readers\n  Multiple concurrent READERS + 1 concurrent WRITER\n\nEnable:\n  PRAGMA journal_mode=WAL;  -- run once after opening connection\n\nPerformance impact:\n  Read throughput: 5-10x improvement for read-heavy workloads\n  Write throughput: similar or slightly better\n  Recovery: slightly more complex (WAL file must be checkpointed)\n\nAlways enable WAL mode for any SQLite app with concurrent access.\n```\n\n---\n\n## SQLite Limitations and When NOT to Use It\n\n```\nWRITE CONCURRENCY:\n  SQLite serialises writes — only ONE write at a time, even across threads.\n  If your app has high concurrent writes (>100/sec from multiple threads):\n  contention, lock timeouts, performance degrades.\n\nFILE LOCKING:\n  SQLite uses OS file locks. Network filesystems (NFS, CIFS) often have\n  buggy locking — corruption risk. Never put SQLite on NFS.\n\nMULTI-PROCESS WRITES:\n  Multiple processes writing the same SQLite file = serialised through file lock.\n  Works but slow for high-concurrency. Better: one process owns the DB.\n\nDATABASE SIZE:\n  SQLite handles up to 281 TB theoretically. Practical: works well up to\n  a few GB. Beyond 100GB: consider PostgreSQL.\n\nNO CLIENT-SERVER:\n  Can't do: my app on Server A talks to SQLite on Server B.\n  SQLite requires the app to run on the same machine as the file.\n  If you need network access: use PostgreSQL.\n```\n\n---\n\n## RocksDB — The High-Performance Key-Value Store\n\nRocksDB was developed at Facebook as a high-performance embedded key-value store.\nIt is an evolution of Google's LevelDB, optimised for SSDs and large datasets.\n\n```\nKEY DIFFERENCE FROM SQLITE:\n  SQLite: SQL queries, joins, tables, relational model\n  RocksDB: pure key-value store (get/put/delete by key)\n           No SQL, no joins, no tables\n           Just: store bytes by key, retrieve bytes by key\n\nWHAT ROCKSDB EXCELS AT:\n  Millions of writes per second (100-500K writes/sec on good SSD)\n  Billions of key-value pairs (tested at Facebook with PBs of data)\n  SSD-optimised (LSM tree structure minimises write amplification on SSD)\n  Embedded (runs in same process as app, no network)\n\nWHO USES ROCKSDB:\n  Facebook (MyRocks = MySQL + RocksDB storage engine)\n  Apache Kafka (log segment indexing)\n  CockroachDB (storage layer)\n  TiKV (Rust key-value store, used by TiDB)\n  LinkedIn, Uber, Airbnb\n```\n\n---\n\n## LSM Tree — How RocksDB Stores Data\n\n```\nLSM = Log-Structured Merge Tree\n\nWRITE PATH:\n  1. New writes go to in-memory MemTable (fast RAM writes)\n  2. When MemTable full, flushed to disk as immutable SSTable (Sorted String Table)\n  3. SSTables are periodically compacted (merged and re-sorted)\n\n  App writes ----> MemTable (RAM)\n                      |  (when full)\n                      v\n                  L0 SSTables (disk, may overlap)\n                      |  (compaction)\n                      v\n                  L1 SSTables (disk, non-overlapping, sorted)\n                      |  (compaction)\n                      v\n                  L2, L3... SSTables (larger, less frequent)\n\nWHY LSM BEATS B-TREE FOR SSD WRITES:\n  B-tree (used by PostgreSQL, MySQL): random WRITE to specific page on disk\n    → SSDs handle random writes poorly (slow, wears flash cells)\n  LSM: always append to sequential log + background compaction\n    → Sequential writes only → SSD-friendly → very fast writes\n\nREAD PATH:\n  1. Check MemTable\n  2. Check L0 SSTables (bloom filter helps)\n  3. Check L1, L2... by key range\n  * Bloom filter: probabilistic structure, quickly checks \"key probably not here\"\n```\n\n---\n\n## SQLite vs RocksDB vs PostgreSQL — Choosing\n\n```\n+------------------+-----------+-----------+---------------+\n| Factor           | SQLite    | RocksDB   | PostgreSQL    |\n+------------------+-----------+-----------+---------------+\n| SQL queries      | Full SQL  | None      | Full SQL      |\n| Write speed      | 100K/s    | 500K/s    | 10-50K TPS    |\n| Concurrency      | Low       | High      | High          |\n| Network access   | No        | No        | Yes           |\n| Setup complexity | Minimal   | Medium    | High          |\n| Use case         | Apps,     | Storage   | Production    |\n|                  | testing,  | engines,  | backends,     |\n|                  | mobile    | databases | services      |\n+------------------+-----------+-----------+---------------+\n\nCHOOSE SQLITE WHEN:\n  Mobile app local storage\n  Desktop app state\n  Test databases (speed + isolation)\n  Single-user apps\n  Config / history / local cache\n\nCHOOSE ROCKSDB WHEN:\n  Building a database or storage system\n  Need extreme write throughput\n  Key-value access pattern (no complex queries)\n  Large datasets on SSD\n\nCHOOSE POSTGRESQL WHEN:\n  Multi-user application\n  Network access from multiple services\n  Complex queries / joins\n  Production web backend\n```\n\n---\n\n## Mind Map\n\n```\nEMBEDDED DATABASES\n|\n+-- SQLITE\n|   +-- Full SQL in single file\n|   +-- Zero config, self-contained\n|   +-- ACID transactions\n|   +-- WAL mode (concurrent reads + 1 writer)\n|   +-- Use: mobile, desktop, testing, single-user\n|   +-- Limit: no concurrent writers, no network\n|\n+-- ROCKSDB\n|   +-- Key-value only (no SQL)\n|   +-- LSM tree (write-optimised for SSD)\n|   +-- 100-500K writes/sec\n|   +-- Used as storage engine in other databases\n|   +-- Use: building databases, extreme write throughput\n|\n+-- WHEN TO USE\n    +-- SQLite: app = one machine, needs SQL, low concurrency\n    +-- RocksDB: building a DB layer, need raw write speed\n    +-- PostgreSQL: multi-machine, multi-user, production\n```\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **SQLite Is Not a Toy Database** by Ben Johnson (SQLite consultant):\n  https://www.youtube.com/watch?v=LHMrNvm88XQe\n  - SQLite performance, WAL mode, real production use cases.\n- **RocksDB Internals** by Facebook Engineering:\n  https://www.youtube.com/watch?v=jGCv4r8CJEI\n  - LSM tree, compaction, Facebook's use of RocksDB at scale.\n\n### Free Books and Articles\n- **SQLite documentation**: https://sqlite.org/docs.html\n- **Also SQLite** (SQLite for production article): https://fly.io/blog/all-in-on-sqlite-litestream/\n- **RocksDB Wiki**: https://github.com/facebook/rocksdb/wiki\n\n### Practice\n- **SQLite Browser** (GUI tool): https://sqlitebrowser.org/\n  - Visual tool to create and browse SQLite databases.\n- Use SQLite for your test database in any project — faster and simpler than Docker + Postgres.\n",
   "questions": [
     {
-      "id": "edb-q1",
+      "id": "embd-q1",
       "type": "mcq",
-      "prompt": "When should you choose SQLite over PostgreSQL?",
+      "prompt": "What is an embedded database?",
       "choices": [
-        "When you need transactions",
-        "For applications running on a single device (mobile, desktop, embedded, offline-first) where simplicity, zero-config, and a self-contained .db file are more valuable than multi-user concurrent writes",
-        "SQLite is always better",
-        "SQLite has no ACID"
+        "A database installed in a container",
+        "A database that runs as a library INSIDE the application process — no separate server, no network connection, direct file access",
+        "A database optimised for small data",
+        "A read-only database"
       ],
       "answerIndex": 1,
-      "explanation": "SQLite excels: mobile apps, desktop tools, CLIs, development, offline-first, edge computing. PostgreSQL wins: multi-server concurrent writes, high concurrency, extensions, advanced features.",
+      "explanation": "Embedded database = library linked into app. SQLite, RocksDB, LevelDB. Operates on local files directly. No TCP socket, no auth, no server setup. Latency: microseconds (vs milliseconds for network DB). Perfect for local storage.",
       "tags": [
-        "SQLite",
-        "embedded-db"
+        "embedded-database",
+        "basics"
       ]
     },
     {
-      "id": "edb-q2",
+      "id": "embd-q2",
       "type": "mcq",
-      "prompt": "SQLite concurrent write limitation and its solution?",
+      "prompt": "SQLite is the world's most deployed database. Where does it run?",
       "choices": [
-        "No limitation",
-        "SQLite allows only ONE writer at a time (file lock). Solution: WAL (Write-Ahead Logging) mode \u2014 allows one writer + concurrent readers simultaneously. Still single-writer, but readers aren't blocked",
-        "SQLite doesn't support concurrent access",
-        "Connection pooling solves it"
+        "Only on Linux servers",
+        "In every Android phone, iPhone, macOS machine, browser (Firefox/Chrome history), Windows apps — more instances than all other DBs combined",
+        "Only in Docker containers",
+        "Only in enterprise software"
       ],
       "answerIndex": 1,
-      "explanation": "WAL mode: reads happen from the old snapshot while write is in the WAL file. PRAGMA journal_mode=WAL. Concurrent readers never block. Still fundamentally single-writer.",
+      "explanation": "SQLite runs everywhere: iOS CoreData layer uses SQLite, Android Room uses SQLite, Chrome stores history in SQLite, Firefox profile is SQLite, every macOS/Windows app that stores settings often uses it. It is ubiquitous precisely because it requires zero infrastructure.",
       "tags": [
-        "SQLite",
-        "WAL",
+        "sqlite",
+        "deployment"
+      ]
+    },
+    {
+      "id": "embd-q3",
+      "type": "mcq",
+      "prompt": "What is WAL mode in SQLite and why should you enable it?",
+      "choices": [
+        "Write Append Log — makes all writes faster",
+        "Write-Ahead Log — allows concurrent readers while one writer writes, instead of blocking all readers during writes. 5-10x read throughput improvement.",
+        "A backup mechanism",
+        "A compression format"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default SQLite: write acquires EXCLUSIVE lock, all readers block. WAL: writer appends to WAL file, readers read main DB file concurrently. No contention. Enable: PRAGMA journal_mode=WAL. Always enable for apps with any concurrent reads and writes.",
+      "tags": [
+        "sqlite",
+        "wal",
         "concurrency"
       ]
     },
     {
-      "id": "edb-q3",
+      "id": "embd-q4",
       "type": "mcq",
-      "prompt": "Why use prepared statements in SQLite (or any DB)?",
+      "prompt": "What is RocksDB and who developed it?",
       "choices": [
-        "Faster syntax",
-        "Prepared statements separate SQL code from data \u2014 values are bound as parameters, never interpolated into the SQL string. This prevents SQL injection: user input can't manipulate the query structure",
-        "Required for transactions",
-        "LIMIT optimisation"
+        "A SQL database by Oracle",
+        "A high-performance embedded key-value store developed at Facebook, based on Google's LevelDB — optimised for SSD write throughput",
+        "An open-source alternative to SQLite",
+        "A distributed NoSQL database"
       ],
       "answerIndex": 1,
-      "explanation": "SQL injection: db.query('SELECT * FROM users WHERE id = ' + userId) where userId = '1 OR 1=1' dumps all users. Prepared: db.prepare('SELECT * FROM users WHERE id = ?').get(userId) \u2014 the ? is always a value, never SQL.",
+      "explanation": "RocksDB was created at Facebook (2012) to solve write-heavy workloads that LevelDB couldn't handle. Key features: LSM tree, SSD-optimised, 100-500K writes/sec, used as storage engine in MyRocks (MySQL), TiKV, CockroachDB.",
       "tags": [
-        "SQLite",
+        "rocksdb",
+        "key-value"
+      ]
+    },
+    {
+      "id": "embd-q5",
+      "type": "mcq",
+      "prompt": "What data model does RocksDB use?",
+      "choices": [
+        "Relational tables",
+        "Document store",
+        "Pure key-value: get(key)->bytes, put(key, bytes), delete(key). No SQL, no joins, no tables.",
+        "Graph database"
+      ],
+      "answerIndex": 2,
+      "explanation": "RocksDB is a key-value store. Keys and values are raw bytes. No schema, no SQL, no queries — just: store bytes by key, retrieve bytes by key. You are responsible for serialising your data (Protocol Buffers, JSON, custom binary). No query language.",
+      "tags": [
+        "rocksdb",
+        "key-value",
+        "data-model"
+      ]
+    },
+    {
+      "id": "embd-q6",
+      "type": "mcq",
+      "prompt": "What is an LSM (Log-Structured Merge) tree?",
+      "choices": [
+        "A balanced binary search tree on disk",
+        "A write-optimised data structure used by RocksDB/Cassandra: writes go to in-memory MemTable, flushed to disk as sequential SSTables, periodically compacted",
+        "A tree used for database indexes",
+        "A network routing algorithm"
+      ],
+      "answerIndex": 1,
+      "explanation": "LSM: writes always go to MemTable (RAM), flushed as sequential SSTable files on disk. Sequential writes are SSD-friendly (no random I/O). Background compaction merges SSTables. Result: extremely fast writes, slower reads than B-trees (must check multiple levels).",
+      "tags": [
+        "rocksdb",
+        "lsm-tree",
+        "storage"
+      ]
+    },
+    {
+      "id": "embd-q7",
+      "type": "mcq",
+      "prompt": "When should you NOT use SQLite?",
+      "choices": [
+        "For mobile apps",
+        "When you need multiple concurrent writers, network access from multiple services, or when the app runs on a different machine than the data",
+        "For test databases",
+        "For small single-user apps"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite limitations: one writer at a time (serialised), no network access (must be on same machine as file), no NFS (file locking bugs cause corruption). For: multi-user web backend, microservices sharing a DB, high-concurrent writes -> use PostgreSQL.",
+      "tags": [
+        "sqlite",
+        "limitations",
+        "when-not-to-use"
+      ]
+    },
+    {
+      "id": "embd-q8",
+      "type": "mcq",
+      "prompt": "What advantage does SQLite `:memory:` provide for testing?",
+      "choices": [
+        "Same performance as file-based",
+        "In-memory SQLite creates a fresh database per test with no file I/O — tests run 10-100x faster, completely isolated, no cleanup needed",
+        "Persistent across test runs",
+        "Allows multiple concurrent writers"
+      ],
+      "answerIndex": 1,
+      "explanation": "sqlite3.connect(':memory:') creates a database in RAM. No file created. Destroyed when connection closes. Each test gets a fresh database. No inter-test contamination. Much faster than file I/O. Ideal for unit tests that need a real database without Docker.",
+      "tags": [
+        "sqlite",
+        "testing",
+        "in-memory"
+      ]
+    },
+    {
+      "id": "embd-q9",
+      "type": "mcq",
+      "prompt": "Why is LSM tree better than B-tree for SSD write performance?",
+      "choices": [
+        "LSM trees use less memory",
+        "B-tree writes: random I/O to specific disk pages (slow on SSD, wears flash cells). LSM: always sequential append + background compaction = SSD-friendly, 10-100x higher write throughput.",
+        "B-trees don't work on SSDs",
+        "LSM uses better compression"
+      ],
+      "answerIndex": 1,
+      "explanation": "B-tree: update in-place -> random writes scattered across disk -> SSD write amplification (must erase entire block to update one byte). LSM: always appends sequentially -> minimal write amplification -> SSDs love sequential writes. RocksDB does 500K writes/sec vs PostgreSQL's 10K.",
+      "tags": [
+        "rocksdb",
+        "lsm-tree",
+        "ssd"
+      ]
+    },
+    {
+      "id": "embd-q10",
+      "type": "mcq",
+      "prompt": "SQLite is ACID compliant. What does this mean?",
+      "choices": [
+        "It uses the same engine as MySQL",
+        "Atomicity (transaction fully completes or rolls back), Consistency (constraints maintained), Isolation (transactions don't interfere), Durability (committed data survives crash)",
+        "It only supports read transactions",
+        "ACID is a marketing term with no technical meaning"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite is fully ACID. A transaction that writes 5 rows: if app crashes before COMMIT, changes are rolled back when you reopen the DB. Durability: after COMMIT, data is safely on disk. Isolation: SQLite serialises writes ensuring no dirty reads.",
+      "tags": [
+        "sqlite",
+        "acid",
+        "transactions"
+      ]
+    },
+    {
+      "id": "embd-q11",
+      "type": "mcq",
+      "prompt": "What is a Bloom filter in RocksDB used for?",
+      "choices": [
+        "Encrypting data",
+        "Compressing SSTables",
+        "A probabilistic data structure that quickly answers 'this key is definitely NOT in this SSTable' — avoids unnecessary disk reads during key lookup",
+        "Sorting keys in MemTable"
+      ],
+      "answerIndex": 2,
+      "explanation": "RocksDB read path must check multiple SSTable levels. Without Bloom filter: open every SSTable and binary search. With Bloom filter: 'is key in this SSTable?' -> if Bloom says NO, skip the file entirely (no disk read). False positive rate ~1% by default. Huge read performance improvement.",
+      "tags": [
+        "rocksdb",
+        "bloom-filter",
+        "performance"
+      ]
+    },
+    {
+      "id": "embd-q12",
+      "type": "mcq",
+      "prompt": "Can you use SQLite on a network file system (NFS)?",
+      "choices": [
+        "Yes, it works perfectly",
+        "No — NFS file locking is often buggy, which can cause SQLite database corruption. Always run SQLite on local storage only.",
+        "Only in read-only mode",
+        "Only with WAL disabled"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite uses OS-level file locks for concurrency control. NFS (and CIFS/SMB) often implement file locking incorrectly or unreliably. Result: two processes think they have exclusive access simultaneously -> database corruption. SQLite docs explicitly warn: do not use on NFS.",
+      "tags": [
+        "sqlite",
+        "nfs",
+        "limitations"
+      ]
+    },
+    {
+      "id": "embd-q13",
+      "type": "mcq",
+      "prompt": "Which production databases use RocksDB as their storage engine?",
+      "choices": [
+        "PostgreSQL, MySQL",
+        "MyRocks (Facebook's MySQL), TiKV (used by TiDB), CockroachDB storage layer",
+        "Redis, Memcached",
+        "MongoDB, Cassandra"
+      ],
+      "answerIndex": 1,
+      "explanation": "RocksDB is used as the storage engine by: MyRocks (Facebook's MySQL variant with 10x better write throughput), TiKV (Rust key-value store under TiDB), CockroachDB (replaces RocksDB with Pebble recently), StreamNative Kafka. It's a building block for other databases.",
+      "tags": [
+        "rocksdb",
+        "production",
+        "databases"
+      ]
+    },
+    {
+      "id": "embd-q14",
+      "type": "mcq",
+      "prompt": "What is SQLite's maximum database file size?",
+      "choices": [
+        "100MB",
+        "2GB",
+        "281 TB theoretically (practical limit: works well up to few GB, usable up to ~100GB)",
+        "1TB hard limit"
+      ],
+      "answerIndex": 2,
+      "explanation": "SQLite's theoretical max is 281 TB. Practically: works great up to a few GB, usable up to ~100GB with some performance considerations. Beyond 100GB: PostgreSQL is better. The 2GB limit is an old myth from early SQLite versions.",
+      "tags": [
+        "sqlite",
+        "limits",
+        "file-size"
+      ]
+    },
+    {
+      "id": "embd-q15",
+      "type": "mcq",
+      "prompt": "What parameterised query syntax prevents SQL injection in Python SQLite?",
+      "choices": [
+        "String concatenation: f'WHERE id = {user_id}'",
+        "Parameterised: cursor.execute('WHERE id = ?', (user_id,)) — driver escapes the value safely",
+        "PRAGMA safe_mode = ON",
+        "There is no SQL injection risk in SQLite"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite (and all SQL databases): never format user input into SQL strings. Use parameterised queries: execute('SELECT * FROM users WHERE id = ?', (user_id,)). The ? placeholder is safely escaped by the driver. Prevents SQL injection regardless of what the user input contains.",
+      "tags": [
+        "sqlite",
         "security",
-        "prepared-statements"
+        "sql-injection"
+      ]
+    },
+    {
+      "id": "embd-q16",
+      "type": "mcq",
+      "prompt": "What does SQLite's AUTOINCREMENT keyword do and when should you avoid it?",
+      "choices": [
+        "Creates a random UUID",
+        "Guarantees monotonically increasing integers that are never reused — slightly slower than INTEGER PRIMARY KEY alone (which reuses deleted IDs)",
+        "Required for all primary keys",
+        "Creates a sequence object like PostgreSQL"
+      ],
+      "answerIndex": 1,
+      "explanation": "INTEGER PRIMARY KEY: SQLite auto-increments and may REUSE deleted IDs. AUTOINCREMENT: never reuses IDs but requires checking a separate table (slower, bigger DB). Use AUTOINCREMENT only if you genuinely cannot reuse IDs. For most apps, INTEGER PRIMARY KEY is fine.",
+      "tags": [
+        "sqlite",
+        "primary-key",
+        "autoincrement"
+      ]
+    },
+    {
+      "id": "embd-q17",
+      "type": "mcq",
+      "prompt": "What is RocksDB compaction and why is it necessary?",
+      "choices": [
+        "Compression of keys",
+        "Background process that merges SSTables (removing deleted keys, merging sorted files) — prevents read amplification from too many overlapping SSTables accumulating",
+        "Network data compression",
+        "Archiving old data"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without compaction: many small SSTables accumulate at L0. Reading a key requires checking all of them. With compaction: SSTables merged, deleted/overwritten keys removed, sorted. Fewer files, faster reads, less storage. Trade-off: compaction uses CPU and I/O — tune for your workload.",
+      "tags": [
+        "rocksdb",
+        "compaction",
+        "lsm-tree"
+      ]
+    },
+    {
+      "id": "embd-q18",
+      "type": "mcq",
+      "prompt": "Which use case is ideal for SQLite in a web application?",
+      "choices": [
+        "High-traffic API with 10,000 concurrent users",
+        "Read-heavy single-server personal application, developer tool, or application with SQLite as local cache with Litestream for replication",
+        "Distributed microservices",
+        "Multi-region global app"
+      ],
+      "answerIndex": 1,
+      "explanation": "Modern SQLite use: personal web apps or small SaaS on a single server with WAL mode and Litestream (streaming replication to S3). Many successful small web apps run entirely on SQLite. The constraint is: single machine. Fly.io and others offer SQLite-first hosting.",
+      "tags": [
+        "sqlite",
+        "web",
+        "use-case"
+      ]
+    },
+    {
+      "id": "embd-q19",
+      "type": "mcq",
+      "prompt": "What is LevelDB and how does it relate to RocksDB?",
+      "choices": [
+        "LevelDB is newer than RocksDB",
+        "LevelDB is Google's embedded key-value store (2011). RocksDB (Facebook, 2012) is a fork of LevelDB optimised for production SSD workloads at scale.",
+        "They are identical",
+        "LevelDB uses B-tree, RocksDB uses LSM"
+      ],
+      "answerIndex": 1,
+      "explanation": "LevelDB: Google's LSM-based embedded KV store, used in Chrome (IndexedDB). RocksDB: Facebook's fork with additions: column families, compaction strategies optimised for large SSDs, better read/write performance at scale. RocksDB has largely superseded LevelDB for production use.",
+      "tags": [
+        "rocksdb",
+        "leveldb",
+        "history"
+      ]
+    },
+    {
+      "id": "embd-q20",
+      "type": "mcq",
+      "prompt": "What does it mean for SQLite to be 'serverless'?",
+      "choices": [
+        "It runs on AWS Lambda",
+        "There is no separate database server process to install, configure, or maintain — the database engine is a library linked directly into your application",
+        "It uses serverless pricing",
+        "It runs in a browser"
+      ],
+      "answerIndex": 1,
+      "explanation": "SQLite 'serverless' = no server process. Contrast: PostgreSQL requires installing and running a postgres daemon. SQLite: include sqlite3.h, link the library, call sqlite3_open(). Zero admin: no config files, no users, no port, no service to start. 'Serverless' in the literal sense, before AWS Lambda popularised the term.",
+      "tags": [
+        "sqlite",
+        "serverless",
+        "architecture"
       ]
     }
   ],
   "flashcards": [
     {
-      "id": "edb-fc1",
-      "front": "SQLite vs Client-Server DB",
-      "back": "SQLite: in-process, single file, zero-config, sync API. Ideal: mobile, desktop, offline, dev/test, edge. Not ideal: multi-server concurrent writes, network access, >100GB.",
+      "id": "embd-fc1",
+      "front": "SQLite sweet spots",
+      "back": "Mobile apps (Android/iOS), desktop apps (settings/history), test databases (:memory: = instant), single-user/single-process web apps, config/state that needs SQL queries, IoT devices. Not for: multi-user, network access, high concurrent writes.",
       "tags": [
-        "SQLite"
+        "sqlite",
+        "use-cases"
       ]
     },
     {
-      "id": "edb-fc2",
-      "front": "WAL mode",
-      "back": "PRAGMA journal_mode=WAL. Allows concurrent reads while one writer operates. Default mode blocks readers during writes. Enable WAL in almost all production SQLite apps.",
+      "id": "embd-fc2",
+      "front": "SQLite WAL mode — always enable",
+      "back": "PRAGMA journal_mode=WAL. Default mode: write blocks all readers. WAL mode: readers and writers coexist (multiple concurrent readers + 1 writer). 5-10x read throughput improvement. Run once when first opening DB.",
       "tags": [
-        "SQLite",
-        "WAL"
+        "sqlite",
+        "wal"
       ]
     },
     {
-      "id": "edb-fc3",
-      "front": "SQLite prepared statements (better-sqlite3)",
-      "back": "const stmt = db.prepare('SELECT * FROM t WHERE id = ?'); stmt.get(id). Synchronous, safe (parameterized), cacheable. Never interpolate user input into SQL strings.",
+      "id": "embd-fc3",
+      "front": "RocksDB LSM write path",
+      "back": "Write -> MemTable (RAM). MemTable full -> flush as SSTable (immutable, sorted, sequential disk write). Background compaction merges SSTables (removes deletes, sorts). Result: always sequential disk writes = SSD-optimised, 500K+ writes/sec.",
       "tags": [
-        "SQLite",
-        "prepared-statements"
+        "rocksdb",
+        "lsm-tree"
+      ]
+    },
+    {
+      "id": "embd-fc4",
+      "front": "SQLite vs RocksDB vs PostgreSQL",
+      "back": "SQLite: full SQL, single-file, zero-config, low concurrency, local only. RocksDB: key-value only, extreme write throughput, builds other DBs. PostgreSQL: full SQL, client-server, network, high concurrency. Choose by use case not preference.",
+      "tags": [
+        "sqlite",
+        "rocksdb",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "embd-fc5",
+      "front": "SQLite parameterised queries rule",
+      "back": "NEVER: f'SELECT * FROM users WHERE id = {user_id}'. ALWAYS: execute('SELECT * FROM users WHERE id = ?', (user_id,)). Parameterised = safe from SQL injection for any input. ALL SQLite queries touching user data must be parameterised.",
+      "tags": [
+        "sqlite",
+        "security",
+        "sql-injection"
+      ]
+    },
+    {
+      "id": "embd-fc6",
+      "front": "RocksDB Bloom filter purpose",
+      "back": "Probabilistic structure per SSTable: 'is this key in this file?' If answer NO -> skip the file (no disk read). ~1% false positive rate. Without Bloom filter: read a key -> check every SSTable level on disk. With: skip most files. Huge read speed improvement.",
+      "tags": [
+        "rocksdb",
+        "bloom-filter"
+      ]
+    },
+    {
+      "id": "embd-fc7",
+      "front": "SQLite :memory: in tests",
+      "back": "conn = sqlite3.connect(':memory:'). Creates fresh in-memory DB per test. No file I/O = 10-100x faster. Destroyed when connection closes = no cleanup. Each test fully isolated. Use for any unit test that needs a real relational DB without Docker overhead.",
+      "tags": [
+        "sqlite",
+        "testing"
+      ]
+    },
+    {
+      "id": "embd-fc8",
+      "front": "SQLite NFS danger",
+      "back": "NEVER put SQLite database file on NFS, CIFS, or any network filesystem. NFS file locking is unreliable -> two processes get simultaneous exclusive lock -> database corruption. Always use local disk (ext4, APFS, NTFS). Real bug, not theoretical risk.",
+      "tags": [
+        "sqlite",
+        "nfs",
+        "corruption"
       ]
     }
   ],

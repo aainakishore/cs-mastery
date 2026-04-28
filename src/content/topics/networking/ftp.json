@@ -7,7 +7,7 @@
   "prereqs": [
     "firewalls"
   ],
-  "guide": "# FTP \u2014 File Transfer Protocol\n\nFTP (RFC 959) is a **dual-channel TCP protocol** for transferring files. It uses separate **control** and **data** connections on ports 21 and 20 respectively.\n\n## The Dual-Channel Design\n\n```\nActive Mode:\n  Client port 21  \u2190\u2500\u2500\u2500\u2500 Control \u2500\u2500\u2500\u2500\u2500\u2192  Server port 21\n  Client port N   \u2190\u2500\u2500 Data (server initiates) \u2190 Server port 20\n  (Server dials BACK to client \u2014 blocked by NAT/firewalls)\n\nPassive Mode (PASV):\n  Client port 21  \u2190\u2500\u2500\u2500\u2500 Control \u2500\u2500\u2500\u2500\u2500\u2192  Server port 21\n  Client          \u2500\u2500\u2500\u2500 Data \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192  Server ephemeral port\n  (Client initiates data \u2014 works through NAT)\n\nModern deployments use PASV (passive mode) almost exclusively.\n```\n\n## Command flow\n\n```\nClient              Server\n  \u2502 \u2500\u2500 220 ready \u2500\u2500\u2192  \u2502\n  \u2502 \u2190 USER alice  \u2500\u2500\u2500 \u2502\n  \u2502 \u2500\u2500 331 pwd req \u2500\u2192 \u2502\n  \u2502 \u2190 PASS secret \u2500\u2500\u2500 \u2502\n  \u2502 \u2500\u2500 230 logged in \u2192 \u2502\n  \u2502 \u2190 LIST /uploads \u2500\u2500 \u2502   (active: server connects back; passive: client opens data conn)\n  \u2502 \u2500\u2500 150 opening \u2500\u2192  \u2502\n  \u2502 \u2500\u2500\u2500 file listing \u2500\u2192 \u2502\n  \u2502 \u2500\u2500 226 transfer OK \u2500\u2192 \u2502\n  \u2502 \u2190 QUIT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 \u2502\n```\n\n## FTP vs SFTP vs FTPS\n\n| Protocol | Port | Security | Transport |\n|---|---|---|---|\n| FTP | 21/20 | None \u2014 credentials and data in plaintext | TCP |\n| FTPS | 21/990 | TLS/SSL wrapping FTP | TCP |\n| SFTP | 22 | SSH-based \u2014 completely different protocol | SSH |\n\n**FTP is insecure** \u2014 never use it over public networks. SFTP (via SSH) is the modern replacement.\n\n## Common Pitfalls\n- **Active mode blocked by firewalls/NAT** \u2014 server tries to connect back to the client, which is typically behind NAT. Always configure PASV mode.\n- **Credentials in plaintext** \u2014 FTP sends username/password as clear text. Use SFTP or FTPS.\n- **Firewall port ranges** \u2014 PASV uses random high ports; configure the server's PASV port range AND open those ports on the firewall.\n",
+  "guide": "# FTP — File Transfer Protocol\n\n## What Is FTP and Why Does It Still Exist?\n\nFTP (File Transfer Protocol) is one of the oldest internet protocols still in use, dating from 1971.\nIt transfers files between computers over a TCP/IP network. You'll encounter it when:\n- Deploying websites to shared hosting servers\n- Transferring large files to/from legacy enterprise systems\n- Working with scientific or government data archives\n- Understanding network security (FTP is often cited as an insecure protocol to avoid or harden)\n\n```\nModern alternatives to plain FTP:\n  SFTP (SSH File Transfer Protocol)  ← use this by default — encrypted\n  FTPS (FTP over TLS/SSL)            ← encrypted FTP, for legacy FTP servers\n  SCP (Secure Copy Protocol)         ← simple file copy over SSH\n  HTTPS (S3, presigned URLs)         ← for web-based file transfer\n\nPlain FTP:  credentials sent in cleartext, never use over the internet\nSFTP/FTPS:  encrypted, safe — these are what you'll actually use\n```\n\n---\n\n## How FTP Works — The Two-Channel Architecture\n\nFTP is unusual: it uses TWO separate TCP connections, not one.\n\n```\nFTP CLIENT                    FTP SERVER\n     │                              │\n     │──── Control Channel ────────►│  (port 21)\n     │     Commands + responses     │\n     │     USER alice               │\n     │     PASS mypassword          │\n     │     LIST /files              │\n     │     RETR document.pdf        │\n     │                              │\n     │◄─── Data Channel ───────────►│  (port 20 active, random port passive)\n          Actual file content            \n          Directory listings             \n\nTWO CHANNELS:\n  Control channel (port 21): always open during session, sends commands\n  Data channel:              opened on-demand for each file transfer or directory listing\n  After transfer completes:  data channel closed, control channel stays open\n```\n\n**Why two channels?** Historical design: one channel for commands/responses (low bandwidth),\na separate higher-bandwidth channel for the actual file data.\n\n---\n\n## Active vs Passive Mode\n\nThis is the most confusing part of FTP, and the most important for firewall troubleshooting.\n\n```\nACTIVE MODE (PORT mode):\n\n  Client opens control channel to server port 21\n  Client picks a port (e.g. 55123) and tells server: PORT 55,123\n  Server makes outbound connection BACK to client:55123 for data\n\n  Client: ──control──► Server:21\n  Server: ──data──────► Client:55123  ← SERVER connects TO CLIENT\n\n  Problem: if client is behind a NAT/firewall, server can't reach client.\n  Active mode FAILS in most modern network configurations.\n\nPASSIVE MODE (PASV mode):\n\n  Client opens control channel to server port 21\n  Client sends PASV command\n  Server opens a random high port (e.g. 54000) and tells client\n  Client makes outbound connection to server:54000 for data\n\n  Client: ──control──► Server:21\n  Client: ──data──────► Server:54000  ← CLIENT connects TO SERVER\n\n  Client only makes outbound connections → works through NAT/firewalls.\n  Passive mode WORKS in modern networks.\n\nRULE: Always use PASSIVE mode for modern FTP clients.\n      Most FTP clients default to passive mode already.\n\nFIREWALL IMPLICATION for servers running active mode:\n  Must allow inbound connections from high ports (1024-65535) = huge security hole\n  Passive mode: server only needs inbound on port 21 + a fixed port range\n  Configure passive port range: 50000-51000, open only those in firewall\n```\n\n---\n\n## FTP Commands\n\n```\nAUTHENTICATION:\n  USER alice        → send username\n  PASS mypassword   → send password (PLAINTEXT! Never use plain FTP over internet)\n  QUIT              → close session\n\nNAVIGATION:\n  PWD               → print working directory\n  CWD /home/alice   → change directory\n  CDUP              → change to parent directory\n  MKD newdir        → make directory\n\nFILE LISTING:\n  LIST              → detailed directory listing (like ls -la)\n  NLST              → name list only (like ls)\n\nTRANSFER COMMANDS:\n  RETR file.txt     → download: server sends file to client\n  STOR file.txt     → upload: client sends file to server\n  DELE file.txt     → delete a file\n  RNFR old.txt      → rename from (specify old name)\n  RNTO new.txt      → rename to (specify new name)\n  APPE file.txt     → append to existing file (resume partial upload)\n\nMODE COMMANDS:\n  PASV              → switch to passive mode\n  PORT h,h,h,h,p,p  → notify server of client port (active mode)\n  TYPE A            → ASCII transfer mode (text files, converts line endings)\n  TYPE I            → binary/image transfer mode (all other files)\n\nIMPORTANT: Always use TYPE I (binary) unless you specifically need ASCII mode.\n           ASCII mode corrupts binary files (images, executables, archives).\n```\n\n---\n\n## ASCII vs Binary Transfer Mode\n\n```\nASCII mode (TYPE A):\n  Converts line endings during transfer:\n  Windows CRLF (\\r\\n) ↔ Unix LF (\\n)\n  Use ONLY for plain text files when transferring between Windows and Unix\n\nBinary mode (TYPE I, 'image' mode):\n  Transfers exact bytes — no conversion\n  Use for: images, executables, zip/tar archives, PDFs, Word documents, everything else\n\nCommon mistake: FTP in ASCII mode corrupts binary files.\n  Transfer a .zip file in ASCII mode: FTP modifies bytes that happen to look like\n  line endings → corrupted archive → unzip fails.\n  Solution: ALWAYS use binary mode (TYPE I) unless you have a specific ASCII reason.\n\nMost modern FTP clients auto-detect file types. Still good to verify.\n```\n\n---\n\n## SFTP vs FTPS — The Secure Variants\n\n```\n+─────────────────────────────────────────────────────────────────────+\n│ Feature         │ SFTP                      │ FTPS                  │\n+─────────────────────────────────────────────────────────────────────+\n│ Protocol basis  │ SSH subsystem             │ FTP + TLS/SSL         │\n│ Default port    │ 22 (same as SSH)           │ 990 (or 21 explicit) │\n│ Channels        │ Single channel            │ Two channels (like FTP│\n│ Firewall        │ Easy (one port: 22)       │ Complex (like FTP)    │\n│ Compatibility   │ Needs SSH server          │ Needs TLS + FTP       │\n│ Setup           │ Simpler (piggybacks SSH)  │ More complex          │\n│ Recommendation  │ Prefer this               │ For legacy FTP systems│\n+─────────────────────────────────────────────────────────────────────+\n\nSFTP (SSH File Transfer Protocol):\n  Not FTP over SSH — it's a completely different protocol.\n  Designed from ground up as a secure file transfer protocol.\n  Runs as a subsystem of SSH. If you have SSH access: you have SFTP access.\n  Uses one encrypted channel for everything (commands + data).\n  Firewall-friendly: single port 22.\n\n  Connect: sftp alice@server.com\n  Or use FileZilla/Cyberduck with SFTP protocol option.\n\nFTPS (FTP Secure):\n  Original FTP protocol with TLS added.\n  Two variants: Explicit FTPS (start unencrypted, upgrade with AUTH TLS)\n                Implicit FTPS (encrypted from the start, port 990)\n  Firewall still needs data channel ports open.\n  Used when: legacy FTP infrastructure requires FTP protocol specifically.\n\nSCP (Secure Copy Protocol):\n  Simple file copy over SSH. No directory browsing.\n  Command: scp file.txt alice@server:/home/alice/\n  Fast, simple, but no resume on failure or directory sync.\n```\n\n---\n\n## Common FTP Use Cases Today\n\n```\n1. SHARED HOSTING DEPLOYMENT:\n   Many budget web hosts use FTP for file uploads.\n   Use FTPS or SFTP if offered. Never plain FTP.\n   Tools: FileZilla (free GUI client), Cyberduck (macOS/Win GUI)\n\n2. LEGACY ENTERPRISE SYSTEMS:\n   Banks, government systems, EDI (Electronic Data Interchange) still use FTP.\n   Usually FTPS internally, sometimes still plain FTP on isolated networks.\n   Automated scripts: ftp command-line client, lftp (Linux), WinSCP scripts\n\n3. SCIENTIFIC DATA ARCHIVES:\n   NCBI (genomics), NASA, NOAA — large public datasets via anonymous FTP\n   Anonymous FTP: USER anonymous, PASS email@address\n   wget or curl can also download from FTP URLs\n\n4. AUTOMATED FILE EXCHANGE:\n   Nightly batch jobs transfer reports between systems\n   Python ftplib: connect, login, RETR each file, process, close\n```\n\n---\n\n## FTP in Python\n\n```python\nfrom ftplib import FTP, FTP_TLS\n\n# Plain FTP (LAN/localhost only — unencrypted)\nwith FTP('ftp.example.com') as ftp:\n    ftp.login(user='alice', passwd='password')\n    ftp.set_pasv(True)  # always passive mode\n    files = ftp.nlst()  # list files\n\n    # Download a file\n    with open('local_file.txt', 'wb') as f:\n        ftp.retrbinary('RETR remote_file.txt', f.write)\n\n    # Upload a file\n    with open('local_upload.txt', 'rb') as f:\n        ftp.storbinary('STOR remote_upload.txt', f)\n\n# FTPS (encrypted — use this for real scenarios)\nwith FTP_TLS('ftp.example.com') as ftps:\n    ftps.login(user='alice', passwd='password')\n    ftps.prot_p()  # protect data channel with TLS\n    ftps.set_pasv(True)\n    # same commands as above\n\n# For SFTP (preferred): use paramiko or fabric\nimport paramiko\ntransport = paramiko.Transport(('server.com', 22))\ntransport.connect(username='alice', password='password')\nsftp = paramiko.SFTPClient.from_transport(transport)\nsftp.get('/remote/file.txt', 'local_file.txt')  # download\nsftp.put('local.txt', '/remote/uploaded.txt')   # upload\n```\n\n---\n\n## Mind Map\n\n```\nFTP\n|\n+-- ARCHITECTURE\n|   +-- Control channel: port 21 (commands)\n|   +-- Data channel: port 20 (active) / random (passive)\n|   +-- Two channels open/close per transfer\n|\n+-- MODES\n|   +-- Active: server connects to client (breaks NAT)\n|   +-- Passive: client connects to server (use this)\n|   +-- ASCII: text, converts line endings (cautious)\n|   +-- Binary: exact bytes (always default)\n|\n+-- SECURE VARIANTS\n|   +-- SFTP: SSH-based, single channel, prefer\n|   +-- FTPS: FTP + TLS, legacy compatibility\n|   +-- SCP: simple SSH file copy\n|\n+-- COMMANDS\n|   +-- Authentication: USER, PASS\n|   +-- Navigation: PWD, CWD, MKD\n|   +-- Transfer: RETR, STOR, APPE\n|   +-- Control: PASV, TYPE I, QUIT\n|\n+-- SECURITY\n    +-- Plain FTP: never over internet (cleartext passwords)\n    +-- Firewall: passive mode + fixed port range\n    +-- Prefer SFTP (port 22) over FTPS\n```\n\n---\n\n## How FTP Connects to Other Topics\n\n- **Linux**: FTP commands run from the bash shell. `ftp`, `lftp`, `sftp` are\n  CLI tools. Server configs live in `/etc/vsftpd.conf`.\n- **Networking**: FTP demonstrates TCP connection management, port usage,\n  NAT traversal challenges. Active vs passive explains firewall concepts clearly.\n- **Security**: FTP is the canonical example of an insecure protocol. Teaches\n  why encryption (TLS/SSH) exists and why cleartext credentials are dangerous.\n- **Docker/CI-CD**: Some CI pipelines still deploy assets via FTP to shared hosts.\n  SFTP or FTPS used in Java/Python automation scripts.\n\n---\n\n## References\n\n### Videos\n- **FTP Explained** by NetworkChuck: https://www.youtube.com/watch?v=tOj8MSEIbfA\n- **SFTP Tutorial** by TechWorld with Nana: https://www.youtube.com/watch?v=b-QF-e9A_bE\n\n### Articles\n- **RFC 959 — FTP specification**: https://tools.ietf.org/html/rfc959\n- **FileZilla client** (free GUI): https://filezilla-project.org/\n- **Python ftplib docs**: https://docs.python.org/3/library/ftplib.html\n- **Paramiko (SFTP in Python)**: https://www.paramiko.org/",
   "questions": [
     {
       "id": "ftp-q1",
@@ -15,12 +15,12 @@
       "prompt": "Why does active mode FTP fail behind NAT/firewalls?",
       "choices": [
         "FTP doesn't support NAT",
-        "In active mode the server initiates the data connection back to the client \u2014 NAT blocks incoming connections the client didn't initiate",
+        "In active mode the server initiates the data connection back to the client — NAT blocks incoming connections the client didn't initiate",
         "Active mode uses UDP",
         "Port 21 is blocked"
       ],
       "answerIndex": 1,
-      "explanation": "Active mode: server dials the client's ephemeral port for data. NAT translates client addresses \u2014 the server can't reach the client. Passive mode: client initiates both connections, solving the NAT problem.",
+      "explanation": "Active mode: server dials the client's ephemeral port for data. NAT translates client addresses — the server can't reach the client. Passive mode: client initiates both connections, solving the NAT problem.",
       "tags": [
         "ftp",
         "active-passive"
@@ -32,12 +32,12 @@
       "prompt": "Main security difference between FTP and SFTP?",
       "choices": [
         "SFTP is faster",
-        "FTP sends credentials and data in plaintext. SFTP runs over SSH \u2014 everything is encrypted",
+        "FTP sends credentials and data in plaintext. SFTP runs over SSH — everything is encrypted",
         "SFTP uses TLS",
         "FTP supports authentication; SFTP doesn't"
       ],
       "answerIndex": 1,
-      "explanation": "FTP has no built-in encryption. SFTP is a completely different protocol built on SSH \u2014 all data (including passwords) is encrypted. FTPS wraps FTP in TLS but is more complex to configure through firewalls.",
+      "explanation": "FTP has no built-in encryption. SFTP is a completely different protocol built on SSH — all data (including passwords) is encrypted. FTPS wraps FTP in TLS but is more complex to configure through firewalls.",
       "tags": [
         "ftp",
         "security"
@@ -49,8 +49,8 @@
       "prompt": "FTP uses how many TCP connections?",
       "choices": [
         "One",
-        "Two \u2014 a control channel (port 21) and a separate data channel (port 20 or ephemeral)",
-        "Three \u2014 control, data, and heartbeat",
+        "Two — a control channel (port 21) and a separate data channel (port 20 or ephemeral)",
+        "Three — control, data, and heartbeat",
         "One per file"
       ],
       "answerIndex": 1,
@@ -59,13 +59,329 @@
         "ftp",
         "architecture"
       ]
+    },
+    {
+      "id": "ftp-q4",
+      "type": "mcq",
+      "prompt": "What are the two channels FTP uses and what does each do?",
+      "choices": [
+        "Encrypt and decrypt channels",
+        "Control channel (port 21): commands and responses. Data channel (port 20 or ephemeral): actual file transfer data. Two separate TCP connections.",
+        "Upload and download channels",
+        "Client and server channels"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTP is unique: two separate TCP connections. Control channel (port 21): authenticate, send commands (LIST, RETR, STOR). Data channel: opened per transfer on port 20 (active) or ephemeral port (passive). This dual-channel design causes NAT/firewall complications.",
+      "tags": [
+        "ftp",
+        "protocol",
+        "channels"
+      ]
+    },
+    {
+      "id": "ftp-q5",
+      "type": "mcq",
+      "prompt": "What is the difference between FTP active mode and passive mode?",
+      "choices": [
+        "Active is encrypted, passive is not",
+        "Active: server initiates data connection TO client (breaks NAT). Passive: client initiates data connection to server (NAT-friendly). Always use passive mode.",
+        "Active is faster",
+        "Passive requires VPN"
+      ],
+      "answerIndex": 1,
+      "explanation": "Active FTP: client on port 1234, server connects back to client:1234 for data. NAT gateway blocks inbound connection from server. Passive FTP: server opens random high port, tells client 'connect to me here'. Client initiates. NAT allows outbound connections. Always configure FTP server for passive mode.",
+      "tags": [
+        "ftp",
+        "active",
+        "passive",
+        "nat"
+      ]
+    },
+    {
+      "id": "ftp-q6",
+      "type": "mcq",
+      "prompt": "What security problem does standard FTP have?",
+      "choices": [
+        "FTP uses too much bandwidth",
+        "FTP transmits credentials and data in PLAINTEXT — passwords, file contents visible to network sniffers. SFTP or FTPS should be used instead.",
+        "FTP is too slow",
+        "FTP has no authentication"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTP: username, password, and all file content sent as plaintext over TCP. Anyone on the network path can read them with Wireshark/tcpdump. Never use FTP over public internet. Replace with: SFTP (SSH File Transfer Protocol, encrypted) or FTPS (FTP + TLS, encrypted).",
+      "tags": [
+        "ftp",
+        "security",
+        "plaintext"
+      ]
+    },
+    {
+      "id": "ftp-q7",
+      "type": "mcq",
+      "prompt": "What is SFTP and how does it differ from FTP?",
+      "choices": [
+        "FTP with SSL (same protocol different transport)",
+        "SFTP is a completely different protocol that runs over SSH — fully encrypted, single channel (no firewall issues), uses port 22. Not related to FTP despite the name.",
+        "Secure FTP with added headers",
+        "FTP over port 443"
+      ],
+      "answerIndex": 1,
+      "explanation": "SFTP ≠ FTP + SSL. SFTP is the SSH File Transfer Protocol — a completely new protocol built into SSH. Single TCP connection on port 22. Everything encrypted. Firewall-friendly (one port). FTPS is FTP + TLS (still two channels, still port 21/20). SFTP is generally recommended over FTPS.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "ssh",
+        "security"
+      ]
+    },
+    {
+      "id": "ftp-q8",
+      "type": "mcq",
+      "prompt": "What is FTPS?",
+      "choices": [
+        "SFTP with a different name",
+        "FTP secured with TLS — either Explicit FTPS (starts as FTP, upgrades with AUTH TLS) or Implicit FTPS (TLS from first connection on port 990). Encrypts FTP traffic.",
+        "FTP over UDP",
+        "FTP with compression"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTPS: standard FTP protocol + TLS encryption. Still uses control and data channels (NAT still an issue). Explicit: connects on 21, client sends AUTH TLS to upgrade. Implicit: port 990, TLS from start. More complex than SFTP due to dual channels and TLS certificate management.",
+      "tags": [
+        "ftp",
+        "ftps",
+        "tls",
+        "security"
+      ]
+    },
+    {
+      "id": "ftp-q9",
+      "type": "mcq",
+      "prompt": "Why is FTP still used despite its security issues?",
+      "choices": [
+        "It's the most secure protocol",
+        "Legacy system compatibility, some B2B integrations still require it, managed file transfer (MFT) solutions use it. Always use SFTP/FTPS in any new deployment.",
+        "FTP is modern",
+        "FTP is faster than alternatives"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTP persists due to: legacy systems that can't be updated (AS400, mainframes), some payment processors/banks that mandated it decades ago, automated batch file transfers between companies. For any new system: use SFTP. For legacy: at minimum use FTPS to add encryption.",
+      "tags": [
+        "ftp",
+        "legacy",
+        "use-cases"
+      ]
+    },
+    {
+      "id": "ftp-q10",
+      "type": "mcq",
+      "prompt": "What port does SFTP use?",
+      "choices": [
+        "21",
+        "990",
+        "22 (same as SSH — SFTP is an SSH subsystem)",
+        "8021"
+      ],
+      "answerIndex": 2,
+      "explanation": "SFTP runs on port 22 (SSH port). SFTP is literally an SSH subsystem — sshd handles SFTP connections. No separate FTP server needed. Client: sftp user@server or use GUI like FileZilla (protocol: SFTP). Single port = simple firewall rule: allow TCP 22.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "port"
+      ]
+    },
+    {
+      "id": "ftp-q11",
+      "type": "mcq",
+      "prompt": "What FTP command is used to transfer a file from server to client?",
+      "choices": [
+        "STOR",
+        "GET",
+        "RETR (retrieve) — sent on control channel, triggers opening data channel, server sends file bytes",
+        "PUSH"
+      ],
+      "answerIndex": 2,
+      "explanation": "FTP commands on control channel: USER/PASS (auth), LIST (directory listing), RETR filename (download), STOR filename (upload), DELE filename (delete), MKD dirname (create directory), PWD (print working directory), PASV (enter passive mode). QUIT (disconnect).",
+      "tags": [
+        "ftp",
+        "commands",
+        "protocol"
+      ]
+    },
+    {
+      "id": "ftp-q12",
+      "type": "mcq",
+      "prompt": "What is anonymous FTP?",
+      "choices": [
+        "FTP without encryption",
+        "FTP server allowing login with username 'anonymous' and any email as password — used for public file distribution (old software, patches). Never for sensitive data.",
+        "FTP over Tor",
+        "FTP with no password at all"
+      ],
+      "answerIndex": 1,
+      "explanation": "Anonymous FTP: username='anonymous', password=any string (email by convention). Used by: old software mirrors, public patch distribution, RFC archive (ftp.ietf.org historically). No private data should ever be accessible via anonymous FTP. Most modern public distribution uses HTTP/CDN instead.",
+      "tags": [
+        "ftp",
+        "anonymous",
+        "public"
+      ]
+    },
+    {
+      "id": "ftp-q13",
+      "type": "mcq",
+      "prompt": "What is SCP (Secure Copy) and how does it relate to SFTP?",
+      "choices": [
+        "Symmetric Cryptographic Protocol",
+        "SCP uses SSH to securely copy files between hosts. Simpler than SFTP (no interactive session, just copy). Both encrypted via SSH. SFTP: interactive (list, navigate, rename). SCP: one-time copy operation.",
+        "A network protocol",
+        "FTP over SSH"
+      ],
+      "answerIndex": 1,
+      "explanation": "SCP: scp file.txt user@server:/path/. Simple non-interactive copy. SFTP: sftp user@server -> interactive: ls, cd, get, put, rm. Use SCP for scripts/automation. Use SFTP for interactive file management. Both use port 22, both SSH-encrypted. SCP is deprecated in OpenSSH; use sftp or rsync instead.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "scp",
+        "ssh"
+      ]
+    },
+    {
+      "id": "ftp-q14",
+      "type": "mcq",
+      "prompt": "What is the FTP PASV command?",
+      "choices": [
+        "Pause transfer",
+        "Client sends PASV to ask server to enter passive mode — server responds with IP:port for client to connect to for data channel. NAT-friendly.",
+        "Set passive file permissions",
+        "Password validation"
+      ],
+      "answerIndex": 1,
+      "explanation": "PASV flow: client sends PASV. Server: '227 Entering Passive Mode (10,0,1,5,195,80)' = IP 10.0.1.5, port 195*256+80=50000. Client opens TCP connection to 10.0.1.5:50000. Client initiates data connection = works through NAT. EPSV (Extended Passive) = IPv6-compatible version.",
+      "tags": [
+        "ftp",
+        "passive",
+        "pasv",
+        "nat"
+      ]
+    },
+    {
+      "id": "ftp-q15",
+      "type": "mcq",
+      "prompt": "How should you transfer sensitive files between servers today instead of FTP?",
+      "choices": [
+        "Anonymous FTP",
+        "SFTP (SSH File Transfer Protocol), FTPS (FTP+TLS), or managed file transfer (MFT) solutions like AWS Transfer Family for S3 integration. For ad-hoc: scp or rsync over SSH.",
+        "Email attachment",
+        "Standard FTP with strong password"
+      ],
+      "answerIndex": 1,
+      "explanation": "Never FTP for sensitive data. SFTP: easiest, uses existing SSH infrastructure. FTPS: if FTP is mandated (legacy). Cloud: AWS Transfer Family (managed SFTP/FTPS endpoint directly to S3). rsync over SSH: for large sync operations. Strong password doesn't protect FTP — everything including the password is still in plaintext.",
+      "tags": [
+        "ftp",
+        "security",
+        "modern-alternatives"
+      ]
+    },
+    {
+      "id": "ftp-q16",
+      "type": "mcq",
+      "prompt": "What is binary vs ASCII transfer mode in FTP?",
+      "choices": [
+        "Binary is encrypted, ASCII is not",
+        "Binary mode: transfers file byte-for-byte (for images, executables, archives). ASCII mode: translates line endings (LF/CRLF) between OS types. Using wrong mode corrupts files.",
+        "They are the same in modern FTP",
+        "ASCII mode uses more bandwidth"
+      ],
+      "answerIndex": 1,
+      "explanation": "FTP was designed cross-platform. ASCII mode: convert \\n (Unix) to \\r\\n (Windows) on transfer. OK for text files between mixed OS. Binary/Image mode: exact byte copy, no translation. Always use binary for: zip files, images, executables, databases. ASCII for text files (if needed). Modern FTP clients default to binary.",
+      "tags": [
+        "ftp",
+        "binary",
+        "ascii",
+        "modes"
+      ]
+    },
+    {
+      "id": "ftp-q17",
+      "type": "mcq",
+      "prompt": "What is AWS Transfer Family?",
+      "choices": [
+        "A file migration service",
+        "Managed SFTP/FTPS/FTP server that puts files directly into S3 or EFS — clients use standard SFTP clients, no server to manage",
+        "A network routing service",
+        "An IoT protocol"
+      ],
+      "answerIndex": 1,
+      "explanation": "AWS Transfer Family: managed endpoint for SFTP/FTPS. Partner sends file to your SFTP endpoint -> file lands in S3 bucket automatically. No EC2, no SSH server management. Set up DNS: sftp.company.com -> Transfer Family endpoint. IAM role controls which S3 prefix each SFTP user can access.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "aws",
+        "s3"
+      ]
+    },
+    {
+      "id": "ftp-q18",
+      "type": "mcq",
+      "prompt": "What is rsync and how does it improve on SCP for file transfer?",
+      "choices": [
+        "A replacement for FTP",
+        "Delta transfer: only sends CHANGED bytes (not entire file). Over SSH: encrypted. Resumable. Preserves permissions, timestamps. Faster than SCP for large or frequently-updated files.",
+        "A real-time sync protocol",
+        "Encrypted FTP client"
+      ],
+      "answerIndex": 1,
+      "explanation": "rsync: rsync -avz --delete /local/ user@server:/remote/. Delta algorithm: compare local and remote checksums at block level, send only changed blocks. 1GB file with 1KB change: transfers ~10KB not 1GB (if already synced). Over SSH (rsync -e ssh): encrypted. For backups and deployments: rsync is far superior to scp.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "rsync",
+        "delta"
+      ]
+    },
+    {
+      "id": "ftp-q19",
+      "type": "mcq",
+      "prompt": "What firewall ports must be open for an FTP server in passive mode?",
+      "choices": [
+        "Port 21 only",
+        "Port 21 (control channel) AND a range of high ports for data connections (e.g., 50000-51000) — server must be configured to use only this range for passive data channels",
+        "Ports 20 and 21 only",
+        "Ports 22 and 21"
+      ],
+      "answerIndex": 1,
+      "explanation": "Passive FTP: server opens random high port for each data transfer. Firewall must allow inbound to all possible random ports = security nightmare. Solution: configure FTP server with fixed passive port range (pasv_min_port=50000, pasv_max_port=51000). Open only that range in firewall. SFTP: only port 22 needed.",
+      "tags": [
+        "ftp",
+        "passive",
+        "firewall",
+        "ports"
+      ]
+    },
+    {
+      "id": "ftp-q20",
+      "type": "mcq",
+      "prompt": "What is the difference between SFTP and FTPS in terms of channel architecture?",
+      "choices": [
+        "SFTP has two channels, FTPS has one",
+        "SFTP: single SSH channel (port 22, simple firewall). FTPS: two channels like FTP (control on 21 + data channels), TLS over each. SFTP is simpler to firewall and operationally.",
+        "They are architecturally identical",
+        "FTPS is more secure than SFTP"
+      ],
+      "answerIndex": 1,
+      "explanation": "SFTP: one TCP connection on port 22. Open port 22 in firewall. Done. FTPS: still TCP 21 for control + separate data connections (passive range or active mode). Must configure TLS on both channels. More complex. Firewall: must allow range of data ports. SFTP operationally simpler than FTPS.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "ftps",
+        "comparison"
+      ]
     }
   ],
   "flashcards": [
     {
       "id": "ftp-fc1",
       "front": "FTP active vs passive mode",
-      "back": "Active: server initiates data connection back to client (blocked by NAT). Passive (PASV): client initiates both connections \u2014 works through NAT/firewalls. Always use PASV in production.",
+      "back": "Active: server initiates data connection back to client (blocked by NAT). Passive (PASV): client initiates both connections — works through NAT/firewalls. Always use PASV in production.",
       "tags": [
         "ftp"
       ]
@@ -77,6 +393,69 @@
       "tags": [
         "ftp",
         "security"
+      ]
+    },
+    {
+      "id": "ftp-fc3",
+      "front": "FTP active vs passive mode",
+      "back": "Active: server initiates data connection TO client -> FAILS behind NAT. Passive: client connects TO server data port -> NAT friendly. Always configure servers for passive mode. Configure fixed passive port range, open only that range in firewall.",
+      "tags": [
+        "ftp",
+        "active",
+        "passive",
+        "nat"
+      ]
+    },
+    {
+      "id": "ftp-fc4",
+      "front": "FTP vs SFTP vs FTPS",
+      "back": "FTP: plaintext, dual channel, legacy only. SFTP: SSH subsystem, port 22, encrypted, single channel, recommended. FTPS: FTP + TLS, still dual channel, complex. For new systems: SFTP always. Legacy requirement: FTPS. Never plain FTP over internet.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "ftps",
+        "security"
+      ]
+    },
+    {
+      "id": "ftp-fc5",
+      "front": "SFTP in practice",
+      "back": "sftp user@host (interactive). sftp user@host:/remote/file ./local/ (get). sftp -b batchfile user@host (scripted). Port 22, same as SSH. Uses SSH key auth (no password). AWS Transfer Family: managed SFTP endpoint pointing to S3.",
+      "tags": [
+        "ftp",
+        "sftp",
+        "commands"
+      ]
+    },
+    {
+      "id": "ftp-fc6",
+      "front": "AWS Transfer Family",
+      "back": "Managed SFTP/FTPS endpoint -> S3 or EFS. No server to manage. DNS: sftp.company.com -> Transfer Family. IAM controls S3 access per user. B2B file transfer without managing EC2+SSH server+SFTP software.",
+      "tags": [
+        "ftp",
+        "aws",
+        "s3",
+        "transfer-family"
+      ]
+    },
+    {
+      "id": "ftp-fc7",
+      "front": "rsync vs scp",
+      "back": "scp: always copies full file, no resume, slower for large files. rsync: delta algorithm (only changed blocks), resumable, preserves permissions/timestamps, --delete to sync deletions. rsync -avz --delete source/ user@host:dest/ Use rsync for backups and deployments.",
+      "tags": [
+        "ftp",
+        "rsync",
+        "scp"
+      ]
+    },
+    {
+      "id": "ftp-fc8",
+      "front": "FTP security rule",
+      "back": "FTP password = plaintext over network. NEVER use FTP for: sensitive files, credentials, tokens, PII. Replace with SFTP (port 22, SSH-encrypted). Audit any existing FTP usage. Legacy systems: wrap in FTPS at minimum. Modern cloud: S3 pre-signed URLs or AWS Transfer Family.",
+      "tags": [
+        "ftp",
+        "security",
+        "plaintext"
       ]
     }
   ],
