@@ -1,0 +1,461 @@
+{
+  "id": "api-design-patterns",
+  "unit": 13,
+  "order": 107,
+  "title": "API Design Patterns",
+  "summary": "Master REST, GraphQL, gRPC, versioning, pagination, and idempotency for production-grade APIs.",
+  "prereqs": [
+    "system-design-fundamentals"
+  ],
+  "guide": "# API Design Patterns — The Contract Between Services\n\n## Mental Model\nAn API is a contract. Callers depend on it. Breaking it breaks them. Good API design prioritises:\n1. **Clarity** — obvious what each endpoint does and returns\n2. **Stability** — changes are backward-compatible\n3. **Performance** — right granularity, right format for the use case\n\n## REST — The Standard\n\n### Resource naming\n```\n# Good — noun, plural, hierarchical\nGET    /users                  # list users\nGET    /users/{id}             # get one user\nPOST   /users                  # create user\nPUT    /users/{id}             # replace user\nPATCH  /users/{id}             # partial update\nDELETE /users/{id}             # delete user\n\nGET    /users/{id}/orders      # user's orders\nGET    /users/{id}/orders/{oid}# specific order\n\n# Bad — verb in URL, non-standard\nPOST /getUser\nGET  /deleteUser?id=123\n```\n\n### HTTP status codes that matter\n| Code | Meaning | When to use |\n|------|---------|-------------|\n| 200 | OK | successful GET, PUT, PATCH |\n| 201 | Created | successful POST |\n| 204 | No Content | successful DELETE |\n| 400 | Bad Request | validation error, malformed JSON |\n| 401 | Unauthorized | missing/invalid auth token |\n| 403 | Forbidden | valid auth, but no permission |\n| 404 | Not Found | resource doesn't exist |\n| 409 | Conflict | duplicate create, optimistic lock |\n| 422 | Unprocessable | semantic validation failed |\n| 429 | Too Many Requests | rate limited |\n| 500 | Internal Server Error | unexpected server error |\n\n### Pagination patterns\n```\n# Offset pagination — simple, SQL-friendly, inconsistent on inserts\nGET /posts?page=2&limit=20\nResponse: { data: [...], total: 500, page: 2, limit: 20 }\n\n# Cursor pagination — consistent for real-time feeds, no offset drift\nGET /posts?cursor=eyJpZCI6MTIzfQ&limit=20\nResponse: { data: [...], nextCursor: \"eyJpZCI6MTQzfQ\", hasMore: true }\n\n# Keyset pagination — most efficient for DB (uses indexed WHERE clause)\nGET /posts?afterId=143&limit=20\n```\n\n**Rule:** Use cursor/keyset pagination for feeds and real-time data. Offset is fine for admin dashboards.\n\n## GraphQL — Query What You Need\n```graphql\n# Client requests exactly what it needs\nquery {\n  user(id: \"123\") {\n    name\n    email\n    orders(last: 5) {\n      id\n      total\n      status\n    }\n  }\n}\n```\n\n```\nREST problems GraphQL solves:\n  Over-fetching: REST returns whole object even if you need 2 fields\n  Under-fetching: need 3 REST calls to assemble one screen\n  GraphQL: one request, exactly the shape you need\n```\n\n**When NOT to use GraphQL:** Simple CRUD, caching is critical (REST caches at HTTP layer; GraphQL typically uses POST → no HTTP caching), team unfamiliar with schema design.\n\n## gRPC — High-Performance Service-to-Service\n```protobuf\n// user.proto — contract defined in Protobuf\nservice UserService {\n    rpc GetUser(UserRequest) returns (UserResponse);\n    rpc ListUsers(ListRequest) returns (stream UserResponse);  // server streaming\n}\n\nmessage UserRequest { string id = 1; }\nmessage UserResponse { string id = 1; string name = 2; int32 age = 3; }\n```\ngRPC generates client/server code in any language. Uses HTTP/2 (multiplexing, header compression, bidirectional streaming).\n\n**When to use gRPC:** internal service-to-service (microservices), high throughput, streaming, polyglot environments.\n\n## API Versioning Strategies\n```\n# URL versioning (most visible, easy to route)\nGET /v1/users\nGET /v2/users\n\n# Header versioning (clean URLs, harder to test in browser)\nGET /users\nAccept: application/vnd.myapp.v2+json\n\n# Query param (least preferred)\nGET /users?version=2\n```\n\n**Semantic versioning rules:**\n- Breaking change (removed field, changed type) → new major version `/v2`\n- Additive change (new optional field) → backward compatible, no new version needed\n- Bug fix in behavior → patch, keep same version\n\n## Idempotency — Safe to Retry\n```\nIdempotent operations:\n  GET    — always safe\n  PUT    — same request → same result\n  DELETE — deleting already-deleted = 404 or 204 (still safe)\n\nNon-idempotent:\n  POST   — creates a new resource each time\n\nMake POST idempotent with Idempotency-Key:\n  POST /payments\n  Idempotency-Key: client-uuid-12345\n\nServer stores the key + response. On retry with same key → return stored response, don't process again.\n```\n\n## Common Pitfalls\n- **Exposing DB schema in API**: `userId` in DB becomes `user_id` in API — don't expose internal column names; use a stable API name\n- **Returning 200 for errors**: `{ \"status\": \"error\" }` with HTTP 200 — clients can't distinguish success from failure at HTTP layer\n- **Missing pagination**: returning 10k records in one response — always paginate\n- **Inconsistent naming**: mixing `camelCase` and `snake_case` in same API\n- **No versioning strategy from day 1**: adding `/v2` after production = pain; plan from the start\n\n## Connections\n- `system-design-fundamentals` — APIs are the interface of system components\n- `distributed-systems` — API design affects how services communicate\n- `rate-limiting` — Rate limit at API gateway; API design must signal limits (429 + Retry-After)\n- `networking-rpc` — gRPC is RPC over HTTP/2\n",
+  "questions": [
+    {
+      "id": "apidp-q1",
+      "type": "mcq",
+      "prompt": "What HTTP method + URL correctly represents 'update a specific user's email'?",
+      "choices": [
+        "POST /users/updateEmail",
+        "PATCH /users/{id}",
+        "PUT /updateUser/{id}",
+        "GET /users/{id}/update"
+      ],
+      "answerIndex": 1,
+      "explanation": "PATCH is for partial updates. PUT replaces the whole resource. POST and GET are wrong here. The URL should be a noun (resource), not a verb.",
+      "tags": [
+        "rest",
+        "http-methods"
+      ]
+    },
+    {
+      "id": "apidp-q2",
+      "type": "mcq",
+      "prompt": "What HTTP status should a successful resource creation return?",
+      "choices": [
+        "200 OK",
+        "201 Created",
+        "202 Accepted",
+        "204 No Content"
+      ],
+      "answerIndex": 1,
+      "explanation": "201 Created with a Location header pointing to the new resource is the REST standard for successful POST. 200 is for successful reads/updates.",
+      "tags": [
+        "rest",
+        "status-codes"
+      ]
+    },
+    {
+      "id": "apidp-q3",
+      "type": "mcq",
+      "prompt": "What is the key difference between cursor pagination and offset pagination?",
+      "choices": [
+        "Cursor is faster on small datasets",
+        "Cursor is stable under concurrent inserts (no drift); offset can skip/duplicate rows if data changes during pagination",
+        "Offset uses a database cursor internally",
+        "No real difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "Offset drift: if rows are inserted between page 1 and page 2 requests, page 2 might duplicate the last item of page 1. Cursor-based pagination uses a stable pointer (ID/timestamp) — no drift.",
+      "tags": [
+        "pagination"
+      ]
+    },
+    {
+      "id": "apidp-q4",
+      "type": "mcq",
+      "prompt": "What problem does GraphQL's single-endpoint design solve vs REST?",
+      "choices": [
+        "Authentication",
+        "Over-fetching (too much data) and under-fetching (need multiple requests for one screen)",
+        "Database performance",
+        "Caching"
+      ],
+      "answerIndex": 1,
+      "explanation": "REST: fixed response shapes. GraphQL: client specifies exactly what it needs — no wasted bandwidth, no waterfall requests.",
+      "tags": [
+        "graphql"
+      ]
+    },
+    {
+      "id": "apidp-q5",
+      "type": "mcq",
+      "prompt": "When is gRPC preferred over REST?",
+      "choices": [
+        "Public APIs consumed by browsers",
+        "High-throughput service-to-service communication, streaming, polyglot microservices",
+        "CRUD web applications",
+        "When simplicity is key"
+      ],
+      "answerIndex": 1,
+      "explanation": "gRPC uses HTTP/2 (multiplexing, compression, streaming), binary Protobuf (smaller, faster than JSON), and auto-generated clients. Ideal for internal microservice communication.",
+      "tags": [
+        "grpc"
+      ]
+    },
+    {
+      "id": "apidp-q6",
+      "type": "mcq",
+      "prompt": "What is an idempotency key used for?",
+      "choices": [
+        "Authentication",
+        "Making POST requests safe to retry without duplicate operations",
+        "Caching responses",
+        "Rate limiting"
+      ],
+      "answerIndex": 1,
+      "explanation": "An idempotency key (UUID sent by client) lets the server detect retries of the same request. On retry, return the cached response without re-processing. Critical for payments.",
+      "tags": [
+        "idempotency"
+      ]
+    },
+    {
+      "id": "apidp-q7",
+      "type": "mcq",
+      "prompt": "What does HTTP 403 mean vs 401?",
+      "choices": [
+        "Both mean authentication failed",
+        "401: not authenticated (missing/invalid token). 403: authenticated but not authorized (no permission for this resource).",
+        "403: server error. 401: client error.",
+        "They are interchangeable"
+      ],
+      "answerIndex": 1,
+      "explanation": "401 = 'who are you?' 403 = 'I know who you are, but you can't do this.' Always distinguish them — helps clients know whether to re-authenticate or request permissions.",
+      "tags": [
+        "rest",
+        "status-codes"
+      ]
+    },
+    {
+      "id": "apidp-q8",
+      "type": "mcq",
+      "prompt": "Which API versioning approach is most common and easiest to test?",
+      "choices": [
+        "Header versioning",
+        "URL path versioning (/v1/)",
+        "Query parameter versioning",
+        "Subdomain versioning"
+      ],
+      "answerIndex": 1,
+      "explanation": "URL versioning (/v1/, /v2/) is visible, easy to route in load balancers, and testable in browsers. Widely adopted (GitHub, Twitter, Stripe).",
+      "tags": [
+        "versioning"
+      ]
+    },
+    {
+      "id": "apidp-q9",
+      "type": "mcq",
+      "prompt": "What is a breaking change in an API?",
+      "choices": [
+        "Adding a new optional field to a response",
+        "Removing a field, changing a field type, or changing endpoint behavior",
+        "Adding a new endpoint",
+        "Fixing a bug in an existing endpoint"
+      ],
+      "answerIndex": 1,
+      "explanation": "Breaking changes force clients to update code. Removals, type changes, renamed fields, or changed semantics are breaking. Adding optional fields is non-breaking (additive).",
+      "tags": [
+        "versioning"
+      ]
+    },
+    {
+      "id": "apidp-q10",
+      "type": "multi",
+      "prompt": "Which HTTP methods are idempotent (safe to retry with same result)?",
+      "choices": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "GET (read-only), PUT (replace to same state), DELETE (already deleted = same final state). POST creates new resources each time. PATCH may or may not be idempotent depending on operation.",
+      "tags": [
+        "http-methods",
+        "idempotency"
+      ]
+    },
+    {
+      "id": "apidp-q11",
+      "type": "mcq",
+      "prompt": "What is the main weakness of GraphQL compared to REST for public APIs?",
+      "choices": [
+        "GraphQL doesn't support authentication",
+        "HTTP caching doesn't work out of the box (POST requests aren't cached by CDNs)",
+        "GraphQL is slower",
+        "GraphQL can't handle complex queries"
+      ],
+      "answerIndex": 1,
+      "explanation": "REST GET responses cache naturally at CDN/proxy level. GraphQL uses POST for queries (to send the query body) — CDNs don't cache POSTs, requiring application-level caching.",
+      "tags": [
+        "graphql",
+        "caching"
+      ]
+    },
+    {
+      "id": "apidp-q12",
+      "type": "mcq",
+      "prompt": "What should a PATCH vs PUT request body contain?",
+      "choices": [
+        "Same thing — both full resource representation",
+        "PATCH: only the fields to change. PUT: the complete new resource representation.",
+        "PUT: partial update. PATCH: full update.",
+        "No body required for either"
+      ],
+      "answerIndex": 1,
+      "explanation": "PUT replaces the entire resource (omitted fields get default/null values). PATCH is a partial update — only include what's changing.",
+      "tags": [
+        "rest",
+        "http-methods"
+      ]
+    },
+    {
+      "id": "apidp-q13",
+      "type": "mcq",
+      "prompt": "What is gRPC's wire format?",
+      "choices": [
+        "JSON",
+        "XML",
+        "Protocol Buffers (binary)",
+        "MessagePack"
+      ],
+      "answerIndex": 2,
+      "explanation": "gRPC uses Protocol Buffers — a binary format 3-10x smaller and faster to serialize/deserialize than JSON. Requires generated code from `.proto` schema files.",
+      "tags": [
+        "grpc"
+      ]
+    },
+    {
+      "id": "apidp-q14",
+      "type": "mcq",
+      "prompt": "What HTTP response should a rate-limited request return?",
+      "choices": [
+        "403 Forbidden",
+        "400 Bad Request",
+        "429 Too Many Requests with Retry-After header",
+        "503 Service Unavailable"
+      ],
+      "answerIndex": 2,
+      "explanation": "429 with `Retry-After: 30` (seconds) or a reset timestamp tells clients exactly when to retry. 503 implies the server is down, not that the client is throttled.",
+      "tags": [
+        "rest",
+        "status-codes",
+        "rate-limiting"
+      ]
+    },
+    {
+      "id": "apidp-q15",
+      "type": "mcq",
+      "prompt": "Which pagination is most DB-efficient for large tables?",
+      "choices": [
+        "Offset/limit",
+        "Cursor using last ID",
+        "Keyset using WHERE id > lastId ORDER BY id LIMIT n",
+        "Random sampling"
+      ],
+      "answerIndex": 2,
+      "explanation": "Keyset pagination uses `WHERE id > :lastId LIMIT n` — a full index scan with a seek. `OFFSET n` requires DB to scan and discard n rows — gets slower as offset grows.",
+      "tags": [
+        "pagination",
+        "database"
+      ]
+    },
+    {
+      "id": "apidp-q16",
+      "type": "mcq",
+      "prompt": "Should you expose database column names directly in your API?",
+      "choices": [
+        "Yes — simplifies mapping",
+        "No — it couples your API contract to DB internals; use stable API names",
+        "Only for admin endpoints",
+        "Only if using camelCase"
+      ],
+      "answerIndex": 1,
+      "explanation": "Database schemas change. Column renamed = breaking API change for clients. Use a stable API name layer (DTO/ViewModel) that maps to DB columns.",
+      "tags": [
+        "api-design",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "apidp-q17",
+      "type": "multi",
+      "prompt": "Which are benefits of gRPC over REST?",
+      "choices": [
+        "HTTP/2 multiplexing",
+        "Human-readable format",
+        "Bidirectional streaming",
+        "No schema required",
+        "Auto-generated clients in many languages"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        4
+      ],
+      "explanation": "gRPC: HTTP/2 (multiplexing), streaming support, schema-driven code generation. REST/JSON is more human-readable, requires no schema.",
+      "tags": [
+        "grpc"
+      ]
+    },
+    {
+      "id": "apidp-q18",
+      "type": "mcq",
+      "prompt": "What is over-fetching?",
+      "choices": [
+        "Sending too many requests",
+        "API returning more data than the client needs",
+        "Using too many HTTP methods",
+        "Requesting data that doesn't exist"
+      ],
+      "answerIndex": 1,
+      "explanation": "Over-fetching: a REST endpoint returns the full User object (20 fields) but the UI only needs name and avatar. Wastes bandwidth. GraphQL solves this by letting clients specify fields.",
+      "tags": [
+        "graphql",
+        "api-design"
+      ]
+    },
+    {
+      "id": "apidp-q19",
+      "type": "mcq",
+      "prompt": "Where should you return a 404 vs 403?",
+      "choices": [
+        "404 for all protected resources (security through obscurity)",
+        "403 when resource exists but user can't access it; 404 when it genuinely doesn't exist",
+        "Both are interchangeable",
+        "Always 403 to avoid leaking information"
+      ],
+      "answerIndex": 1,
+      "explanation": "In security-sensitive contexts (e.g., private repos): returning 404 for unauthorized resources prevents leaking their existence. But for clarity, 403 is the semantically correct choice for 'exists but no access'.",
+      "tags": [
+        "rest",
+        "status-codes"
+      ]
+    },
+    {
+      "id": "apidp-q20",
+      "type": "mcq",
+      "prompt": "What is the 'N+1 query problem' in GraphQL?",
+      "choices": [
+        "GraphQL makes N+1 API calls",
+        "Fetching a list of N items then making 1 DB query per item instead of 1 batch query for all",
+        "Returning N+1 fields",
+        "GraphQL schema with N+1 types"
+      ],
+      "answerIndex": 1,
+      "explanation": "Classic: fetch 100 users (1 query), then for each user fetch their orders (100 queries) = 101 queries. Solution: DataLoader — batches all individual item requests into one query.",
+      "tags": [
+        "graphql",
+        "performance"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "apidp-fc1",
+      "front": "REST resource naming rule",
+      "back": "Nouns, plural, hierarchical. `/users/{id}/orders`. Never verbs in URL. Use HTTP method for the action (GET=read, POST=create, PUT=replace, PATCH=partial, DELETE=remove).",
+      "tags": [
+        "rest"
+      ]
+    },
+    {
+      "id": "apidp-fc2",
+      "front": "201 vs 200 vs 204",
+      "back": "200: success with body (GET, PUT, PATCH). 201: resource created (POST) — include Location header. 204: success, no body (DELETE).",
+      "tags": [
+        "status-codes"
+      ]
+    },
+    {
+      "id": "apidp-fc3",
+      "front": "Cursor vs offset pagination",
+      "back": "Cursor: stable pointer (last ID/timestamp), no drift on concurrent inserts, best for feeds. Offset: simpler, drifts on inserts, O(OFFSET) DB scan. Use cursor for real-time data.",
+      "tags": [
+        "pagination"
+      ]
+    },
+    {
+      "id": "apidp-fc4",
+      "front": "Idempotency-Key pattern",
+      "back": "Client sends UUID header. Server stores `(key → response)`. On retry with same key: return cached response, no reprocessing. Critical for payments and POST mutations.",
+      "tags": [
+        "idempotency"
+      ]
+    },
+    {
+      "id": "apidp-fc5",
+      "front": "When to use gRPC vs REST",
+      "back": "gRPC: internal service-to-service, streaming, high throughput, polyglot. REST: public APIs, browser clients, simplicity, CDN caching. GraphQL: flexible client queries, avoid over/under-fetching.",
+      "tags": [
+        "grpc",
+        "graphql"
+      ]
+    },
+    {
+      "id": "apidp-fc6",
+      "front": "Breaking vs non-breaking API change",
+      "back": "Breaking: remove field, change type, rename field, change behavior. Non-breaking: add optional field, add endpoint, improve performance. Breaking → new major version.",
+      "tags": [
+        "versioning"
+      ]
+    },
+    {
+      "id": "apidp-fc7",
+      "front": "429 Too Many Requests response",
+      "back": "Always include `Retry-After: <seconds>` or `X-RateLimit-Reset: <timestamp>`. Clients use this to back off intelligently instead of hammering again immediately.",
+      "tags": [
+        "rate-limiting",
+        "status-codes"
+      ]
+    },
+    {
+      "id": "apidp-fc8",
+      "front": "GraphQL N+1 solution",
+      "back": "DataLoader: batches individual field resolvers into one query per type. Instead of 100 user queries → 1 query with WHERE id IN (...). Essential for any list query with nested data.",
+      "tags": [
+        "graphql",
+        "performance"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the API for a social media feed service. Users can post, follow others, and see a personalized feed. Design: (1) REST endpoints for posts, follows, and feed; (2) pagination strategy for the feed (justify choice); (3) GraphQL schema alternative for a mobile client that needs flexible data; (4) one example of an idempotent operation and how you'd implement it; (5) versioning strategy. No implementation code — just API contracts and decisions.",
+    "checklist": [
+      {
+        "id": "apidp-p1",
+        "text": "Define 5+ REST endpoints with correct HTTP methods and URL patterns",
+        "weight": 20
+      },
+      {
+        "id": "apidp-p2",
+        "text": "Choose and justify a pagination strategy for the feed endpoint",
+        "weight": 20
+      },
+      {
+        "id": "apidp-p3",
+        "text": "Sketch a GraphQL schema with at least 2 types and a query/mutation",
+        "weight": 20
+      },
+      {
+        "id": "apidp-p4",
+        "text": "Identify an idempotency requirement (e.g., follow request) and design the key strategy",
+        "weight": 20
+      },
+      {
+        "id": "apidp-p5",
+        "text": "Define a versioning plan for your API from day 1",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Feed endpoint: cursor pagination — real-time feed changes during browsing make offset drift a real problem.",
+      "Follow: POST /users/{id}/follows/{followeeId} — idempotent with idempotency key to prevent double-follow from retries.",
+      "GraphQL: type Post { id, content, author: User, likes: Int } — shows how schema composes types.",
+      "Versioning: embed /v1/ from day 1 even if you never need /v2/ — no cost upfront, huge benefit later."
+    ]
+  }
+}

@@ -1,0 +1,468 @@
+{
+  "id": "python-oop",
+  "unit": 2,
+  "order": 12,
+  "title": "Python OOP",
+  "summary": "Master classes, inheritance, dunder methods, and Pythonic object design.",
+  "prereqs": [
+    "python-fundamentals"
+  ],
+  "guide": "# Python OOP — Think in Objects, Not Scripts\n\n## Mental Model\nA class is a blueprint — a cookie-cutter shape. An instance is the actual cookie.\nPython doesn't enforce privacy; it trusts the programmer. That's why you'll see `_private` (convention) not a hard wall.\n\n## Core Concepts\n\n### Class Anatomy\n```python\nclass Animal:\n    species = \"Unknown\"          # class attribute — shared by all instances\n\n    def __init__(self, name: str, sound: str):\n        self.name = name         # instance attribute — unique per object\n        self.sound = sound\n\n    def speak(self) -> str:\n        return f\"{self.name} says {self.sound}\"\n\n    def __repr__(self) -> str:   # unambiguous string for debugging\n        return f\"Animal(name={self.name!r})\"\n\n    def __str__(self) -> str:    # human-readable string\n        return self.name\n\ndog = Animal(\"Rex\", \"woof\")\nprint(dog)        # Rex          ← __str__\nprint(repr(dog))  # Animal(name='Rex')  ← __repr__\n```\n\n## Inheritance\n```\n        Animal\n       /      \\\n    Dog        Cat\n     |\n  GoldenRetriever\n```\n```python\nclass Dog(Animal):\n    def __init__(self, name: str):\n        super().__init__(name, \"woof\")   # ALWAYS call super().__init__\n        self.tricks: list[str] = []\n\n    def learn(self, trick: str) -> None:\n        self.tricks.append(trick)\n\n    def speak(self) -> str:              # override\n        return f\"{self.name} barks loudly!\"\n```\n\n### MRO — Method Resolution Order\n```python\nclass A: pass\nclass B(A): pass\nclass C(A): pass\nclass D(B, C): pass   # Diamond problem\n\nprint(D.__mro__)\n# (<class 'D'>, <class 'B'>, <class 'C'>, <class 'A'>, <class 'object'>)\n# Python uses C3 linearization — left-to-right, depth-first, no repeats\n```\n\n## Dunder (Magic) Methods Cheatsheet\n| Dunder | Triggered by |\n|--------|-------------|\n| `__init__` | `Dog(name)` |\n| `__str__` | `str(obj)`, `print(obj)` |\n| `__repr__` | `repr(obj)`, REPL |\n| `__len__` | `len(obj)` |\n| `__eq__` | `obj1 == obj2` |\n| `__lt__` | `obj1 < obj2` (enables sorting) |\n| `__add__` | `obj1 + obj2` |\n| `__getitem__` | `obj[key]` |\n| `__iter__` | `for x in obj` |\n| `__enter__/__exit__` | `with obj:` |\n\n## Properties — Controlled Attribute Access\n```python\nclass Temperature:\n    def __init__(self, celsius: float):\n        self._celsius = celsius          # _underscore = \"please don't touch directly\"\n\n    @property\n    def celsius(self) -> float:\n        return self._celsius\n\n    @celsius.setter\n    def celsius(self, value: float) -> None:\n        if value < -273.15:\n            raise ValueError(\"Below absolute zero!\")\n        self._celsius = value\n\n    @property\n    def fahrenheit(self) -> float:       # computed property, no setter\n        return self._celsius * 9/5 + 32\n\nt = Temperature(100)\nprint(t.fahrenheit)   # 212.0\nt.celsius = -300      # raises ValueError\n```\n\n## Class Methods vs Static Methods\n```python\nclass Pizza:\n    tax_rate = 0.08\n\n    def __init__(self, toppings: list[str], price: float):\n        self.toppings = toppings\n        self.price = price\n\n    @classmethod\n    def margherita(cls) -> \"Pizza\":          # factory — knows about the class\n        return cls([\"tomato\", \"mozzarella\"], 10.0)\n\n    @staticmethod\n    def is_vegetarian(toppings: list[str]) -> bool:   # utility — no self, no cls\n        return \"pepperoni\" not in toppings\n\np = Pizza.margherita()\nprint(Pizza.is_vegetarian([\"tomato\"]))  # True\n```\n\n**Rule:** Use `@classmethod` for alternative constructors. Use `@staticmethod` for pure helpers that happen to live in the class namespace.\n\n## Dataclasses — Less Boilerplate\n```python\nfrom dataclasses import dataclass, field\n\n@dataclass(order=True, frozen=True)   # frozen = immutable, order = auto __lt__ etc\nclass Point:\n    x: float\n    y: float\n    label: str = field(default=\"\", compare=False)  # exclude from eq/order\n\np1 = Point(1.0, 2.0)\np2 = Point(1.0, 2.0)\nprint(p1 == p2)   # True  — auto __eq__\n```\n\n## Common Pitfalls\n- **Mutable default argument in `__init__`**: `def __init__(self, items=[])` — all instances share the SAME list. Fix: `def __init__(self, items=None): self.items = items or []`\n- **Forgetting `super().__init__()`** in multi-inheritance → parent state never set up\n- **Shadowing built-ins**: `class list` or attribute `id` shadows Python's built-ins\n- **`__eq__` without `__hash__`**: if you define `__eq__`, Python sets `__hash__ = None`, breaking use in sets/dicts. Fix: also define `__hash__` or use `@dataclass(unsafe_hash=True)`\n\n## Connections\n- `python-fundamentals` → base syntax you need before OOP\n- `ts-interfaces-types` → compare structural typing (TypeScript) vs nominal (Java) vs duck typing (Python)\n- `dsa-java-binary-trees` → tree node classes are pure OOP in any language\n",
+  "questions": [
+    {
+      "id": "pyoop-q1",
+      "type": "mcq",
+      "prompt": "What is the first parameter of every instance method in Python?",
+      "choices": [
+        "this",
+        "self",
+        "cls",
+        "instance"
+      ],
+      "answerIndex": 1,
+      "explanation": "`self` refers to the instance. It's a convention, not a keyword — but everyone uses it.",
+      "tags": [
+        "oop",
+        "methods"
+      ]
+    },
+    {
+      "id": "pyoop-q2",
+      "type": "mcq",
+      "prompt": "Which dunder method is called when you do `len(obj)`?",
+      "choices": [
+        "__size__",
+        "__count__",
+        "__len__",
+        "__length__"
+      ],
+      "answerIndex": 2,
+      "explanation": "`__len__` is the standard hook. Implement it to make your class work with `len()`.",
+      "tags": [
+        "dunder",
+        "protocols"
+      ]
+    },
+    {
+      "id": "pyoop-q3",
+      "type": "mcq",
+      "prompt": "What does `@classmethod` receive as its first argument?",
+      "choices": [
+        "self",
+        "The class (cls)",
+        "None",
+        "The module"
+      ],
+      "answerIndex": 1,
+      "explanation": "`cls` receives the class itself, not an instance. This lets factory methods create instances via `cls(...)` which works correctly with subclasses.",
+      "tags": [
+        "classmethod",
+        "methods"
+      ]
+    },
+    {
+      "id": "pyoop-q4",
+      "type": "codeOutput",
+      "prompt": "What does this print?",
+      "code": "class A:\n    x = 1\nclass B(A):\n    pass\nB.x = 2\nprint(A.x, B.x)",
+      "choices": [
+        "1 1",
+        "2 2",
+        "1 2",
+        "2 1"
+      ],
+      "answerIndex": 2,
+      "explanation": "Setting `B.x` creates a new class attribute on B without touching A. A.x stays 1.",
+      "tags": [
+        "inheritance",
+        "class-attributes"
+      ]
+    },
+    {
+      "id": "pyoop-q5",
+      "type": "mcq",
+      "prompt": "What is the purpose of `__repr__`?",
+      "choices": [
+        "Format for logging files",
+        "Unambiguous string for debugging/REPL",
+        "Convert to bytes",
+        "Create a copy"
+      ],
+      "answerIndex": 1,
+      "explanation": "`__repr__` should return a string that ideally could recreate the object. It's shown in the REPL and used when `__str__` is not defined.",
+      "tags": [
+        "dunder",
+        "debugging"
+      ]
+    },
+    {
+      "id": "pyoop-q6",
+      "type": "multi",
+      "prompt": "Which are valid ways to call a classmethod `Pizza.margherita`?",
+      "choices": [
+        "Pizza.margherita()",
+        "pizza_instance.margherita()",
+        "margherita(Pizza)",
+        "Pizza.margherita(Pizza)"
+      ],
+      "answerIndexes": [
+        0,
+        1
+      ],
+      "explanation": "Both the class and an instance can call a classmethod — `cls` is injected automatically in both cases. The third/fourth forms are wrong syntax.",
+      "tags": [
+        "classmethod"
+      ]
+    },
+    {
+      "id": "pyoop-q7",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "class Counter:\n    count = 0\n    def __init__(self):\n        Counter.count += 1\n\na = Counter()\nb = Counter()\nprint(Counter.count)",
+      "choices": [
+        "0",
+        "1",
+        "2",
+        "Error"
+      ],
+      "answerIndex": 2,
+      "explanation": "Each `__init__` increments the shared class attribute. Two instances → count = 2.",
+      "tags": [
+        "class-attributes",
+        "oop"
+      ]
+    },
+    {
+      "id": "pyoop-q8",
+      "type": "mcq",
+      "prompt": "What does `@property` enable?",
+      "choices": [
+        "Makes attribute read-only permanently",
+        "Lets you call a method like an attribute with optional setter logic",
+        "Caches the return value",
+        "Creates a class attribute"
+      ],
+      "answerIndex": 1,
+      "explanation": "`@property` turns a method into an attribute-style access. Add `@x.setter` to allow writes with validation.",
+      "tags": [
+        "property",
+        "encapsulation"
+      ]
+    },
+    {
+      "id": "pyoop-q9",
+      "type": "mcq",
+      "prompt": "You define `__eq__` on a class. What happens to `__hash__` by default?",
+      "choices": [
+        "It uses id() as before",
+        "It's set to None (class becomes unhashable)",
+        "It's derived from __eq__",
+        "Nothing changes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Python resets `__hash__ = None` when you define `__eq__` to prevent inconsistent hashing. You must define `__hash__` manually if you need the class in a set/dict.",
+      "tags": [
+        "dunder",
+        "hashing"
+      ]
+    },
+    {
+      "id": "pyoop-q10",
+      "type": "mcq",
+      "prompt": "What is Python's Method Resolution Order (MRO) algorithm?",
+      "choices": [
+        "Depth-first search",
+        "Breadth-first search",
+        "C3 linearization",
+        "Right-to-left parent order"
+      ],
+      "answerIndex": 2,
+      "explanation": "C3 linearization ensures consistent, predictable MRO in diamond inheritance. Left-to-right, no duplicates, respects local precedence.",
+      "tags": [
+        "inheritance",
+        "mro"
+      ]
+    },
+    {
+      "id": "pyoop-q11",
+      "type": "codeOutput",
+      "prompt": "What does this print?",
+      "code": "class Dog:\n    def __init__(self, name):\n        self.name = name\n    def __str__(self):\n        return self.name\n    def __repr__(self):\n        return f'Dog({self.name!r})'\n\nd = Dog('Rex')\nprint(str(d))\nprint(repr(d))",
+      "choices": [
+        "Rex\\nRex",
+        "Rex\\nDog('Rex')",
+        "Dog('Rex')\\nDog('Rex')",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "`str()` calls `__str__` → 'Rex'. `repr()` calls `__repr__` → \"Dog('Rex')\".",
+      "tags": [
+        "dunder",
+        "str"
+      ]
+    },
+    {
+      "id": "pyoop-q12",
+      "type": "mcq",
+      "prompt": "What is wrong with: `def __init__(self, items=[])`?",
+      "choices": [
+        "Lists are not allowed as defaults",
+        "The default list is shared across all instances",
+        "It should be items=()",
+        "Nothing is wrong"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default mutable arguments are evaluated ONCE at function definition. All instances share the same list object. Use `items=None` then `self.items = items if items is not None else []`.",
+      "tags": [
+        "pitfalls",
+        "mutability"
+      ]
+    },
+    {
+      "id": "pyoop-q13",
+      "type": "mcq",
+      "prompt": "When should you use `@staticmethod` vs `@classmethod`?",
+      "choices": [
+        "They are interchangeable",
+        "staticmethod when you need cls; classmethod when you don't",
+        "staticmethod for utilities with no class/instance needed; classmethod for factories",
+        "staticmethod only in abstract classes"
+      ],
+      "answerIndex": 2,
+      "explanation": "Use `@staticmethod` for pure utility functions that happen to live in the class. Use `@classmethod` when you need access to the class itself (e.g., alternative constructors).",
+      "tags": [
+        "classmethod",
+        "staticmethod"
+      ]
+    },
+    {
+      "id": "pyoop-q14",
+      "type": "mcq",
+      "prompt": "What does `frozen=True` in `@dataclass` do?",
+      "choices": [
+        "Prevents subclassing",
+        "Makes instances immutable (no attribute assignment after init)",
+        "Freezes class-level attributes",
+        "Enables pickling"
+      ],
+      "answerIndex": 1,
+      "explanation": "Frozen dataclasses raise `FrozenInstanceError` on attribute assignment. They also become hashable automatically.",
+      "tags": [
+        "dataclass",
+        "immutability"
+      ]
+    },
+    {
+      "id": "pyoop-q15",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "class Vehicle:\n    def start(self):\n        return 'vroom'\n\nclass Car(Vehicle):\n    def start(self):\n        return super().start() + '!'\n\nprint(Car().start())",
+      "choices": [
+        "vroom",
+        "vroom!",
+        "!",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "`super().start()` calls `Vehicle.start()` returning 'vroom', then '!' is appended → 'vroom!'.",
+      "tags": [
+        "inheritance",
+        "super"
+      ]
+    },
+    {
+      "id": "pyoop-q16",
+      "type": "multi",
+      "prompt": "Which dunder methods does `@dataclass` auto-generate by default?",
+      "choices": [
+        "__init__",
+        "__repr__",
+        "__eq__",
+        "__hash__",
+        "__lt__"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "By default: `__init__`, `__repr__`, `__eq__`. `__hash__` and ordering methods (`__lt__` etc.) require `frozen=True` or `order=True`.",
+      "tags": [
+        "dataclass",
+        "dunder"
+      ]
+    },
+    {
+      "id": "pyoop-q17",
+      "type": "mcq",
+      "prompt": "What is duck typing in Python?",
+      "choices": [
+        "All objects inherit from Duck",
+        "Type checks happen at compile time",
+        "If an object has the required methods/attributes, it's usable regardless of its type",
+        "Type annotations are mandatory"
+      ],
+      "answerIndex": 2,
+      "explanation": "If it walks like a duck and quacks like a duck, it's a duck. Python checks method existence at call time, not type identity.",
+      "tags": [
+        "duck-typing",
+        "protocols"
+      ]
+    },
+    {
+      "id": "pyoop-q18",
+      "type": "mcq",
+      "prompt": "The `__enter__` and `__exit__` methods enable:",
+      "choices": [
+        "Iteration protocol",
+        "Context manager protocol (with statement)",
+        "Comparison operators",
+        "Arithmetic operators"
+      ],
+      "answerIndex": 1,
+      "explanation": "Implementing `__enter__` and `__exit__` lets your class be used with `with obj as x:` — ideal for resource management (files, DB connections, locks).",
+      "tags": [
+        "dunder",
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyoop-q19",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "class A:\n    def method(self):\n        return 'A'\nclass B(A):\n    def method(self):\n        return 'B'\nclass C(A):\n    def method(self):\n        return 'C'\nclass D(B, C):\n    pass\nprint(D().method())",
+      "choices": [
+        "A",
+        "B",
+        "C",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "MRO for D is D → B → C → A. B is checked first, so `B.method` is called → 'B'.",
+      "tags": [
+        "mro",
+        "inheritance"
+      ]
+    },
+    {
+      "id": "pyoop-q20",
+      "type": "mcq",
+      "prompt": "What is the difference between a class attribute and an instance attribute?",
+      "choices": [
+        "No difference in Python",
+        "Class attributes are constants; instance attributes are variables",
+        "Class attributes are shared across all instances; instance attributes are unique per instance",
+        "Instance attributes must be defined in __init__; class attributes anywhere"
+      ],
+      "answerIndex": 2,
+      "explanation": "Class attributes live on the class object itself and are shared. Instance attributes live on the specific instance (set via `self.attr = ...`).",
+      "tags": [
+        "attributes",
+        "oop"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "pyoop-fc1",
+      "front": "self vs cls",
+      "back": "`self` = the instance (used in regular methods). `cls` = the class itself (used in @classmethod). Neither is a keyword — just strong convention.",
+      "tags": [
+        "oop"
+      ]
+    },
+    {
+      "id": "pyoop-fc2",
+      "front": "When to use @property",
+      "back": "Use when you want attribute-style access (`obj.price`) but need logic (validation, computation) on get/set. Avoids `get_price()` / `set_price()` boilerplate.",
+      "tags": [
+        "property"
+      ]
+    },
+    {
+      "id": "pyoop-fc3",
+      "front": "Mutable default argument trap",
+      "back": "Never use mutable defaults: `def f(x=[])`. The list is created once and shared. Use `x=None` then `x = x or []` inside the function.",
+      "tags": [
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyoop-fc4",
+      "front": "__repr__ vs __str__",
+      "back": "`__repr__`: unambiguous, for developers, shown in REPL. `__str__`: human-readable, for users, used by print(). If only one defined, `__repr__` is used as fallback.",
+      "tags": [
+        "dunder"
+      ]
+    },
+    {
+      "id": "pyoop-fc5",
+      "front": "super() in Python",
+      "back": "`super()` returns a proxy to the next class in MRO. Always call `super().__init__()` in subclasses to ensure parent state is initialised.",
+      "tags": [
+        "inheritance"
+      ]
+    },
+    {
+      "id": "pyoop-fc6",
+      "front": "@dataclass saves you writing",
+      "back": "`__init__`, `__repr__`, `__eq__` automatically. Add `order=True` for comparisons, `frozen=True` for immutability + auto hashability.",
+      "tags": [
+        "dataclass"
+      ]
+    },
+    {
+      "id": "pyoop-fc7",
+      "front": "Duck typing rule",
+      "back": "Python checks for methods at call time, not types at definition. If `obj.fly()` exists, you can call it — regardless of `obj`'s class. Enables flexible APIs.",
+      "tags": [
+        "duck-typing"
+      ]
+    },
+    {
+      "id": "pyoop-fc8",
+      "front": "__hash__ after __eq__",
+      "back": "Defining `__eq__` sets `__hash__ = None`. You must also define `__hash__` if you want instances in sets or as dict keys. `@dataclass(frozen=True)` handles this automatically.",
+      "tags": [
+        "dunder",
+        "hashing"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design a small in-memory task management system using Python OOP. You have `Task` objects with title, priority (low/medium/high), status (todo/in-progress/done), and due date. Tasks belong to `Project` objects. A `TaskManager` singleton orchestrates all projects. Design the class hierarchy — no code execution needed, just think through the design decisions: Which attributes go on which class? What dunder methods add value? Should `Task` be a dataclass? How do you sort tasks by priority? What validations belong in setters? Write brief notes for each decision.",
+    "checklist": [
+      {
+        "id": "pyoop-p1",
+        "text": "Define `Task` with appropriate attributes; justify dataclass vs plain class",
+        "weight": 20
+      },
+      {
+        "id": "pyoop-p2",
+        "text": "Identify which dunder methods (`__lt__`, `__eq__`, `__repr__`) to implement and why",
+        "weight": 20
+      },
+      {
+        "id": "pyoop-p3",
+        "text": "Design `Project` class with methods to add/filter/sort tasks",
+        "weight": 20
+      },
+      {
+        "id": "pyoop-p4",
+        "text": "Explain where validation logic lives (setter vs `__init__` vs classmethod factory)",
+        "weight": 20
+      },
+      {
+        "id": "pyoop-p5",
+        "text": "Describe the `TaskManager` design — singleton pattern, class attributes, interface",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "For Task, consider `@dataclass(order=True)` — add a sort_index field that maps priority to a number.",
+      "Use `@property` with a setter on `status` to validate transitions (can't go from done → todo).",
+      "For the singleton TaskManager, use a class attribute `_instance` and override `__new__`.",
+      "Think about what `__repr__` should show for debugging vs what a user-facing `__str__` should show."
+    ]
+  }
+}

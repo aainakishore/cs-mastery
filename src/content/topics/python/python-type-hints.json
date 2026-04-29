@@ -1,0 +1,459 @@
+{
+  "id": "python-type-hints",
+  "unit": 2,
+  "order": 15,
+  "title": "Python Type Hints",
+  "summary": "Add static type annotations to Python code for better tooling, documentation, and bug prevention.",
+  "prereqs": [
+    "python-fundamentals",
+    "python-oop"
+  ],
+  "guide": "# Python Type Hints — Document Intent, Catch Bugs Early\n\n## Mental Model\nType hints are like commit messages for your function signatures. Python doesn't enforce them at runtime (unless you use a library like `beartype`), but tools like **mypy**, **pyright**, and your IDE use them to catch bugs before they run.\n\n```python\ndef greet(name: str) -> str:   # annotated\n    return \"Hello, \" + name\n\ngreet(42)   # mypy: error: Argument 1 to \"greet\" has incompatible type \"int\"; expected \"str\"\n```\n\n## Basic Annotations\n```python\nx: int = 5\ny: float = 3.14\nname: str = \"Alice\"\nactive: bool = True\nitems: list[int] = [1, 2, 3]       # Python 3.9+ — lowercase generics\nmapping: dict[str, int] = {\"a\": 1}\npair: tuple[int, str] = (1, \"hi\")\noptional: int | None = None         # Python 3.10+ union syntax\n```\n\n### Function Annotations\n```python\ndef add(a: int, b: int) -> int:\n    return a + b\n\ndef no_return() -> None:\n    print(\"side effect only\")\n\ndef process(data: list[str], max_len: int = 10) -> dict[str, int]:\n    return {s: len(s) for s in data if len(s) <= max_len}\n```\n\n## Optional and Union\n```python\nfrom typing import Optional, Union  # pre-3.10 style\n\n# Optional[X] is shorthand for Union[X, None]\ndef find_user(user_id: int) -> Optional[str]:   # may return None\n    ...\n\n# Modern Python 3.10+ syntax\ndef find_user(user_id: int) -> str | None:\n    ...\n\n# Union of multiple types\ndef parse(value: str | int | float) -> float:\n    return float(value)\n```\n\n## Collections\n```python\nfrom typing import List, Dict, Tuple, Set  # pre-3.9 (needed for older Python)\n\n# Python 3.9+ — use built-in generics directly\ndef average(numbers: list[float]) -> float:\n    return sum(numbers) / len(numbers)\n\ndef group_by_first(items: list[tuple[str, int]]) -> dict[str, list[int]]:\n    result: dict[str, list[int]] = {}\n    for key, val in items:\n        result.setdefault(key, []).append(val)\n    return result\n```\n\n## TypeVar — Generic Functions\n```python\nfrom typing import TypeVar\n\nT = TypeVar('T')\n\ndef first(items: list[T]) -> T:   # works for any type\n    return items[0]\n\nx: int = first([1, 2, 3])         # T inferred as int\ny: str = first([\"a\", \"b\"])        # T inferred as str\n```\n\n## Protocol — Structural Typing (Duck Typing with Types)\n```python\nfrom typing import Protocol\n\nclass Drawable(Protocol):\n    def draw(self) -> None: ...   # any class with a draw() method qualifies\n\nclass Circle:\n    def draw(self) -> None:\n        print(\"O\")\n\nclass Square:\n    def draw(self) -> None:\n        print(\"■\")\n\ndef render(shape: Drawable) -> None:\n    shape.draw()\n\nrender(Circle())  # ✓ — Circle has draw()\nrender(Square())  # ✓ — Square has draw()\n```\n\nProtocols are structural — you don't need to explicitly inherit or register. This is type-safe duck typing.\n\n## Callable Type Hints\n```python\nfrom typing import Callable\n\ndef apply(fn: Callable[[int, int], int], a: int, b: int) -> int:\n    return fn(a, b)\n\napply(lambda x, y: x + y, 3, 4)  # ✓\n```\n`Callable[[ArgTypes...], ReturnType]`\n\n## TypedDict — Typed Dictionaries\n```python\nfrom typing import TypedDict\n\nclass UserRecord(TypedDict):\n    id: int\n    name: str\n    email: str\n    age: int | None\n\ndef get_name(user: UserRecord) -> str:\n    return user[\"name\"]   # IDE knows \"name\" exists and is str\n```\n\n## Literal and Final\n```python\nfrom typing import Literal, Final\n\nDirection = Literal[\"north\", \"south\", \"east\", \"west\"]\n\ndef move(direction: Direction) -> None:\n    ...\n\nmove(\"north\")   # ✓\nmove(\"up\")      # mypy error: not a valid Literal\n\nMAX_SIZE: Final = 100   # constant — reassignment is a type error\n```\n\n## Common Patterns\n```python\n# Self-referential types\nclass Node:\n    def __init__(self, value: int, next: \"Node | None\" = None):\n        self.value = value\n        self.next = next\n\n# Overloaded functions (different signatures)\nfrom typing import overload\n\n@overload\ndef process(x: int) -> int: ...\n@overload\ndef process(x: str) -> str: ...\ndef process(x):              # actual implementation (no annotation needed)\n    if isinstance(x, int):\n        return x * 2\n    return x.upper()\n```\n\n## Running mypy\n```bash\npip install mypy\nmypy src/              # check all files\nmypy --strict src/     # strict mode — catches more issues\n```\n\n## Common Pitfalls\n- **`list` vs `List`**: In Python 3.9+, use `list[int]` directly. Pre-3.9 needs `from typing import List; List[int]`\n- **`Any` escapes checking**: `from typing import Any; x: Any` — mypy ignores it. Avoid in production code\n- **Forward references**: If a class references itself, use a string: `\"Node | None\"` or `from __future__ import annotations`\n- **Overly complex annotations**: If your annotation needs 3 lines, consider a `TypeAlias` or `TypedDict`\n- **Ignoring `None` returns**: if a function can return `None`, annotate it! Not checking return values causes `AttributeError` at runtime\n\n## Connections\n- `python-oop` — type hints integrate with class design (TypedDict, Protocol, TypeVar)\n- `ts-fundamentals` — TypeScript type system is richer; compare structural typing approaches\n- `python-fundamentals` — base syntax needed first\n",
+  "questions": [
+    {
+      "id": "pyth-q1",
+      "type": "mcq",
+      "prompt": "What does `def f(x: int) -> str:` declare?",
+      "choices": [
+        "x must be int at runtime",
+        "x is expected to be int, return is expected to be str — checked by type checkers, not enforced by Python",
+        "Creates a typed class",
+        "Converts x to int automatically"
+      ],
+      "answerIndex": 1,
+      "explanation": "Type hints are advisory — Python doesn't enforce them at runtime. They're for type checkers (mypy, pyright) and IDE tooling.",
+      "tags": [
+        "basics",
+        "type-hints"
+      ]
+    },
+    {
+      "id": "pyth-q2",
+      "type": "mcq",
+      "prompt": "What is `Optional[str]` equivalent to?",
+      "choices": [
+        "str | bool",
+        "str | None",
+        "str | ...",
+        "Optional means the parameter has a default value"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Optional[X]` is shorthand for `Union[X, None]` — the value can be X or None.",
+      "tags": [
+        "optional",
+        "union"
+      ]
+    },
+    {
+      "id": "pyth-q3",
+      "type": "codeOutput",
+      "prompt": "What does Python do at runtime if you call `greet(42)` where `def greet(name: str) -> str`?",
+      "choices": [
+        "Raises TypeError",
+        "Raises AttributeError",
+        "Runs without error (type hints not enforced)",
+        "Returns 42"
+      ],
+      "answerIndex": 2,
+      "explanation": "Python ignores type hints at runtime. Only type checkers like mypy catch this. The function will try to run and may raise an error only if `str` operations are called on `42`.",
+      "tags": [
+        "runtime",
+        "type-hints"
+      ]
+    },
+    {
+      "id": "pyth-q4",
+      "type": "mcq",
+      "prompt": "How do you annotate a function that accepts either int or str?",
+      "choices": [
+        "def f(x: int | str):",
+        "def f(x: (int, str)):",
+        "def f(x: any):",
+        "def f(int x, str x):"
+      ],
+      "answerIndex": 0,
+      "explanation": "Python 3.10+ uses `X | Y` union syntax. Pre-3.10 uses `Union[int, str]` from typing.",
+      "tags": [
+        "union"
+      ]
+    },
+    {
+      "id": "pyth-q5",
+      "type": "mcq",
+      "prompt": "What is a TypeVar used for?",
+      "choices": [
+        "Declaring global variables",
+        "Creating generic functions that work with any type while preserving type information",
+        "Creating runtime type checking",
+        "Type aliases"
+      ],
+      "answerIndex": 1,
+      "explanation": "`TypeVar` enables generic functions. `T = TypeVar('T')` means 'some specific type that will be determined at call time'. The type checker infers T from the argument.",
+      "tags": [
+        "generics",
+        "typevar"
+      ]
+    },
+    {
+      "id": "pyth-q6",
+      "type": "mcq",
+      "prompt": "What does `Protocol` from typing enable?",
+      "choices": [
+        "Multiple inheritance",
+        "Structural subtyping — any class with the required methods satisfies the protocol",
+        "Abstract base classes",
+        "Runtime interface checking"
+      ],
+      "answerIndex": 1,
+      "explanation": "Protocol enables structural typing (duck typing with type safety). A class satisfies a Protocol if it has the required methods/attributes — no explicit inheritance needed.",
+      "tags": [
+        "protocol",
+        "structural-typing"
+      ]
+    },
+    {
+      "id": "pyth-q7",
+      "type": "codeOutput",
+      "prompt": "Is this valid type annotation? `items: list[int | str] = [1, 'hello', 2]`",
+      "choices": [
+        "Yes, valid Python 3.10+",
+        "No, lists must be homogeneous",
+        "Yes but only with from typing import List",
+        "No, int and str can't be mixed"
+      ],
+      "answerIndex": 0,
+      "explanation": "`list[int | str]` declares a list that can contain both ints and strings. This is valid Python 3.10+ syntax.",
+      "tags": [
+        "union",
+        "collections"
+      ]
+    },
+    {
+      "id": "pyth-q8",
+      "type": "mcq",
+      "prompt": "What is `Final` from typing used for?",
+      "choices": [
+        "Marking abstract methods",
+        "Declaring constants — type checkers raise error if reassigned",
+        "Finalizing class hierarchy (no subclassing)",
+        "Type aliases"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Final` marks a name as a constant. `MAX: Final = 100` — mypy will flag any code that tries to reassign `MAX`.",
+      "tags": [
+        "final",
+        "constants"
+      ]
+    },
+    {
+      "id": "pyth-q9",
+      "type": "mcq",
+      "prompt": "What is `TypedDict` useful for?",
+      "choices": [
+        "Creating typed tuples",
+        "Typing dictionaries with known string keys and specific value types",
+        "Runtime dict validation",
+        "Replacing dataclasses"
+      ],
+      "answerIndex": 1,
+      "explanation": "`TypedDict` gives type checkers information about dict structure. IDEs can autocomplete keys and catch typos. Useful when you can't refactor to dataclasses.",
+      "tags": [
+        "typeddict"
+      ]
+    },
+    {
+      "id": "pyth-q10",
+      "type": "mcq",
+      "prompt": "What is the issue with using `Any` in type annotations?",
+      "choices": [
+        "It's slower at runtime",
+        "It disables type checking for that value — bugs can hide",
+        "It's not valid Python syntax",
+        "It only works for primitive types"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Any` essentially opts out of type checking. mypy won't flag type errors involving `Any` values. Use it sparingly — only for truly dynamic code.",
+      "tags": [
+        "any",
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyth-q11",
+      "type": "mcq",
+      "prompt": "How do you annotate a function parameter that accepts a callback `fn(int, int) -> bool`?",
+      "choices": [
+        "fn: function",
+        "fn: Callable[[int, int], bool]",
+        "fn: (int, int) -> bool",
+        "fn: lambda int, int: bool"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Callable[[ArgType1, ArgType2, ...], ReturnType]` is the correct annotation for callable objects.",
+      "tags": [
+        "callable"
+      ]
+    },
+    {
+      "id": "pyth-q12",
+      "type": "codeOutput",
+      "prompt": "What does `x: int | None = None` mean?",
+      "choices": [
+        "x is None only",
+        "x can be int or None, currently None",
+        "x is int with default None",
+        "Syntax error"
+      ],
+      "answerIndex": 1,
+      "explanation": "The annotation says x can be `int` or `None`. The `= None` is the default value. This is the standard pattern for optional parameters.",
+      "tags": [
+        "optional",
+        "union"
+      ]
+    },
+    {
+      "id": "pyth-q13",
+      "type": "mcq",
+      "prompt": "In Python 3.9+, how do you annotate a list of strings?",
+      "choices": [
+        "List[str]",
+        "list[str]",
+        "List<str>",
+        "ArrayList[str]"
+      ],
+      "answerIndex": 1,
+      "explanation": "Python 3.9+ allows built-in generics: `list[str]`, `dict[str, int]`, `tuple[int, ...]`. Pre-3.9 needed `from typing import List; List[str]`.",
+      "tags": [
+        "collections",
+        "generics"
+      ]
+    },
+    {
+      "id": "pyth-q14",
+      "type": "mcq",
+      "prompt": "Forward reference in type hints: when do you need `\"Node | None\"`?",
+      "choices": [
+        "Always in Python 3.10+",
+        "When the referenced class is defined after the annotation in the same file",
+        "For all self-referential types in all Python versions",
+        "Never needed — Python resolves it automatically"
+      ],
+      "answerIndex": 2,
+      "explanation": "Self-referential types (like a Node pointing to another Node) require string quotes in all Python versions unless you add `from __future__ import annotations` at the top of the file.",
+      "tags": [
+        "forward-references"
+      ]
+    },
+    {
+      "id": "pyth-q15",
+      "type": "multi",
+      "prompt": "Which are valid uses of type hints?",
+      "choices": [
+        "Function parameter annotations",
+        "Return type annotations",
+        "Variable annotations at module level",
+        "Runtime type enforcement",
+        "IDE autocompletion and documentation"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "explanation": "All except runtime enforcement. Python doesn't enforce type hints at runtime by default. The others are all valid uses.",
+      "tags": [
+        "basics"
+      ]
+    },
+    {
+      "id": "pyth-q16",
+      "type": "mcq",
+      "prompt": "What does `Literal['north', 'south', 'east', 'west']` do?",
+      "choices": [
+        "Creates an enum",
+        "Restricts the value to exactly those string literals",
+        "Imports compass directions",
+        "Creates a type alias for str"
+      ],
+      "answerIndex": 1,
+      "explanation": "`Literal` restricts acceptable values to specific constants. Type checkers flag any other string as an error.",
+      "tags": [
+        "literal"
+      ]
+    },
+    {
+      "id": "pyth-q17",
+      "type": "mcq",
+      "prompt": "What is `--strict` mode in mypy?",
+      "choices": [
+        "Faster checking",
+        "Enables many additional checks: disallows Any, requires all functions to be annotated, etc.",
+        "Only checks public APIs",
+        "Adds runtime enforcement"
+      ],
+      "answerIndex": 1,
+      "explanation": "`mypy --strict` enables flags like `--disallow-any-generics`, `--disallow-untyped-defs`, `--warn-return-any`. Stricter = fewer type-safety holes.",
+      "tags": [
+        "mypy",
+        "tooling"
+      ]
+    },
+    {
+      "id": "pyth-q18",
+      "type": "codeOutput",
+      "prompt": "What does mypy report for: `def f(x: int) -> str: return x`?",
+      "choices": [
+        "No error",
+        "error: Incompatible return value type (got int, expected str)",
+        "error: x must be converted first",
+        "error: Missing return statement"
+      ],
+      "answerIndex": 1,
+      "explanation": "The function returns an `int` but is annotated to return `str`. mypy catches this mismatch.",
+      "tags": [
+        "mypy",
+        "return-types"
+      ]
+    },
+    {
+      "id": "pyth-q19",
+      "type": "mcq",
+      "prompt": "What is `TypeAlias` used for?",
+      "choices": [
+        "Creating runtime type objects",
+        "Giving a complex type a readable name for reuse",
+        "Subtyping built-in types",
+        "Marking deprecated types"
+      ],
+      "answerIndex": 1,
+      "explanation": "`UserId = TypeAlias = int` gives a semantic name to `int`. Now you can use `UserId` in annotations to document intent without runtime overhead.",
+      "tags": [
+        "type-alias"
+      ]
+    },
+    {
+      "id": "pyth-q20",
+      "type": "multi",
+      "prompt": "Which statements about Python type hints are true?",
+      "choices": [
+        "They are enforced at runtime by default",
+        "They improve IDE autocompletion",
+        "mypy and pyright are static type checkers",
+        "They serve as documentation",
+        "They must be added to all Python files"
+      ],
+      "answerIndexes": [
+        1,
+        2,
+        3
+      ],
+      "explanation": "Type hints are NOT enforced at runtime (1 false), NOT mandatory (5 false). They do improve tooling (2), enable static checking (3), and document intent (4).",
+      "tags": [
+        "basics"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "pyth-fc1",
+      "front": "Optional[X] vs X | None",
+      "back": "Same thing. `Optional[X]` is from `typing` (pre-3.10). `X | None` is modern Python 3.10+ syntax. Both mean the value can be X or None.",
+      "tags": [
+        "optional"
+      ]
+    },
+    {
+      "id": "pyth-fc2",
+      "front": "TypeVar use case",
+      "back": "Generic functions: `T = TypeVar('T')` then `def first(items: list[T]) -> T`. The type checker infers what T is at each call site, preserving type safety without losing flexibility.",
+      "tags": [
+        "generics"
+      ]
+    },
+    {
+      "id": "pyth-fc3",
+      "front": "Protocol vs ABC",
+      "back": "Protocol: structural (duck typing) — any class with required methods qualifies, no inheritance needed. ABC: nominal — must explicitly inherit. Protocol is more Pythonic.",
+      "tags": [
+        "protocol"
+      ]
+    },
+    {
+      "id": "pyth-fc4",
+      "front": "When type hints run (runtime vs static)",
+      "back": "Type hints are NOT enforced at runtime by default. They're checked by static tools (mypy, pyright) and used by IDEs. Runtime enforcement requires `beartype` or `pydantic`.",
+      "tags": [
+        "basics"
+      ]
+    },
+    {
+      "id": "pyth-fc5",
+      "front": "list[int] vs List[int]",
+      "back": "Python 3.9+: use `list[int]`, `dict[str, int]` directly. Pre-3.9: import `from typing import List, Dict`. Or use `from __future__ import annotations` for all Pythons.",
+      "tags": [
+        "collections"
+      ]
+    },
+    {
+      "id": "pyth-fc6",
+      "front": "TypedDict use case",
+      "back": "When you have dict-shaped data with known keys (API responses, config). Gives type checker key-level type info. Prefer dataclasses for new code; use TypedDict for existing dict-heavy code.",
+      "tags": [
+        "typeddict"
+      ]
+    },
+    {
+      "id": "pyth-fc7",
+      "front": "Callable annotation format",
+      "back": "`Callable[[ArgType1, ArgType2], ReturnType]`. For any callable: `Callable[..., ReturnType]`. For no args: `Callable[[], ReturnType]`.",
+      "tags": [
+        "callable"
+      ]
+    },
+    {
+      "id": "pyth-fc8",
+      "front": "Forward reference — when needed",
+      "back": "Self-referential types: `next: \"Node | None\"` (string). OR add `from __future__ import annotations` at file top to make all annotations lazy strings. Needed for circular references.",
+      "tags": [
+        "forward-references"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You're designing a type-annotated API client library for a REST service. The client methods return typed response objects. Design the type annotations for: (1) A `UserAPI` class with `get_user(id: int) -> ?` and `list_users(filter: ?) -> ?`, (2) A paginated response wrapper, (3) An error response type, (4) A callback for event hooks `on_response(response) -> None`. Consider: TypedDict vs dataclass for responses, Optional vs union for nullable fields, Callable for hooks, TypeVar for generic pagination wrapper. Write the type signatures — no implementations needed.",
+    "checklist": [
+      {
+        "id": "pyth-p1",
+        "text": "Define response types using TypedDict or dataclass with correct field annotations",
+        "weight": 20
+      },
+      {
+        "id": "pyth-p2",
+        "text": "Use Optional/Union correctly for nullable fields and error responses",
+        "weight": 20
+      },
+      {
+        "id": "pyth-p3",
+        "text": "Create a generic PaginatedResponse[T] using TypeVar",
+        "weight": 20
+      },
+      {
+        "id": "pyth-p4",
+        "text": "Annotate callback hooks using Callable with correct signature",
+        "weight": 20
+      },
+      {
+        "id": "pyth-p5",
+        "text": "Justify TypedDict vs dataclass for each response type (at least one of each)",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "For paginated responses: `T = TypeVar('T'); class PaginatedResponse(Generic[T]): items: list[T]; total: int; page: int`",
+      "Error response could be `class APIError(TypedDict): code: int; message: str; details: dict[str, Any] | None`",
+      "Callback: `ResponseHook = Callable[[dict[str, Any], int], None]` — takes response body and status code",
+      "Use `Literal` for HTTP methods: `method: Literal['GET', 'POST', 'PUT', 'DELETE']`"
+    ]
+  }
+}

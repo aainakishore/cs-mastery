@@ -1,0 +1,463 @@
+{
+  "id": "microservices-patterns",
+  "unit": 13,
+  "order": 129,
+  "title": "Microservices Patterns",
+  "summary": "Circuit breakers, service mesh, API gateway, service discovery, bulkhead, sidecar — the production patterns that make microservices actually work.",
+  "prereqs": [
+    "event-driven-architecture"
+  ],
+  "guide": "# Microservices Patterns — Making Distributed Systems Resilient\n\n## Mental Model\nA monolith is like a single floor office — everything walks to the printer. Microservices are a city — each building (service) does one thing, connected by roads (network calls). The patterns here are the traffic lights, emergency routes, and building codes that stop the city from grinding to a halt.\n\n```\nMonolith:                           Microservices:\n  ┌─────────────────────┐            ┌──────┐  ┌──────┐  ┌──────┐\n  │ OrderService        │            │Order │  │Pay   │  │Ship  │\n  │ PaymentService      │            │Svc   │  │Svc   │  │Svc   │\n  │ ShippingService     │            └──┬───┘  └──┬───┘  └──┬───┘\n  │ (all in one process)│               └──────────┼─────────┘\n  └─────────────────────┘                      Network calls\n  Simple deploys, hard to scale           Complex, resilient when designed right\n```\n\n## Pattern 1 — Circuit Breaker\nPrevents cascading failures when a downstream service is slow/down.\n\n```\nStates:\n  CLOSED (normal) ──[failures > threshold]──► OPEN (fail fast)\n                                                    │\n                                    [timeout elapsed]│\n                                                    ▼\n                                              HALF-OPEN (probe)\n                                                    │\n                             [probe succeeds]────────┼────[probe fails]\n                                    ▼                            ▼\n                              CLOSED (reset)               OPEN again\n\nIn OPEN state: immediately return error (no wait for timeout).\n               Upstream gets fast failure, can use fallback.\n```\n\nLibraries: Resilience4j (Java), Polly (.NET), Hystrix (deprecated but conceptually relevant).\n\n```java\n// Resilience4j example\nCircuitBreaker cb = CircuitBreaker.ofDefaults(\"paymentService\");\n\nSupplier<PaymentResult> decorated = CircuitBreaker\n  .decorateSupplier(cb, () -> paymentService.charge(order));\n\nTry.ofSupplier(decorated)\n  .recover(CallNotPermittedException.class, e -> PaymentResult.fallback());\n```\n\n## Pattern 2 — API Gateway\nSingle entry point for all clients. Handles: routing, auth, rate limiting, SSL termination, request aggregation.\n\n```\nMobile App ──┐\nWeb App    ──┤──► API Gateway ──► UserService\nPartner    ──┘         │       ──► OrderService\n                       │       ──► ProductService\n              (auth, rate-limit,\n               logging, routing)\n```\n\nBenefits: clients don't need to know about internal service topology. Centralised cross-cutting concerns. Can aggregate multiple service responses into one.\n\n## Pattern 3 — Service Discovery\nServices scale dynamically — IPs change. Don't hardcode service addresses.\n\n```\nClient-side discovery:\n  ServiceA ──► Registry ──► [list of OrderService IPs]\n  ServiceA picks one (load balance) and calls directly\n\nServer-side discovery:\n  ServiceA ──► Load Balancer ──► Registry ──► OrderService IP\n  (Load Balancer handles the lookup)\n\nTools: Consul, Eureka (Netflix), Kubernetes DNS (easiest in K8s)\n\nIn K8s: order-service.default.svc.cluster.local resolves to ClusterIP\n        → K8s handles discovery automatically via DNS + kube-proxy\n```\n\n## Pattern 4 — Bulkhead\nIsolate failures. Named after ship bulkheads that prevent flooding from spreading.\n\n```\nWithout bulkheads:\n  Thread pool: [  10 threads  ]\n  All 10 blocked by slow InventoryService → OrderService also starves\n\nWith bulkheads:\n  Thread pool A: [3 threads] → InventoryService calls\n  Thread pool B: [3 threads] → PaymentService calls\n  Thread pool C: [4 threads] → all other calls\n\n  If Inventory blocks all 3 → Payment still works\n```\n\n## Pattern 5 — Sidecar / Service Mesh\nDeploy a proxy container alongside each service that handles: mTLS, retries, circuit breaking, telemetry — without any code changes.\n\n```\nPod (K8s):\n  ┌──────────────────────────────────┐\n  │  App Container  │  Sidecar Proxy │\n  │  (your code)    │  (Envoy/Istio) │\n  │                 │  - mTLS        │\n  │                 │  - metrics     │\n  │                 │  - retries     │\n  │                 │  - circuit bkr │\n  └──────────────────────────────────┘\n  All traffic in/out goes through sidecar\n\nTools: Istio (Envoy-based), Linkerd, AWS App Mesh\n```\n\n## Pattern 6 — Strangler Fig (Migration Pattern)\nGradually replace a monolith with microservices without a big-bang rewrite:\n\n```\nPhase 1:  Monolith handles everything\n          Client ──► Monolith\n\nPhase 2:  New service extracted for one domain\n          Client ──► API Gateway/Proxy ──► PaymentService (new)\n                                       ──► Monolith (everything else)\n\nPhase 3:  Extract more services one by one\n          Eventually: Monolith is strangled, fully replaced\n\nKey: the facade/proxy routes incrementally. No risky cutover.\n```\n\n## Pattern 7 — Retry with Exponential Backoff + Jitter\n```\nNaive retry: immediate → floods recovering service with retries\nExponential backoff: wait 1s → 2s → 4s → 8s between retries\nWith jitter: wait 1±0.3s → 2±0.6s → 4±1.2s\n             (randomises timing, prevents thundering herd)\n\nMax retries: 3-5. After that: fail or use fallback.\n```\n\n## Pattern 8 — Saga with Compensating Actions (review)\nSee Event-Driven Architecture topic — Sagas coordinate multi-step transactions across services.\n\n## Common Pitfalls\n- **Synchronous calls everywhere**: service A calls B calls C calls D — one slow service cascades latency. Prefer async where possible.\n- **No circuit breaker**: cascading failure takes down the whole system, not just the failed service.\n- **Chatty microservices**: services that need to make 10 calls to complete one request. Redesign service boundaries or use API aggregation.\n- **Distributed monolith**: microservices that are so tightly coupled they must all be deployed together. Defeats the purpose.\n- **Missing distributed tracing**: in microservices, a single request touches 5+ services. Without trace IDs propagated through all calls, debugging is nearly impossible.\n\n## Connections\n- `event-driven-architecture` — async communication reduces coupling; use events where possible\n- `kubernetes` — service discovery, health checks, rolling deployments all built-in\n- `observability` — distributed tracing (Jaeger, Zipkin, AWS X-Ray) essential for microservices\n- `caching-advanced` — cache responses at API gateway and service level\n- `load-balancing` — L7 load balancing is part of the service mesh / API gateway\n",
+  "questions": [
+    {
+      "id": "ms-q1",
+      "type": "mcq",
+      "prompt": "A Circuit Breaker in OPEN state:",
+      "choices": [
+        "Allows all requests through",
+        "Immediately returns an error without calling the downstream service",
+        "Slows requests down",
+        "Queues requests for later"
+      ],
+      "answerIndex": 1,
+      "explanation": "OPEN = fail fast. No call is made to the downstream service. The upstream gets an immediate error and can use a fallback. This prevents thread exhaustion and cascading failure.",
+      "tags": [
+        "circuit-breaker"
+      ]
+    },
+    {
+      "id": "ms-q2",
+      "type": "mcq",
+      "prompt": "What transitions a Circuit Breaker from OPEN to HALF-OPEN?",
+      "choices": [
+        "A health check",
+        "A timeout period elapsing — then one probe request is allowed through",
+        "Manual admin action only",
+        "Success rate improving"
+      ],
+      "answerIndex": 1,
+      "explanation": "After the configured timeout (e.g., 30s), the circuit moves to HALF-OPEN and allows a single probe request. If it succeeds, circuit CLOSES. If it fails, circuit re-OPENS.",
+      "tags": [
+        "circuit-breaker"
+      ]
+    },
+    {
+      "id": "ms-q3",
+      "type": "mcq",
+      "prompt": "What is the primary purpose of an API Gateway?",
+      "choices": [
+        "Database connection pooling",
+        "Single entry point for clients — handles routing, auth, rate limiting, SSL termination",
+        "Service-to-service communication",
+        "Data transformation only"
+      ],
+      "answerIndex": 1,
+      "explanation": "API Gateway centralises cross-cutting concerns: authentication, rate limiting, routing, logging, SSL termination. Clients interact with one endpoint regardless of internal service topology.",
+      "tags": [
+        "api-gateway"
+      ]
+    },
+    {
+      "id": "ms-q4",
+      "type": "mcq",
+      "prompt": "Service Discovery solves:",
+      "choices": [
+        "Database migrations",
+        "Dynamic service instance location — services register their IP/port, clients query the registry instead of hardcoding addresses",
+        "Load balancing only",
+        "Authentication"
+      ],
+      "answerIndex": 1,
+      "explanation": "In dynamic environments (K8s, auto-scaled EC2), service IPs change constantly. A service registry (Consul, Eureka, K8s DNS) maps service names to current IPs. Clients query the registry, not hardcoded addresses.",
+      "tags": [
+        "service-discovery"
+      ]
+    },
+    {
+      "id": "ms-q5",
+      "type": "mcq",
+      "prompt": "The Bulkhead pattern prevents:",
+      "choices": [
+        "Memory leaks",
+        "One slow dependency consuming all thread pool resources and starving unrelated services",
+        "SQL injection",
+        "Network packet loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bulkhead isolates thread pools per dependency. If InventoryService is slow and blocks its 3 threads, PaymentService threads are unaffected. Named after ship compartments that prevent one leak from sinking the ship.",
+      "tags": [
+        "bulkhead"
+      ]
+    },
+    {
+      "id": "ms-q6",
+      "type": "mcq",
+      "prompt": "A sidecar proxy in a service mesh handles:",
+      "choices": [
+        "Business logic for the app",
+        "Network concerns (mTLS, retries, circuit breaking, telemetry) without app code changes",
+        "Database connections",
+        "UI rendering"
+      ],
+      "answerIndex": 1,
+      "explanation": "The sidecar (Envoy, Linkerd proxy) intercepts all network traffic to/from the app container. It enforces mTLS, records metrics, applies retry policies — all transparently. The app code just makes plain HTTP/gRPC calls.",
+      "tags": [
+        "sidecar",
+        "service-mesh"
+      ]
+    },
+    {
+      "id": "ms-q7",
+      "type": "mcq",
+      "prompt": "The Strangler Fig pattern is used to:",
+      "choices": [
+        "Immediately rewrite a monolith to microservices",
+        "Gradually replace a monolith by extracting services one at a time behind a routing proxy",
+        "Kill old services instantly",
+        "Strangle memory leaks"
+      ],
+      "answerIndex": 1,
+      "explanation": "Strangler Fig incrementally replaces monolith functionality. A facade/proxy routes traffic: new domain → new service, everything else → monolith. No big-bang rewrite. Each extracted service is production-tested before the next is extracted.",
+      "tags": [
+        "strangler-fig",
+        "migration"
+      ]
+    },
+    {
+      "id": "ms-q8",
+      "type": "mcq",
+      "prompt": "Why add jitter to exponential backoff retries?",
+      "choices": [
+        "For logging purposes",
+        "Prevents the thundering herd — without jitter, all clients retry at the same moment after a failure, overwhelming the recovering service",
+        "Required by HTTP specification",
+        "Improves latency"
+      ],
+      "answerIndex": 1,
+      "explanation": "After a service recovers, all waiting clients retry simultaneously (thundering herd). Jitter randomises retry timing so clients spread their retries across time, allowing the service to recover gracefully.",
+      "tags": [
+        "retries",
+        "backoff"
+      ]
+    },
+    {
+      "id": "ms-q9",
+      "type": "mcq",
+      "prompt": "A 'distributed monolith' is:",
+      "choices": [
+        "A well-designed microservices system",
+        "Microservices so tightly coupled that all must be deployed together — worst of both worlds",
+        "A monolith deployed across multiple data centres",
+        "A monolith with good APIs"
+      ],
+      "answerIndex": 1,
+      "explanation": "If your microservices share a database, have synchronous call chains, or must be deployed in lock-step, you have a distributed monolith. You get the operational complexity of microservices without the independence benefits.",
+      "tags": [
+        "anti-patterns"
+      ]
+    },
+    {
+      "id": "ms-q10",
+      "type": "mcq",
+      "prompt": "Why is distributed tracing essential in microservices?",
+      "choices": [
+        "Performance only",
+        "A single user request touches multiple services — tracing propagates a trace ID through all calls so you can reconstruct the full path for debugging",
+        "Just for compliance",
+        "Replaces logging"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without trace IDs (W3C TraceContext, B3 headers), you have isolated logs per service with no connection. Tracing (Jaeger, Zipkin, AWS X-Ray) shows the full call graph, timings, and where errors occurred.",
+      "tags": [
+        "observability",
+        "tracing"
+      ]
+    },
+    {
+      "id": "ms-q11",
+      "type": "mcq",
+      "prompt": "Client-side service discovery means:",
+      "choices": [
+        "The client queries DNS only",
+        "The client queries the service registry, gets the list of instances, and performs load balancing itself",
+        "An API gateway handles all discovery",
+        "K8s handles it automatically"
+      ],
+      "answerIndex": 1,
+      "explanation": "Client-side: client → registry → list of IPs → client picks one (round-robin/random). More control but client needs registry library. Contrast with server-side: client → load balancer → registry → service (client is simpler).",
+      "tags": [
+        "service-discovery"
+      ]
+    },
+    {
+      "id": "ms-q12",
+      "type": "multi",
+      "prompt": "Which are valid Circuit Breaker fallback strategies?",
+      "choices": [
+        "Return cached response",
+        "Return empty/default response",
+        "Queue request for retry when circuit closes",
+        "Throw error immediately and let client retry",
+        "Use a degraded read-only mode"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "explanation": "Good fallbacks: cached data, default response, queueing for later processing, degraded mode. Throwing immediately without fallback is also valid (fail fast) but not user-friendly. The right fallback depends on the use case.",
+      "tags": [
+        "circuit-breaker",
+        "fallback"
+      ]
+    },
+    {
+      "id": "ms-q13",
+      "type": "mcq",
+      "prompt": "API Gateway vs Service Mesh — key difference?",
+      "choices": [
+        "API Gateway is for internal, Service Mesh for external",
+        "API Gateway: north-south traffic (external clients to services). Service Mesh: east-west traffic (service to service).",
+        "They are the same thing",
+        "Service Mesh replaces API Gateway"
+      ],
+      "answerIndex": 1,
+      "explanation": "API Gateway handles traffic entering your system from outside. Service Mesh manages traffic between internal services. You typically need both: Gateway for external access + Mesh for inter-service communication and mTLS.",
+      "tags": [
+        "api-gateway",
+        "service-mesh"
+      ]
+    },
+    {
+      "id": "ms-q14",
+      "type": "mcq",
+      "prompt": "mTLS in a service mesh provides:",
+      "choices": [
+        "Message compression",
+        "Mutual authentication — both the calling and called service cryptographically verify each other's identity",
+        "Faster routing",
+        "HTTP/2 only"
+      ],
+      "answerIndex": 1,
+      "explanation": "mTLS (mutual TLS) means both sides present certificates. This prevents rogue services from pretending to be legitimate (man-in-the-middle, service impersonation). The service mesh handles certificates automatically.",
+      "tags": [
+        "service-mesh",
+        "security"
+      ]
+    },
+    {
+      "id": "ms-q15",
+      "type": "mcq",
+      "prompt": "When is synchronous HTTP between microservices problematic?",
+      "choices": [
+        "Always",
+        "In deep call chains (A→B→C→D→E) — latency adds up and one slow service cascades through the chain",
+        "Only in high traffic",
+        "Only with REST, not gRPC"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each hop in a synchronous chain adds network latency. Worse: if E is slow, it makes D slow, which makes C slow, etc. Cascading latency. Use async messaging for non-critical paths; keep sync for reads that need immediate responses.",
+      "tags": [
+        "anti-patterns",
+        "communication"
+      ]
+    },
+    {
+      "id": "ms-q16",
+      "type": "mcq",
+      "prompt": "What is 'chatty' microservices anti-pattern?",
+      "choices": [
+        "Services that log too much",
+        "Services that require many network calls to complete a single user request — poor service boundary design",
+        "Services that use too much memory",
+        "Very fast services"
+      ],
+      "answerIndex": 1,
+      "explanation": "If displaying a product page requires 20 microservice calls, your service boundaries are wrong. Redesign: aggregate data in a BFF (Backend for Frontend), use event sourcing to maintain denormalised read models, or co-locate related functionality.",
+      "tags": [
+        "anti-patterns",
+        "service-design"
+      ]
+    },
+    {
+      "id": "ms-q17",
+      "type": "mcq",
+      "prompt": "Health checks in microservices are used by:",
+      "choices": [
+        "Only developers",
+        "Load balancers, service meshes, and orchestrators (K8s) to route traffic only to healthy instances",
+        "Databases",
+        "Clients directly"
+      ],
+      "answerIndex": 1,
+      "explanation": "K8s liveness probes restart unhealthy pods. Readiness probes remove pods from load balancer until ready. Service mesh uses health to make routing decisions. Implement: /health/live and /health/ready endpoints.",
+      "tags": [
+        "health-checks",
+        "k8s"
+      ]
+    },
+    {
+      "id": "ms-q18",
+      "type": "mcq",
+      "prompt": "The Backend for Frontend (BFF) pattern:",
+      "choices": [
+        "A separate backend for each type of frontend client (mobile, web, partner) — each BFF optimises its API for its specific client's needs",
+        "A general-purpose API gateway",
+        "A database per frontend",
+        "Only for mobile apps"
+      ],
+      "answerIndex": 0,
+      "explanation": "Mobile needs different data shapes than web (smaller payloads, different fields). BFF creates a dedicated API layer per client type that aggregates services and formats data optimally. Each frontend team owns its BFF.",
+      "tags": [
+        "bff",
+        "api-design"
+      ]
+    },
+    {
+      "id": "ms-q19",
+      "type": "mcq",
+      "prompt": "Saga compensating transaction for 'PaymentCharged → InventoryReserveFailed':",
+      "choices": [
+        "Ignore and retry reservation",
+        "Publish RefundPayment to rollback the charge — compensation undoes the completed step",
+        "Simply cancel the saga without cleanup",
+        "Contact the user"
+      ],
+      "answerIndex": 1,
+      "explanation": "The compensating transaction for PaymentCharged is RefundPayment. Sagas don't roll back like DB transactions — they undo by executing compensations in reverse order of the original steps.",
+      "tags": [
+        "saga",
+        "compensating-transactions"
+      ]
+    },
+    {
+      "id": "ms-q20",
+      "type": "multi",
+      "prompt": "Which concerns does a Service Mesh handle transparently (without app code changes)?",
+      "choices": [
+        "mTLS between services",
+        "Automatic retries",
+        "Circuit breaking",
+        "Business logic",
+        "Distributed tracing (telemetry injection)"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "explanation": "Service mesh sidecar handles: mTLS, retries, circuit breaking, and telemetry (metrics/traces). Business logic stays in the app container — the mesh only intercepts and manages network traffic.",
+      "tags": [
+        "service-mesh"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ms-fc1",
+      "front": "Circuit Breaker states",
+      "back": "CLOSED (normal) → OPEN (fail fast, after failures threshold) → HALF-OPEN (probe) → CLOSED/OPEN again. In OPEN state: return immediately, no call to downstream.",
+      "tags": [
+        "circuit-breaker"
+      ]
+    },
+    {
+      "id": "ms-fc2",
+      "front": "API Gateway vs Service Mesh",
+      "back": "API Gateway: north-south (external → internal). Service Mesh: east-west (service → service). Use both: Gateway for external access, Mesh for internal mTLS + observability.",
+      "tags": [
+        "api-gateway",
+        "service-mesh"
+      ]
+    },
+    {
+      "id": "ms-fc3",
+      "front": "Bulkhead pattern",
+      "back": "Separate thread pools per dependency. If InventoryService blocks its pool (3 threads), PaymentService pool (3 threads) still works. Isolate failure blast radius.",
+      "tags": [
+        "bulkhead"
+      ]
+    },
+    {
+      "id": "ms-fc4",
+      "front": "Exponential backoff + jitter",
+      "back": "Retry wait: 1s → 2s → 4s → 8s (exponential). Add jitter (±30%) to randomise — prevents thundering herd when all clients retry at the same moment after failure.",
+      "tags": [
+        "retries"
+      ]
+    },
+    {
+      "id": "ms-fc5",
+      "front": "Strangler Fig migration",
+      "back": "Extract one domain at a time behind a facade/proxy. Route new domain → new service, rest → monolith. Incrementally replace until monolith is gone. No big-bang rewrite.",
+      "tags": [
+        "strangler-fig",
+        "migration"
+      ]
+    },
+    {
+      "id": "ms-fc6",
+      "front": "Distributed tracing necessity",
+      "back": "Single request touches 5+ services. Propagate trace ID (W3C TraceContext) in all headers. Use Jaeger/Zipkin/X-Ray to visualise the full call graph. Without it, debugging microservices is nearly impossible.",
+      "tags": [
+        "observability",
+        "tracing"
+      ]
+    },
+    {
+      "id": "ms-fc7",
+      "front": "Chatty microservices anti-pattern",
+      "back": "20 calls per page load = bad service boundaries. Fix: BFF (aggregate at API layer), event-sourced read models (denormalise), or reconsider service decomposition.",
+      "tags": [
+        "anti-patterns"
+      ]
+    },
+    {
+      "id": "ms-fc8",
+      "front": "Service Mesh sidecar handles",
+      "back": "mTLS, retries, circuit breaking, telemetry — all transparently, no app code changes. App just makes plain HTTP/gRPC. Envoy/Istio/Linkerd inject sidecar proxy into every pod.",
+      "tags": [
+        "service-mesh",
+        "sidecar"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the resilience layer for a payment microservice that calls three downstream services: FraudCheck (SLA: 200ms, latency spikes common), LedgerService (critical, must not lose data), and NotificationService (best-effort email). For each: choose Circuit Breaker thresholds, retry strategy, bulkhead sizing, and fallback behaviour. Also decide whether to use a service mesh or implement these patterns in code, and justify.",
+    "checklist": [
+      {
+        "id": "ms-p1",
+        "text": "Circuit Breaker config for each service: failure threshold, timeout, fallback action",
+        "weight": 25
+      },
+      {
+        "id": "ms-p2",
+        "text": "Retry strategy with backoff + jitter for each service",
+        "weight": 20
+      },
+      {
+        "id": "ms-p3",
+        "text": "Bulkhead thread pool sizes and rationale",
+        "weight": 20
+      },
+      {
+        "id": "ms-p4",
+        "text": "Service mesh vs in-code decision with justification",
+        "weight": 20
+      },
+      {
+        "id": "ms-p5",
+        "text": "How you'd implement distributed tracing across all three calls",
+        "weight": 15
+      }
+    ],
+    "hints": [
+      "FraudCheck: Circuit breaker threshold=5 failures/10s. Fallback: allow payment with async fraud review flag. Retry 2x with 200ms backoff.",
+      "LedgerService: No aggressive retries (risk of double charges). Use idempotency keys. Circuit breaker: open after 2 failures. Fallback: DLQ for async retry.",
+      "NotificationService: Best-effort. Retry 3x, exponential backoff. If circuit open, log and continue — email failure must not block payment.",
+      "Service mesh (Istio/Linkerd): better for polyglot teams, centralised policy. In-code (Resilience4j): more control, no K8s dependency. For a single Java service, in-code is simpler."
+    ]
+  }
+}

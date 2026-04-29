@@ -1,0 +1,458 @@
+{
+  "id": "caching-advanced",
+  "unit": 13,
+  "order": 108,
+  "title": "Caching Advanced",
+  "summary": "Master Redis patterns, cache invalidation, stampede prevention, TTL strategies, and distributed cache topologies.",
+  "prereqs": [
+    "caching",
+    "system-design-fundamentals"
+  ],
+  "guide": "# Caching Advanced — The Art of Serving Stale Data Correctly\n\n## Mental Model\nA cache is a bet: \"this data won't change before it's read again.\" Win the bet → fast response. Lose → serve stale data or cause a stampede. Advanced caching is about managing these bets with precision.\n\n```\nWithout cache:       Client → App → DB   (10-100ms)\nWith cache hit:      Client → App → Cache (0.1-1ms)\nWith cache miss:     Client → App → Cache miss → DB → Cache fill → Client\n```\n\n## Redis Data Structures and When to Use Each\n| Structure | Use case |\n|-----------|---------|\n| `String` | Simple key-value: sessions, counters, feature flags |\n| `Hash` | Object fields: `HSET user:123 name Alice age 30` |\n| `List` | Queue, stack, chat history, latest N items |\n| `Set` | Unique members: tags, user IDs, deduplication |\n| `Sorted Set` | Leaderboards, rate-limiting windows, time-series |\n| `Stream` | Event log, message queue |\n| `HyperLogLog` | Approximate unique count (very memory efficient) |\n\n## Cache Invalidation Strategies\n\n### TTL (Time To Live) — simplest\n```\nSET key value EX 3600    # expires in 1 hour\n```\nGood for: data that changes predictably (stock prices, weather). Bad for: data that changes unpredictably (user profile after update).\n\n### Write-through — sync cache and DB\n```\nWrite path:    App → DB (write) AND App → Cache (write)\nRead path:     App → Cache (always fresh)\nPros:          No stale data\nCons:          Write latency (two writes), cache pollution (write-only data cached)\n```\n\n### Write-behind (Write-back) — async\n```\nWrite path:    App → Cache (write) → async → DB\nRead path:     App → Cache\nPros:          Fast writes\nCons:          Data loss risk if cache crashes before DB flush\n```\n\n### Cache-aside (Lazy loading) — most common\n```python\ndef get_user(user_id):\n    user = cache.get(f\"user:{user_id}\")\n    if user is None:                         # cache miss\n        user = db.query(f\"SELECT * FROM users WHERE id={user_id}\")\n        cache.set(f\"user:{user_id}\", user, ex=3600)\n    return user\n\ndef update_user(user_id, data):\n    db.update(...)\n    cache.delete(f\"user:{user_id}\")          # invalidate: next read goes to DB\n```\nMost common pattern. Tolerates cache downtime (fall through to DB).\n\n## Cache Stampede (Thundering Herd) Prevention\n\n```\nProblem: key expires → 1000 concurrent requests all miss → all hit DB → DB dies\n```\n\n### Solution 1: Probabilistic early expiration\n```python\n# Start refreshing the cache before it expires (small probability while still valid)\nremaining_ttl = cache.ttl(key)\nif remaining_ttl < 10 or random.random() < 0.01:   # last 10s or 1% chance\n    refresh_async()\n```\n\n### Solution 2: Mutex / distributed lock\n```python\ndef get_with_lock(key, compute_fn):\n    value = cache.get(key)\n    if value: return value\n\n    lock_key = f\"lock:{key}\"\n    if cache.set(lock_key, \"1\", nx=True, ex=5):   # acquire lock (nx = only if not exists)\n        try:\n            value = compute_fn()\n            cache.set(key, value, ex=3600)\n        finally:\n            cache.delete(lock_key)\n        return value\n    else:\n        time.sleep(0.05)         # another thread is refreshing — wait and retry\n        return get_with_lock(key, compute_fn)\n```\n\n### Solution 3: Background refresh with stale-while-revalidate\nServe stale value immediately, refresh in background. Client never waits.\n\n## Cache Key Design\n\n### Good key patterns\n```\nuser:{id}                        # simple\nuser:{id}:profile                # namespaced\nrate_limit:{user_id}:{window}    # parameterized\nfeed:{user_id}:page:{cursor}     # complex\n```\n\n### Key rules:\n- Include version if schema changes: `user:v2:{id}`\n- Use colons as namespace separators\n- Include all parameters that change the value\n- Keep keys short: consider hashing long params\n\n## Distributed Cache Topologies\n\n### Single node — development\n```\nApp → Redis (single)\n```\n\n### Redis Sentinel — high availability\n```\nApp → Sentinel (monitors)\n         ├── Redis Primary (reads+writes)\n         └── Redis Replicas (reads + failover to primary)\n```\nAutomatic failover. No horizontal scaling.\n\n### Redis Cluster — horizontal scaling\n```\nApp → Redis Cluster\n         ├── Shard 1 (slots 0–5460)\n         ├── Shard 2 (slots 5461–10922)\n         └── Shard 3 (slots 10923–16383)\n```\n16,384 hash slots. Each key maps to a slot via CRC16. Scales linearly.\n\n### CDN caching — edge nodes\n```\nUser (NYC) → Cloudflare Edge (NYC) → Origin (us-east-1)\n                                      ↑ only on cache miss\n```\n\n## Cache Eviction Policies\n| Policy | Behaviour | When to use |\n|--------|-----------|-------------|\n| `LRU` (Least Recently Used) | Evict least recently accessed | General purpose |\n| `LFU` (Least Frequently Used) | Evict least accessed over time | Popularity-based |\n| `TTL` | Evict expired keys | Time-sensitive data |\n| `allkeys-lru` | LRU on ALL keys (even no TTL) | When memory is precious |\n| `volatile-lru` | LRU only on keys with TTL set | Mix of permanent + temp data |\n| `noeviction` | Return error on full cache | When data loss is unacceptable |\n\n## Common Pitfalls\n- **Cache stampede on startup**: warming cold cache with a single thundering herd. Fix: warm gradually or use a lock.\n- **Cache key collision**: two different data types using the same key format. Use namespaces.\n- **Forgetting to invalidate**: user updates profile but old version is served for 1 hour. Plan invalidation from day 1.\n- **Caching null/404**: if DB returns null, cache it too (with short TTL) to prevent repeated DB hits for nonexistent keys (\"cache penetration\").\n- **Over-caching**: every DB query cached → changes don't propagate → incorrect data shown.\n\n## Connections\n- `caching` — foundational LRU, write-through concepts\n- `system-design-fundamentals` — caching is one of the core scaling tools\n- `distributed-systems` — distributed cache consistency challenges\n- `rate-limiting` — Redis Sorted Sets are the best data structure for sliding window rate limiting\n",
+  "questions": [
+    {
+      "id": "cach-adv-q1",
+      "type": "mcq",
+      "prompt": "What is cache-aside (lazy loading) pattern?",
+      "choices": [
+        "Cache is pre-populated at startup",
+        "App checks cache first; on miss fetches from DB and populates cache",
+        "All writes go to cache first, then async to DB",
+        "Cache and DB are always in sync"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cache-aside: read from cache → miss → read from DB → write to cache → return. The application controls the caching logic. Most common pattern.",
+      "tags": [
+        "cache-patterns"
+      ]
+    },
+    {
+      "id": "cach-adv-q2",
+      "type": "mcq",
+      "prompt": "What is the cache stampede problem?",
+      "choices": [
+        "Too many cache hits causing memory overflow",
+        "A popular key expires; many concurrent requests all miss and all hit the DB simultaneously",
+        "Cache and DB are out of sync",
+        "Too many evictions"
+      ],
+      "answerIndex": 1,
+      "explanation": "When a hot key expires, all waiting requests miss simultaneously and flood the DB. Prevention: mutex, probabilistic refresh, or stale-while-revalidate.",
+      "tags": [
+        "stampede"
+      ]
+    },
+    {
+      "id": "cach-adv-q3",
+      "type": "mcq",
+      "prompt": "How does a distributed mutex prevent cache stampede?",
+      "choices": [
+        "Blocks all requests until DB responds",
+        "Only one thread acquires the lock and refreshes the cache; others wait and retry, eventually getting the cached value",
+        "Prevents cache expiry",
+        "Queues requests in Redis"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis SET NX (set if not exists) creates a distributed lock. Only the lock winner computes and fills the cache. Others sleep briefly and re-check — serving the just-filled value.",
+      "tags": [
+        "stampede",
+        "redis"
+      ]
+    },
+    {
+      "id": "cach-adv-q4",
+      "type": "mcq",
+      "prompt": "What Redis data structure is best for a leaderboard?",
+      "choices": [
+        "String",
+        "List",
+        "Hash",
+        "Sorted Set"
+      ],
+      "answerIndex": 3,
+      "explanation": "Sorted Sets store members with scores and allow O(log n) rank queries: `ZADD leaderboard 1500 userId`, `ZREVRANK leaderboard userId` for rank.",
+      "tags": [
+        "redis",
+        "data-structures"
+      ]
+    },
+    {
+      "id": "cach-adv-q5",
+      "type": "mcq",
+      "prompt": "What is the difference between write-through and write-behind caching?",
+      "choices": [
+        "No difference",
+        "Write-through: writes to cache AND DB synchronously (consistent). Write-behind: writes to cache first, DB async (fast writes, risk of data loss)",
+        "Write-through only for reads",
+        "Write-behind always crashes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Write-through is consistent but has write latency. Write-behind is fast but risks losing writes if the cache crashes before flushing to DB.",
+      "tags": [
+        "cache-patterns"
+      ]
+    },
+    {
+      "id": "cach-adv-q6",
+      "type": "mcq",
+      "prompt": "What is cache penetration?",
+      "choices": [
+        "Cache is too full",
+        "Requests for keys that don't exist in DB keep bypassing the cache and hitting the DB",
+        "Cache and DB have different data",
+        "Cache is slow to respond"
+      ],
+      "answerIndex": 1,
+      "explanation": "If null/not-found results aren't cached, every request for a nonexistent key hits the DB. Fix: cache null with a short TTL, or use a Bloom filter to check key existence before hitting DB.",
+      "tags": [
+        "cache-pitfalls"
+      ]
+    },
+    {
+      "id": "cach-adv-q7",
+      "type": "mcq",
+      "prompt": "What is Redis Cluster used for?",
+      "choices": [
+        "High availability with failover",
+        "Horizontal scaling via hash slot distribution across multiple shards",
+        "Authentication",
+        "Backup"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis Cluster distributes keys across 16,384 slots across N shards. Scales read/write throughput horizontally. Each shard has its own master+replica pair for HA.",
+      "tags": [
+        "redis",
+        "distributed-cache"
+      ]
+    },
+    {
+      "id": "cach-adv-q8",
+      "type": "mcq",
+      "prompt": "What does `SET key value NX EX 5` do in Redis?",
+      "choices": [
+        "Sets key, overwrites existing",
+        "Sets key only if it does NOT exist, with 5-second expiry — atomic distributed lock acquisition",
+        "Sets key only if it exists",
+        "Sets 5 keys"
+      ],
+      "answerIndex": 1,
+      "explanation": "NX = Only set if Not eXists. EX = expiry in seconds. Combined: atomic lock acquisition. If key exists (lock held), returns nil. If not, sets the key (acquires lock).",
+      "tags": [
+        "redis",
+        "distributed-lock"
+      ]
+    },
+    {
+      "id": "cach-adv-q9",
+      "type": "mcq",
+      "prompt": "When should you use LFU eviction over LRU?",
+      "choices": [
+        "Always — LFU is better",
+        "When access frequency matters more than recency — viral content that's accessed many times over weeks shouldn't be evicted just because it's not the most recent",
+        "When TTL is set on all keys",
+        "For session data"
+      ],
+      "answerIndex": 1,
+      "explanation": "LRU evicts the least recently accessed. LFU evicts the least frequently accessed overall. LFU is better for skewed access patterns where popular items shouldn't be evicted even if not accessed in the last minute.",
+      "tags": [
+        "eviction"
+      ]
+    },
+    {
+      "id": "cach-adv-q10",
+      "type": "multi",
+      "prompt": "Which are valid cache invalidation strategies?",
+      "choices": [
+        "TTL-based expiry",
+        "Write-through (sync)",
+        "Write-behind (async)",
+        "Cache-aside invalidation on write",
+        "Never invalidate — always fresh"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "explanation": "All of 0-3 are valid strategies with different trade-offs. 'Never invalidate' would serve stale data forever — not a valid strategy.",
+      "tags": [
+        "cache-patterns"
+      ]
+    },
+    {
+      "id": "cach-adv-q11",
+      "type": "mcq",
+      "prompt": "What is stale-while-revalidate?",
+      "choices": [
+        "Serving an error while the cache refreshes",
+        "Serving the current (possibly stale) cached value immediately, while triggering a background refresh",
+        "Blocking until cache is fresh",
+        "Fetching from two sources simultaneously"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stale-while-revalidate: client gets the stale value (no wait), background job refreshes the cache. Next request gets the fresh value. Excellent for web performance (HTTP Cache-Control header supports this).",
+      "tags": [
+        "cache-patterns"
+      ]
+    },
+    {
+      "id": "cach-adv-q12",
+      "type": "mcq",
+      "prompt": "What Redis structure is best for rate limiting with a sliding window?",
+      "choices": [
+        "String with increment",
+        "Hash",
+        "Sorted Set (ZRANGEBYSCORE to count requests in window)",
+        "List"
+      ],
+      "answerIndex": 2,
+      "explanation": "Sorted Set: `ZADD user:requests <timestamp> <uuid>`, then `ZCOUNT user:requests (now-60s) now` to count requests in the last 60 seconds. ZREMRANGEBYSCORE prunes old entries.",
+      "tags": [
+        "redis",
+        "rate-limiting"
+      ]
+    },
+    {
+      "id": "cach-adv-q13",
+      "type": "mcq",
+      "prompt": "What is the benefit of Redis Sentinel over a single Redis node?",
+      "choices": [
+        "Horizontal scaling",
+        "Automatic failover: if master goes down, Sentinel promotes a replica to master",
+        "Lower latency",
+        "More data structures"
+      ],
+      "answerIndex": 1,
+      "explanation": "Sentinel monitors master and replicas. On master failure, it auto-promotes the best replica and updates clients. No horizontal scaling — use Cluster for that.",
+      "tags": [
+        "redis",
+        "distributed-cache"
+      ]
+    },
+    {
+      "id": "cach-adv-q14",
+      "type": "mcq",
+      "prompt": "What is the `noeviction` policy risk?",
+      "choices": [
+        "Data is evicted randomly",
+        "When memory is full, Redis returns errors for write commands — application must handle ENOMEM",
+        "Replicas stop syncing",
+        "TTLs are ignored"
+      ],
+      "answerIndex": 1,
+      "explanation": "`noeviction` means Redis refuses writes when full. Use when you can't afford data loss (e.g., session store), but you MUST handle the error response gracefully.",
+      "tags": [
+        "eviction"
+      ]
+    },
+    {
+      "id": "cach-adv-q15",
+      "type": "mcq",
+      "prompt": "What is cache warming?",
+      "choices": [
+        "Setting high TTL values",
+        "Pre-populating the cache before traffic hits, to avoid cold-start stampedes",
+        "Increasing cache memory",
+        "Running Redis at higher CPU priority"
+      ],
+      "answerIndex": 1,
+      "explanation": "After a deployment or restart, the cache is empty (cold). Cache warming pre-loads frequently accessed data. Prevents thundering herd on startup.",
+      "tags": [
+        "cache-pitfalls"
+      ]
+    },
+    {
+      "id": "cach-adv-q16",
+      "type": "mcq",
+      "prompt": "When should you include a version in a cache key (e.g., `user:v2:{id}`)?",
+      "choices": [
+        "Always",
+        "When the schema/format of the cached data changes — old keys serve old format, new code expects new format",
+        "For security",
+        "When TTL is over 1 hour"
+      ],
+      "answerIndex": 1,
+      "explanation": "If your serialization format changes (new fields added to User), existing cache entries are the old format. Key versioning ensures old entries aren't read by code expecting the new format — clean migration.",
+      "tags": [
+        "cache-keys"
+      ]
+    },
+    {
+      "id": "cach-adv-q17",
+      "type": "multi",
+      "prompt": "Which Redis data structures support O(1) operations?",
+      "choices": [
+        "String GET/SET",
+        "Hash HGET/HSET",
+        "List LPUSH/LPOP (from ends)",
+        "Set SADD/SISMEMBER",
+        "Sorted Set ZADD (it's O(log n))"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "explanation": "String, Hash, List (at ends), Set operations are O(1). Sorted Set ZADD/ZRANK are O(log n) due to the skiplist structure.",
+      "tags": [
+        "redis",
+        "complexity"
+      ]
+    },
+    {
+      "id": "cach-adv-q18",
+      "type": "mcq",
+      "prompt": "What is probabilistic early expiration for stampede prevention?",
+      "choices": [
+        "Expire all keys early",
+        "With a small probability, refresh the cache before it expires — spreading refresh load over time instead of all-at-once",
+        "Cache multiple values per key",
+        "Random TTL assignment"
+      ],
+      "answerIndex": 1,
+      "explanation": "As expiry approaches, each request has an increasing probability of triggering a refresh. This distributes the refresh across many requests instead of one stampede moment.",
+      "tags": [
+        "stampede"
+      ]
+    },
+    {
+      "id": "cach-adv-q19",
+      "type": "mcq",
+      "prompt": "What is the correct way to handle a null/not-found DB result in cache-aside?",
+      "choices": [
+        "Don't cache null — always hit DB",
+        "Cache null with a short TTL (e.g., 30s) to prevent repeated DB hits for nonexistent keys",
+        "Return 500 error",
+        "Cache null with same TTL as existing data"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cache penetration: attacker or buggy code repeatedly requests nonexistent keys, bypassing cache and slamming DB. Caching null with short TTL breaks this pattern.",
+      "tags": [
+        "cache-pitfalls"
+      ]
+    },
+    {
+      "id": "cach-adv-q20",
+      "type": "mcq",
+      "prompt": "What is Redis Cluster hash slot distribution based on?",
+      "choices": [
+        "Random assignment",
+        "CRC16 of the key modulo 16384 determines which slot and therefore which shard",
+        "Key alphabetical order",
+        "Key length"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis Cluster computes `CRC16(key) % 16384` to assign a slot. Slots are distributed across shards. Keys with the same `{hash tag}` go to the same slot.",
+      "tags": [
+        "redis",
+        "distributed-cache"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "cach-adv-fc1",
+      "front": "Cache-aside read flow",
+      "back": "1. Check cache. 2. Hit → return. 3. Miss → query DB. 4. Write to cache with TTL. 5. Return. On update: write to DB, delete cache key (next read refills).",
+      "tags": [
+        "cache-patterns"
+      ]
+    },
+    {
+      "id": "cach-adv-fc2",
+      "front": "Cache stampede — three solutions",
+      "back": "1. Mutex (SET NX lock, one thread refreshes). 2. Probabilistic early refresh (refresh before expiry with small chance). 3. Stale-while-revalidate (serve stale, refresh async).",
+      "tags": [
+        "stampede"
+      ]
+    },
+    {
+      "id": "cach-adv-fc3",
+      "front": "Redis Sorted Set for rate limiting",
+      "back": "`ZADD key <timestamp> <uuid>` per request. `ZCOUNT key (now-window) now` for count. `ZREMRANGEBYSCORE key 0 (now-window)` to prune. Atomic with Lua or pipeline.",
+      "tags": [
+        "redis",
+        "rate-limiting"
+      ]
+    },
+    {
+      "id": "cach-adv-fc4",
+      "front": "SET NX for distributed lock",
+      "back": "`SET lock:resource uuid NX EX 5` — acquires lock (NX = only if not exists, EX = auto-expire). On release: `DELETE lock:resource` only if value == uuid (compare-and-delete).",
+      "tags": [
+        "redis",
+        "distributed-lock"
+      ]
+    },
+    {
+      "id": "cach-adv-fc5",
+      "front": "Cache penetration fix",
+      "back": "Cache null results with short TTL (30s). Or use Bloom filter: cheap membership check before hitting DB — if not in filter, definitely doesn't exist in DB.",
+      "tags": [
+        "cache-pitfalls"
+      ]
+    },
+    {
+      "id": "cach-adv-fc6",
+      "front": "Sentinel vs Cluster",
+      "back": "Sentinel: high availability (auto-failover), single shard, same capacity. Cluster: horizontal scaling (shards), auto-failover per shard, more complex client.",
+      "tags": [
+        "distributed-cache"
+      ]
+    },
+    {
+      "id": "cach-adv-fc7",
+      "front": "Write-through vs write-behind trade-off",
+      "back": "Write-through: consistent (sync both), slower writes. Write-behind: fast writes (async to DB), risk of data loss on crash. Use write-behind only when write performance is critical and some loss is tolerable.",
+      "tags": [
+        "cache-patterns"
+      ]
+    },
+    {
+      "id": "cach-adv-fc8",
+      "front": "LRU vs LFU eviction",
+      "back": "LRU: evict least recently used — good for recency-biased access. LFU: evict least frequently used over time — good for popularity-biased access (protects viral content from eviction).",
+      "tags": [
+        "eviction"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the caching layer for a high-traffic news feed. Requirements: 10M users, feeds personalised per user, articles cached globally, trending articles refreshed every 5 minutes, user preferences change rarely. Design: (1) what to cache and at what granularity, (2) TTL strategy for each type, (3) invalidation strategy when an article is edited, (4) stampede prevention for a breaking news article that goes viral, (5) Redis topology for this scale. No code — architecture decisions and justifications.",
+    "checklist": [
+      {
+        "id": "cach-adv-p1",
+        "text": "Define cache keys and TTLs for user feeds, article content, and trending list",
+        "weight": 20
+      },
+      {
+        "id": "cach-adv-p2",
+        "text": "Design invalidation strategy for article edits (which keys, how triggered)",
+        "weight": 20
+      },
+      {
+        "id": "cach-adv-p3",
+        "text": "Stampede prevention strategy for viral article (breaking news scenario)",
+        "weight": 20
+      },
+      {
+        "id": "cach-adv-p4",
+        "text": "Choose Redis topology (single, sentinel, cluster) and justify for this scale",
+        "weight": 20
+      },
+      {
+        "id": "cach-adv-p5",
+        "text": "Identify 2 potential cache pitfalls in this design and mitigations",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "User feeds are personalised — cache per user ID with 5-minute TTL. Article content is global — cache per article ID with 1-hour TTL.",
+      "When an article is edited: delete `article:{id}` cache. For feeds containing that article: either short TTL (eventual consistency) or event-driven invalidation.",
+      "Viral article stampede: mutex (distributed lock) for cache fill, or pre-warm the cache via background job before TTL expires.",
+      "At 10M users, Redis Cluster is likely needed for feed caches. Global article cache could be a separate smaller Redis Sentinel setup."
+    ]
+  }
+}

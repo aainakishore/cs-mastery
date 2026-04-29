@@ -1,0 +1,464 @@
+{
+  "id": "event-driven-architecture",
+  "unit": 13,
+  "order": 128,
+  "title": "Event-Driven Architecture",
+  "summary": "Design systems around events: CQRS, event sourcing, saga patterns, and how to handle distributed transactions without 2PC.",
+  "prereqs": [
+    "system-design-fundamentals"
+  ],
+  "guide": "# Event-Driven Architecture — React to What Happened\n\n## Mental Model\nIn a traditional request/response system, Service A *calls* Service B and waits. In event-driven architecture, Service A *publishes* that something happened. Service B (and C and D) *subscribe* and react — without A knowing or caring.\n\n```\nTraditional (tight coupling):\n  OrderService ─────────────────► InventoryService (sync call, waits)\n  OrderService ─────────────────► PaymentService (another sync call)\n  OrderService ─────────────────► EmailService   (another sync call)\n  Total latency = sum of all calls. If Email is down, order fails.\n\nEvent-Driven (loose coupling):\n  OrderService ──► OrderPlaced event ──► Message Bus\n                                              │\n                                     ┌────────┼────────┐\n                                     ▼        ▼        ▼\n                              Inventory  Payment   Email\n                              (async)    (async)   (async)\n  Total latency = time to publish. If Email is down, order still succeeds.\n```\n\n## Core Concepts\n\n### Events vs Commands vs Queries\n```\nCommand: \"PlaceOrder\" — an intent, directed at one service, may be rejected\nEvent:   \"OrderPlaced\" — a fact, broadcast, cannot be rejected (already happened)\nQuery:   \"GetOrder\"   — asks for state, no side effects\n\nRule: Events are FACTS. Name them in past tense: OrderPlaced, PaymentFailed.\n```\n\n### Event Sourcing\nInstead of storing the current state, store the entire *sequence of events* that produced it:\n```\nTraditional DB:           Event Store:\n  Order table:              events table:\n  id: 123                   OrderCreated   {orderId:123, items:[...]}\n  status: \"shipped\"         PaymentCharged {orderId:123, amount:50}\n  total: 50                 OrderShipped   {orderId:123, trackingId:\"X\"}\n\n  ← single row, current state     ← append-only log, full history\n```\n\n**Benefits:** full audit trail, time-travel queries, replay events to rebuild state, debug by replaying.\n**Tradeoff:** queries require replaying all events (use snapshots to optimise).\n\n### CQRS — Command Query Responsibility Segregation\n```\nWrite side (Commands):          Read side (Queries):\n  ┌──────────────┐               ┌──────────────┐\n  │ Command Model│               │ Read Model   │\n  │ (normalised  │──events──────►│ (denormalised│\n  │  domain)     │               │  for queries)│\n  └──────────────┘               └──────────────┘\n  Complex aggregates             Flat, fast views\n  Strong consistency             Eventual consistency (milliseconds behind)\n```\n\nUse CQRS when read and write patterns differ radically — e.g., millions of reads of simple data, rare complex writes.\n\n### Saga Pattern — Distributed Transactions\nWithout a distributed transaction coordinator (2PC), use sagas:\n```\nChoreography Saga (event-driven):\n  OrderService    ──► OrderCreated\n  PaymentService  ◄── OrderCreated → charges card → PaymentSucceeded\n  InventoryService◄── PaymentSucceeded → reserves items → ItemsReserved\n  ShipService     ◄── ItemsReserved → creates shipment → OrderShipped\n\n  If PaymentService fails → publishes PaymentFailed\n  OrderService ◄── PaymentFailed → cancels order → OrderCancelled\n\n  Pro: no central coordinator. Con: hard to follow the flow.\n\nOrchestration Saga (command-driven):\n  SagaOrchestrator ──► ChargePayment command ──► PaymentService\n  SagaOrchestrator ◄── PaymentSucceeded       ◄── PaymentService\n  SagaOrchestrator ──► ReserveItems command   ──► InventoryService\n  ...\n\n  Pro: clear flow, easy to observe. Con: orchestrator can become a bottleneck.\n```\n\n### Outbox Pattern — Reliable Event Publishing\n```\nThe problem: write to DB AND publish event — what if crash between them?\n\nTransaction DB:                Message Bus:\n  INSERT order ──────┐\n  INSERT outbox ─────┘ (same TX)    ← atomic\n                            ↑\n                     Outbox Relay reads\n                     new rows, publishes\n                     to Message Bus ──────► published!\n                     marks as sent\n\nGuarantees: at-least-once delivery. Make consumers idempotent.\n```\n\n## Common Pitfalls\n- **Eventual consistency surprise**: after publishing OrderPlaced, if you immediately query the read model it might not reflect the order yet. Communicate this to users (optimistic UI).\n- **Event schema evolution**: once events are published and consumed, you can't just change their structure. Use versioning or additive changes only.\n- **Lost events**: use durable message brokers (Kafka, RabbitMQ with persistence). Don't use in-memory queues for critical events.\n- **Event storms**: a cascade where one event triggers many events which trigger more. Design with circuit breakers and dead letter queues.\n- **Not making consumers idempotent**: at-least-once delivery means duplicates. Always handle duplicate events gracefully.\n\n## ASCII Flow: Order Processing\n```\nUser ──► POST /orders\n              │\n         OrderService\n              │ (1) Write to DB\n              │ (2) Write to outbox table (same TX)\n              ▼\n         Outbox Relay ──► Kafka topic: \"order.created\"\n                                │\n              ┌─────────────────┼─────────────────┐\n              ▼                 ▼                 ▼\n        PaymentWorker    InventoryWorker    Analytics\n        processes event  reserves stock    updates dashboards\n        publishes:       publishes:\n        payment.charged  items.reserved\n```\n\n## Connections\n- `kafka` — the backbone of most event-driven systems\n- `distributed-systems` — CAP theorem applies; choose AP for event systems\n- `caching-advanced` — read models in CQRS are often cached\n- `observability` — tracing events across services requires distributed tracing\n",
+  "questions": [
+    {
+      "id": "eda-q1",
+      "type": "mcq",
+      "prompt": "What distinguishes an Event from a Command?",
+      "choices": [
+        "Events are synchronous, commands are async",
+        "Events are facts (past tense, broadcast). Commands are intents (directed, rejectable).",
+        "Events require a response",
+        "Commands are stored, events are not"
+      ],
+      "answerIndex": 1,
+      "explanation": "Events record what happened — they can't be rejected because they already occurred. Commands express intent and can fail/be rejected. Name events in past tense: OrderPlaced, not PlaceOrder.",
+      "tags": [
+        "events",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "eda-q2",
+      "type": "mcq",
+      "prompt": "Event Sourcing stores:",
+      "choices": [
+        "Current state snapshots",
+        "Diffs between states",
+        "The full sequence of events that produced current state",
+        "SQL transactions"
+      ],
+      "answerIndex": 2,
+      "explanation": "Event Sourcing keeps an immutable append-only log of all events. Current state is derived by replaying events. Full audit trail, time-travel, and replay are free — at the cost of query complexity.",
+      "tags": [
+        "event-sourcing"
+      ]
+    },
+    {
+      "id": "eda-q3",
+      "type": "mcq",
+      "prompt": "CQRS splits:",
+      "choices": [
+        "Database and cache",
+        "Frontend and backend",
+        "Command (write) model and Query (read) model into separate representations",
+        "SQL and NoSQL"
+      ],
+      "answerIndex": 2,
+      "explanation": "CQRS separates the write model (normalised, strong consistency for commands) from the read model (denormalised, optimised for queries). The read model is updated asynchronously via events.",
+      "tags": [
+        "cqrs"
+      ]
+    },
+    {
+      "id": "eda-q4",
+      "type": "mcq",
+      "prompt": "In a Choreography Saga, who coordinates the flow?",
+      "choices": [
+        "A central orchestrator service",
+        "No central coordinator — each service reacts to events and publishes its own",
+        "The database",
+        "An API gateway"
+      ],
+      "answerIndex": 1,
+      "explanation": "Choreography = no conductor. Each service listens for events it cares about, acts, and publishes the result. The flow is implicit in event subscriptions. Contrast with Orchestration where a central service directs each step.",
+      "tags": [
+        "saga",
+        "choreography"
+      ]
+    },
+    {
+      "id": "eda-q5",
+      "type": "mcq",
+      "prompt": "What problem does the Outbox Pattern solve?",
+      "choices": [
+        "Slow queries",
+        "The dual write problem: ensuring a DB write and event publish are atomic",
+        "Schema migrations",
+        "Event deduplication"
+      ],
+      "answerIndex": 1,
+      "explanation": "Writing to the DB and publishing an event are two separate operations. If the process crashes between them, you get inconsistency. The Outbox pattern writes both in one DB transaction, then a relay reads the outbox and publishes events reliably.",
+      "tags": [
+        "outbox",
+        "reliability"
+      ]
+    },
+    {
+      "id": "eda-q6",
+      "type": "mcq",
+      "prompt": "Why must event consumers be idempotent?",
+      "choices": [
+        "For performance",
+        "At-least-once delivery means the same event can arrive multiple times — processing it twice must not cause double side effects",
+        "Events are always exactly-once",
+        "For security"
+      ],
+      "answerIndex": 1,
+      "explanation": "Most message brokers guarantee at-least-once delivery. Network retries, rebalances, and replays can deliver the same event multiple times. Consumers must detect and ignore duplicates (using event IDs).",
+      "tags": [
+        "idempotency",
+        "reliability"
+      ]
+    },
+    {
+      "id": "eda-q7",
+      "type": "mcq",
+      "prompt": "Eventual consistency in event-driven systems means:",
+      "choices": [
+        "Data is never consistent",
+        "After all events are processed, all services will have consistent state — but there may be a short lag",
+        "Only the write model is consistent",
+        "Transactions are used everywhere"
+      ],
+      "answerIndex": 1,
+      "explanation": "After publishing an event, read models may lag by milliseconds. Eventually (usually very quickly) all subscribers converge on the same state. Systems must be designed to tolerate and communicate this lag.",
+      "tags": [
+        "consistency",
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "eda-q8",
+      "type": "mcq",
+      "prompt": "Event schema evolution rule:",
+      "choices": [
+        "Delete fields freely",
+        "Rename events anytime",
+        "Make only additive changes (new optional fields) — never remove or rename fields in existing events",
+        "Versioning is not needed"
+      ],
+      "answerIndex": 2,
+      "explanation": "Consumers depend on event structure. Removing or renaming fields breaks consumers. Safe changes: add optional fields, create new event versions. Use a schema registry (Confluent Schema Registry) for enforcement.",
+      "tags": [
+        "schema-evolution"
+      ]
+    },
+    {
+      "id": "eda-q9",
+      "type": "multi",
+      "prompt": "Which patterns address distributed transactions without 2PC?",
+      "choices": [
+        "Saga pattern",
+        "Outbox pattern",
+        "Two-phase commit",
+        "Eventual consistency with compensating transactions",
+        "Distributed locking"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Sagas coordinate multi-service transactions through event chains. The Outbox pattern ensures reliable publishing. Compensating transactions undo partially completed work on failure. 2PC and distributed locking are generally avoided in microservices.",
+      "tags": [
+        "distributed-transactions",
+        "saga"
+      ]
+    },
+    {
+      "id": "eda-q10",
+      "type": "mcq",
+      "prompt": "What is a Dead Letter Queue (DLQ)?",
+      "choices": [
+        "A queue for deleted messages",
+        "A queue where messages go after repeated processing failures — for debugging and manual reprocessing",
+        "A high priority queue",
+        "A backup database"
+      ],
+      "answerIndex": 1,
+      "explanation": "When a consumer fails to process a message after N retries, the message goes to the DLQ. This prevents poison messages from blocking the main queue. Engineers inspect and replay DLQ messages after fixing the bug.",
+      "tags": [
+        "dlq",
+        "reliability"
+      ]
+    },
+    {
+      "id": "eda-q11",
+      "type": "mcq",
+      "prompt": "In an Orchestration Saga, the orchestrator:",
+      "choices": [
+        "Only listens to events",
+        "Sends commands to each participant and waits for their response before proceeding",
+        "Is replaced by events",
+        "Stores all state in a shared database"
+      ],
+      "answerIndex": 1,
+      "explanation": "The orchestrator (a separate service or workflow engine) knows the entire saga flow. It commands each step, waits for success/failure, and decides next steps including compensations. Easier to observe but the orchestrator is a single point of complexity.",
+      "tags": [
+        "saga",
+        "orchestration"
+      ]
+    },
+    {
+      "id": "eda-q12",
+      "type": "mcq",
+      "prompt": "Event sourcing 'snapshots' are used to:",
+      "choices": [
+        "Back up events",
+        "Avoid replaying the entire event history on every query by storing periodic state checkpoints",
+        "Compress events",
+        "Synchronise databases"
+      ],
+      "answerIndex": 1,
+      "explanation": "Replaying 10 million events to reconstruct state is slow. Snapshots periodically capture current state at event N. Then only events N+1 onwards need replay. Snapshot frequency is a trade-off between storage and query speed.",
+      "tags": [
+        "event-sourcing",
+        "snapshots"
+      ]
+    },
+    {
+      "id": "eda-q13",
+      "type": "mcq",
+      "prompt": "What is an 'event storm' in event-driven systems?",
+      "choices": [
+        "Many users connecting simultaneously",
+        "A cascade where one event triggers many events which trigger more, potentially overwhelming the system",
+        "A Kafka topic with many partitions",
+        "DDoS via events"
+      ],
+      "answerIndex": 1,
+      "explanation": "Event storms are runaway cascades. Use: circuit breakers, backpressure, DLQs, and rate limiting on event processors. Design event flows to be acyclic (DAG) to prevent infinite loops.",
+      "tags": [
+        "event-storms",
+        "reliability"
+      ]
+    },
+    {
+      "id": "eda-q14",
+      "type": "mcq",
+      "prompt": "Why is CQRS read model 'eventually consistent'?",
+      "choices": [
+        "Because it uses NoSQL",
+        "Because it's updated asynchronously from events — there's a lag between write and read model update",
+        "Because developers chose weak consistency",
+        "It's not — read models are always current"
+      ],
+      "answerIndex": 1,
+      "explanation": "The read model is updated by consuming events from the write side. Events have propagation delay (usually milliseconds). During this window, reads may return slightly stale data. This is the fundamental tradeoff of CQRS.",
+      "tags": [
+        "cqrs",
+        "consistency"
+      ]
+    },
+    {
+      "id": "eda-q15",
+      "type": "mcq",
+      "prompt": "Which is the main benefit of event-driven architecture over synchronous microservices?",
+      "choices": [
+        "Lower latency",
+        "Decoupling — publishers don't know or depend on consumers; consumers can be added/changed without changing publishers",
+        "Simpler debugging",
+        "Fewer services"
+      ],
+      "answerIndex": 1,
+      "explanation": "Event-driven decouples producers from consumers. You can add new consumers (email, analytics, audit) without changing the producing service. Services fail independently. This is the core value proposition.",
+      "tags": [
+        "fundamentals",
+        "decoupling"
+      ]
+    },
+    {
+      "id": "eda-q16",
+      "type": "mcq",
+      "prompt": "What does 'at-least-once' delivery mean for Kafka consumers?",
+      "choices": [
+        "Messages are delivered exactly once",
+        "Messages may be delivered more than once — consumers MUST be idempotent",
+        "Messages may be lost",
+        "Messages arrive in strict order"
+      ],
+      "answerIndex": 1,
+      "explanation": "Kafka's default consumer guarantees at-least-once delivery. On failure, the consumer re-reads from its last committed offset and may reprocess messages it already handled. Always track processed event IDs.",
+      "tags": [
+        "kafka",
+        "delivery-semantics"
+      ]
+    },
+    {
+      "id": "eda-q17",
+      "type": "mcq",
+      "prompt": "An event schema registry is used to:",
+      "choices": [
+        "Store events permanently",
+        "Enforce schema contracts between producers and consumers — prevent breaking schema changes",
+        "Route events to correct consumers",
+        "Monitor event throughput"
+      ],
+      "answerIndex": 1,
+      "explanation": "A schema registry (e.g., Confluent Schema Registry) stores schema versions and validates that producers only publish schema-compatible events. Consumers can negotiate which schema version to use.",
+      "tags": [
+        "schema-registry",
+        "schema-evolution"
+      ]
+    },
+    {
+      "id": "eda-q18",
+      "type": "mcq",
+      "prompt": "Compensating transactions in a Saga are used to:",
+      "choices": [
+        "Speed up transactions",
+        "Undo the effects of already-completed steps when a later step fails",
+        "Lock rows during processing",
+        "Replace rollbacks"
+      ],
+      "answerIndex": 1,
+      "explanation": "Since distributed sagas can't roll back like a DB transaction, each step must have a compensating action (e.g., 'RefundPayment' compensates 'ChargePayment'). On failure, the saga triggers compensations in reverse order.",
+      "tags": [
+        "saga",
+        "compensating-transactions"
+      ]
+    },
+    {
+      "id": "eda-q19",
+      "type": "mcq",
+      "prompt": "Which pattern should you use when you need a full audit trail and time-travel queries?",
+      "choices": [
+        "CRUD with updated_at timestamps",
+        "Event Sourcing — store all events, derive state by replay",
+        "CQRS without event sourcing",
+        "Append-only logging"
+      ],
+      "answerIndex": 1,
+      "explanation": "Event Sourcing naturally produces audit trails (every state change is an event). Time-travel queries replay events up to a point in time. CRUD with timestamps only captures current state and a change history must be built separately.",
+      "tags": [
+        "event-sourcing",
+        "audit"
+      ]
+    },
+    {
+      "id": "eda-q20",
+      "type": "multi",
+      "prompt": "Which are true about the Outbox Pattern?",
+      "choices": [
+        "Event and DB write happen in one atomic transaction",
+        "A relay process reads the outbox and publishes events",
+        "Guarantees exactly-once delivery",
+        "Prevents the dual-write problem",
+        "Requires a separate microservice"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Outbox: (1) write to DB + outbox in ONE transaction, (2) relay reads outbox and publishes, solving the dual-write problem. It guarantees at-least-once (not exactly-once). The relay can be a separate process or embedded.",
+      "tags": [
+        "outbox",
+        "reliability"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "eda-fc1",
+      "front": "Event vs Command",
+      "back": "Event = FACT (past tense, broadcast, immutable). Command = INTENT (directed, rejectable). OrderPlaced is an event. PlaceOrder is a command.",
+      "tags": [
+        "fundamentals"
+      ]
+    },
+    {
+      "id": "eda-fc2",
+      "front": "Event Sourcing in one sentence",
+      "back": "Store the stream of events, not the current state. Replay events to rebuild state. Full history, time-travel, audit trail for free.",
+      "tags": [
+        "event-sourcing"
+      ]
+    },
+    {
+      "id": "eda-fc3",
+      "front": "CQRS read model consistency",
+      "back": "Eventually consistent — updated asynchronously from events. May lag milliseconds. Design UIs for optimistic updates. Never block reads on write completion.",
+      "tags": [
+        "cqrs"
+      ]
+    },
+    {
+      "id": "eda-fc4",
+      "front": "Saga vs 2PC",
+      "back": "2PC locks resources across services = deadlock risk, poor scalability. Saga = sequence of local transactions with compensating actions. Use Saga for distributed transactions in microservices.",
+      "tags": [
+        "saga",
+        "distributed-transactions"
+      ]
+    },
+    {
+      "id": "eda-fc5",
+      "front": "Outbox Pattern",
+      "back": "Write to DB + outbox table in ONE transaction. Relay reads outbox, publishes events, marks sent. Solves dual-write. Guarantees at-least-once delivery (make consumers idempotent).",
+      "tags": [
+        "outbox"
+      ]
+    },
+    {
+      "id": "eda-fc6",
+      "front": "Idempotency in event consumers",
+      "back": "At-least-once delivery = duplicates happen. Track processed event IDs. Re-receiving same event = no-op. Essential for all event consumers.",
+      "tags": [
+        "idempotency"
+      ]
+    },
+    {
+      "id": "eda-fc7",
+      "front": "Choreography vs Orchestration Saga",
+      "back": "Choreography: decentralised, each service reacts to events, no coordinator. Orchestration: central saga service directs each step. Orchestration is easier to understand and debug.",
+      "tags": [
+        "saga"
+      ]
+    },
+    {
+      "id": "eda-fc8",
+      "front": "Dead Letter Queue purpose",
+      "back": "Messages that fail processing N times go to DLQ. Prevents poison messages blocking the queue. Inspect DLQ, fix bug, replay messages. Essential for production event systems.",
+      "tags": [
+        "dlq",
+        "reliability"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design an event-driven order processing system for an e-commerce platform. Requirements: order placement must not fail if email or inventory service is down, full audit trail of all order state changes, ability to replay last 30 days of events for debugging. Design: event schema for the order lifecycle (name 5+ events), which saga pattern you'd use and why, how you'd handle payment failure compensation, and where you'd put the Outbox pattern.",
+    "checklist": [
+      {
+        "id": "eda-p1",
+        "text": "Define 5+ order lifecycle events with correct past-tense names and key fields",
+        "weight": 20
+      },
+      {
+        "id": "eda-p2",
+        "text": "Choose Choreography or Orchestration saga and justify with your requirements",
+        "weight": 25
+      },
+      {
+        "id": "eda-p3",
+        "text": "Design compensation flow for PaymentFailed after InventoryReserved",
+        "weight": 20
+      },
+      {
+        "id": "eda-p4",
+        "text": "Place Outbox pattern correctly and explain what atomic transaction it protects",
+        "weight": 20
+      },
+      {
+        "id": "eda-p5",
+        "text": "Explain how you'd implement idempotency in the Inventory consumer",
+        "weight": 15
+      }
+    ],
+    "hints": [
+      "Events: OrderCreated, PaymentCharged, PaymentFailed, InventoryReserved, InventoryReleased, OrderShipped, OrderCancelled.",
+      "Compensation order: if OrderShipped fails after InventoryReserved + PaymentCharged → first release inventory, then refund payment (reverse order).",
+      "Outbox goes in OrderService: INSERT order + INSERT outbox_event in single DB transaction. Relay publishes to Kafka.",
+      "Idempotency: InventoryConsumer stores processed event IDs in a ProcessedEvents table. On receive, check if ID exists before processing."
+    ]
+  }
+}

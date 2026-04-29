@@ -1,0 +1,461 @@
+{
+  "id": "aws-lambda-deep-dive",
+  "unit": 18,
+  "order": 124,
+  "title": "AWS Lambda Deep Dive",
+  "summary": "Master Lambda internals: execution model, cold starts, layers, event sources, concurrency, and cost optimisation.",
+  "prereqs": [
+    "aws-practitioner"
+  ],
+  "guide": "# AWS Lambda Deep Dive — Serverless at the Metal\n\n## Mental Model\nLambda is a function-as-a-service: you give AWS a function, and it runs it in response to events. You don't manage servers, but you DO manage execution context, memory, concurrency, and cold starts.\n\n```\nEvent source → Lambda trigger → Lambda function (your code)\n                                       │\n                               Execution environment\n                               ├── Runtime (Node/Python/Java...)\n                               ├── /tmp (ephemeral storage, 512MB-10GB)\n                               ├── Environment variables\n                               └── Lambda Layer (shared code/libs)\n```\n\n## Execution Model — What Happens When Lambda Runs\n\n### Cold Start vs Warm Start\n```\nCOLD START (new execution environment created):\n  1. Download your code package from S3\n  2. Spin up execution environment (VM/container)\n  3. Start runtime (JVM, Node process, Python interpreter)\n  4. Run initialization code (outside handler)\n  5. Run your handler function\n\nWARM START (existing environment reused):\n  1. Run your handler function  ← only this step!\n\nCold start overhead (approximate):\n  Node.js:     ~100-200ms\n  Python:      ~100-200ms\n  Java (JVM):  ~500ms–2s  ← worst offender\n  Java (GraalVM native): ~50ms\n```\n\n**Rule:** Code outside your handler (DB connections, SDK clients) runs ONCE on cold start and is cached for subsequent warm invocations. Exploit this.\n\n```python\nimport boto3\n\n# GOOD: initialized once, reused across warm invocations\ndynamodb = boto3.resource('dynamodb')\ntable = dynamodb.Table('users')\n\ndef handler(event, context):\n    # table is already initialized\n    return table.get_item(Key={'id': event['id']})\n```\n\n## Memory, CPU, and Timeout\n\n```\nMemory: 128MB – 10,240MB\nCPU:    Proportional to memory (more memory = more vCPU allocated)\nTimeout: max 15 minutes\n\nRule: If your function is CPU-bound, increase memory — it also increases CPU.\n      At 1,769MB you get 1 full vCPU. At 3,008MB you get 2 vCPUs.\n```\n\n### Pricing\n```\nCost = (invocations × $0.20/million) + (duration × memory × $0.0000166667/GB-second)\n\nExample: 1M invocations, 512MB, avg 200ms each:\n  Invocations: 1,000,000 × $0.0000002 = $0.20\n  Duration:    1,000,000 × 0.2s × 0.5GB × $0.0000166667 = $1.67\n  Total: ~$1.87/month — very cheap!\n```\n\n## Lambda Layers — Shared Code and Dependencies\n\n```\nLambda Layer structure:\n  layer.zip\n  └── python/\n      └── lib/\n          └── python3.12/\n              └── site-packages/\n                  ├── requests/\n                  └── boto3/\n\nAttach up to 5 layers to a function. Layers are versioned.\n```\n\n**Use cases:**\n- Common libraries (requests, numpy) shared across functions\n- Lambda Extensions (monitoring agents, secret fetchers)\n- Custom runtimes\n\n## Concurrency — The Critical Knob\n\n```\nConcurrency = number of simultaneous running executions\n\nAccount default: 1,000 concurrent executions across ALL functions\nReserved concurrency: guarantee N executions for one function (others can't use them)\nProvisioned concurrency: pre-warm N environments (no cold starts) — costs more\n\nThrottling: when concurrency limit hit → Lambda returns 429 → caller retries\n```\n\n### Concurrency formula\n```\nConcurrency = (invocations/second) × (average duration in seconds)\nExample: 100 req/s, 500ms average → 100 × 0.5 = 50 concurrent executions\n```\n\n## Event Sources and Invocation Patterns\n\n| Event Source | Invocation Type | Error Handling |\n|---|---|---|\n| API Gateway / ALB | Synchronous | Client gets error immediately |\n| S3 / SNS | Asynchronous | Lambda retries 2x, then DLQ |\n| SQS | Polling (Lambda pulls) | Messages return to queue on failure |\n| DynamoDB Streams | Polling | Retry until success or expiry |\n| EventBridge | Asynchronous | Retries + DLQ |\n\n### Dead Letter Queue (DLQ) for async failures\n```json\n{\n  \"FunctionName\": \"my-function\",\n  \"DeadLetterConfig\": {\n    \"TargetArn\": \"arn:aws:sqs:us-east-1:123456789:my-dlq\"\n  }\n}\n```\n\n## Lambda with SQS — The Standard Async Pattern\n```\nProducer → SQS queue → Lambda (event source mapping)\n                │\n                ├── Batch size: 10 messages per invocation\n                ├── Concurrency: 1 Lambda per shard/partition\n                └── On error: messages return to queue, retry\n```\n\n**Partial batch failure:** If your function processes 10 messages and fails on #7, report the failed items so only those are retried (not all 10).\n\n## Common Pitfalls\n- **Using Lambda for long-running tasks** (>15 min): use ECS/Fargate or Step Functions instead\n- **Connecting to RDS directly**: each Lambda invocation opens a new DB connection → pool exhaustion. Use RDS Proxy.\n- **Large deployment package**: >50MB slows cold starts. Use Layers for dependencies.\n- **No provisioned concurrency for latency-sensitive paths**: cold starts will hit 1-5% of users. Use provisioned concurrency for critical paths.\n- **Not setting reserved concurrency on downstream services**: a traffic spike can starve other functions.\n\n## Connections\n- `aws-practitioner` — foundational AWS concepts\n- `aws-mastery` — API Gateway + Lambda combination patterns\n- `serverless-patterns` — higher-level patterns using Lambda\n- `scaling` — Lambda auto-scaling and concurrency model\n",
+  "questions": [
+    {
+      "id": "lam-q1",
+      "type": "mcq",
+      "prompt": "What is a Lambda cold start?",
+      "choices": [
+        "When Lambda runs out of memory",
+        "When a new execution environment must be created (download code, start runtime, run init code)",
+        "When a Lambda function fails",
+        "When Lambda scales down"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cold start: AWS creates a new execution environment, downloads your code, starts the runtime, runs initialization code outside the handler. Subsequent invocations reuse the environment (warm start).",
+      "tags": [
+        "cold-start"
+      ]
+    },
+    {
+      "id": "lam-q2",
+      "type": "mcq",
+      "prompt": "Code outside the Lambda handler function executes:",
+      "choices": [
+        "On every invocation",
+        "Only on cold starts (once per execution environment)",
+        "Never",
+        "Only in production"
+      ],
+      "answerIndex": 1,
+      "explanation": "Initialization code (DB connections, SDK clients) runs once per environment. Warm invocations skip it. This is the key optimization: initialize expensive objects outside the handler.",
+      "tags": [
+        "cold-start",
+        "optimization"
+      ]
+    },
+    {
+      "id": "lam-q3",
+      "type": "mcq",
+      "prompt": "What happens when you increase Lambda memory allocation?",
+      "choices": [
+        "Only memory increases",
+        "Both memory AND CPU increase proportionally — more memory = more vCPU",
+        "Only CPU increases",
+        "Cost decreases"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda allocates CPU proportional to memory. At 1,769MB you get 1 full vCPU. At 3,008MB you get 2 vCPUs. For CPU-bound functions, increasing memory improves performance.",
+      "tags": [
+        "memory",
+        "performance"
+      ]
+    },
+    {
+      "id": "lam-q4",
+      "type": "mcq",
+      "prompt": "What is Lambda Reserved Concurrency?",
+      "choices": [
+        "Pre-warmed execution environments",
+        "A guarantee that N executions are always available for one function, preventing it from consuming the entire account limit",
+        "Minimum guaranteed executions per second",
+        "Maximum memory allocation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Reserved concurrency reserves N of your account's concurrency for one function. It guarantees availability AND caps maximum concurrency — both useful.",
+      "tags": [
+        "concurrency"
+      ]
+    },
+    {
+      "id": "lam-q5",
+      "type": "mcq",
+      "prompt": "What is the key difference between Reserved Concurrency and Provisioned Concurrency?",
+      "choices": [
+        "No difference",
+        "Reserved: caps and reserves slots (no cold start prevention). Provisioned: pre-warms environments (eliminates cold starts, costs more).",
+        "Provisioned is cheaper",
+        "Reserved runs code before invocation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Reserved concurrency manages slots. Provisioned concurrency pre-warms execution environments so the first request is handled without cold start latency — important for user-facing APIs.",
+      "tags": [
+        "concurrency",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "lam-q6",
+      "type": "mcq",
+      "prompt": "Lambda maximum timeout is:",
+      "choices": [
+        "30 seconds",
+        "5 minutes",
+        "15 minutes",
+        "1 hour"
+      ],
+      "answerIndex": 2,
+      "explanation": "Lambda max timeout is 15 minutes. For longer tasks, use Step Functions (orchestrate multiple Lambdas), ECS Fargate, or AWS Batch.",
+      "tags": [
+        "limits"
+      ]
+    },
+    {
+      "id": "lam-q7",
+      "type": "mcq",
+      "prompt": "Why should you use RDS Proxy with Lambda connecting to RDS?",
+      "choices": [
+        "RDS Proxy is required for Lambda",
+        "Each Lambda invocation opens a new DB connection; at scale this exhausts RDS connection pool. RDS Proxy pools and reuses connections.",
+        "RDS Proxy makes queries faster",
+        "Lambda can't connect to RDS directly"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda instances are ephemeral and don't maintain persistent connections. At scale (1000 concurrent Lambdas), you'd have 1000 DB connections. RDS Proxy acts as a connection pool between Lambda and RDS.",
+      "tags": [
+        "rds-proxy",
+        "databases"
+      ]
+    },
+    {
+      "id": "lam-q8",
+      "type": "mcq",
+      "prompt": "What is a Lambda Layer?",
+      "choices": [
+        "A VPC subnet for Lambda",
+        "A versioned .zip archive containing libraries/code shared across multiple Lambda functions",
+        "Lambda's execution log",
+        "A Lambda event source"
+      ],
+      "answerIndex": 1,
+      "explanation": "Layers let you package common dependencies (numpy, requests) separately and attach them to up to 5 Lambda functions. Reduces deployment package size and enables sharing.",
+      "tags": [
+        "layers"
+      ]
+    },
+    {
+      "id": "lam-q9",
+      "type": "mcq",
+      "prompt": "Lambda invocation concurrency formula is:",
+      "choices": [
+        "Invocations per second only",
+        "Invocations per second × average duration in seconds",
+        "Total invocations / runtime",
+        "Memory × CPU"
+      ],
+      "answerIndex": 1,
+      "explanation": "If you have 100 requests/second each taking 500ms, you need 100 × 0.5 = 50 concurrent executions. This determines your required concurrency limit.",
+      "tags": [
+        "concurrency"
+      ]
+    },
+    {
+      "id": "lam-q10",
+      "type": "mcq",
+      "prompt": "For Lambda triggered by SQS, what happens if the function fails on some messages in a batch?",
+      "choices": [
+        "All messages in the batch are retried",
+        "Only successfully processed messages are deleted; failed ones return to queue",
+        "All messages are deleted",
+        "Function is disabled"
+      ],
+      "answerIndex": 1,
+      "explanation": "By default, the entire batch is retried. With partial batch failure reporting, Lambda can delete only the successful messages and return failed ones to the queue for retry.",
+      "tags": [
+        "sqs",
+        "error-handling"
+      ]
+    },
+    {
+      "id": "lam-q11",
+      "type": "mcq",
+      "prompt": "Which invocation type does API Gateway use with Lambda?",
+      "choices": [
+        "Asynchronous",
+        "Synchronous",
+        "Polling",
+        "Streaming"
+      ],
+      "answerIndex": 1,
+      "explanation": "API Gateway invokes Lambda synchronously — it waits for the response to return to the HTTP client. The client gets a 502 if Lambda times out or throws.",
+      "tags": [
+        "api-gateway",
+        "invocation"
+      ]
+    },
+    {
+      "id": "lam-q12",
+      "type": "mcq",
+      "prompt": "What is a Dead Letter Queue (DLQ) used for in Lambda?",
+      "choices": [
+        "Storing Lambda logs",
+        "Receiving events that Lambda failed to process after all retries",
+        "Storing Lambda deployment packages",
+        "Queuing cold-start requests"
+      ],
+      "answerIndex": 1,
+      "explanation": "For async invocations (S3, SNS), Lambda retries twice on failure then sends the event to the DLQ (SQS or SNS). Allows inspection and reprocessing of failed events.",
+      "tags": [
+        "dlq",
+        "error-handling"
+      ]
+    },
+    {
+      "id": "lam-q13",
+      "type": "mcq",
+      "prompt": "Lambda `/tmp` storage is:",
+      "choices": [
+        "Permanent across all invocations",
+        "Persistent within an execution environment (same Lambda instance), but ephemeral overall — not shared between instances",
+        "Shared across all Lambda instances",
+        "Not available"
+      ],
+      "answerIndex": 1,
+      "explanation": "/tmp (512MB-10GB) persists for the lifetime of the execution environment. The same warm instance can reuse /tmp contents across invocations. It's NOT shared between different Lambda instances.",
+      "tags": [
+        "storage",
+        "execution-environment"
+      ]
+    },
+    {
+      "id": "lam-q14",
+      "type": "multi",
+      "prompt": "Which are valid strategies to reduce Lambda cold start times?",
+      "choices": [
+        "Use Provisioned Concurrency",
+        "Use smaller deployment packages (layers for dependencies)",
+        "Increase timeout",
+        "Use Node.js or Python instead of Java",
+        "Move initialization outside the handler"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "explanation": "Provisioned concurrency pre-warms environments. Smaller packages download faster. Node/Python runtimes start faster than JVM. Init outside handler runs once per environment. Timeout doesn't affect cold starts.",
+      "tags": [
+        "cold-start",
+        "optimization"
+      ]
+    },
+    {
+      "id": "lam-q15",
+      "type": "mcq",
+      "prompt": "Lambda pricing is based on:",
+      "choices": [
+        "Monthly flat fee",
+        "Number of invocations + duration × memory allocated",
+        "CPU usage only",
+        "Number of executions per day"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda charges for: (1) number of requests ($0.20/million) and (2) duration in GB-seconds (memory × duration). The generous free tier (1M invocations/month) makes it very cheap for low-traffic workloads.",
+      "tags": [
+        "pricing"
+      ]
+    },
+    {
+      "id": "lam-q16",
+      "type": "mcq",
+      "prompt": "What is Lambda throttling?",
+      "choices": [
+        "Lambda slowing down execution",
+        "Lambda rejecting requests (429) when concurrency limit is reached",
+        "Network timeout",
+        "Memory limit exceeded"
+      ],
+      "answerIndex": 1,
+      "explanation": "When Lambda's concurrency limit is hit, new requests get throttled (429). Synchronous callers (API Gateway) get 429 errors. Async callers (SQS) retry automatically.",
+      "tags": [
+        "concurrency",
+        "throttling"
+      ]
+    },
+    {
+      "id": "lam-q17",
+      "type": "mcq",
+      "prompt": "For a Java Lambda function, what significantly reduces cold start time?",
+      "choices": [
+        "Increasing memory",
+        "Using GraalVM native compilation instead of JVM",
+        "Using multiple layers",
+        "Increasing timeout"
+      ],
+      "answerIndex": 1,
+      "explanation": "JVM cold starts take 500ms-2s (classloading, JIT warmup). GraalVM native image compiles to a native binary: ~50ms cold start — comparable to Node/Python. Trade-off: longer compile times, some reflection limitations.",
+      "tags": [
+        "java",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "lam-q18",
+      "type": "mcq",
+      "prompt": "Lambda Environment Variables are:",
+      "choices": [
+        "Plain text only",
+        "Encrypted at rest using AWS KMS by default",
+        "Not encrypted",
+        "Stored in S3"
+      ],
+      "answerIndex": 1,
+      "explanation": "Lambda encrypts environment variables at rest using AWS KMS. You can use the default Lambda service key or a customer-managed CMK for sensitive values.",
+      "tags": [
+        "security",
+        "environment"
+      ]
+    },
+    {
+      "id": "lam-q19",
+      "type": "codeOutput",
+      "prompt": "Where should you create a DynamoDB client in Lambda for best performance?",
+      "choices": [
+        "Inside the handler function",
+        "Outside the handler at module level (initialized on cold start, reused on warm starts)",
+        "In an environment variable",
+        "In a Lambda Layer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Module-level initialization runs once per execution environment. On warm invocations, the same client is reused — avoiding the overhead of creating the client on every request.",
+      "tags": [
+        "optimization",
+        "cold-start"
+      ]
+    },
+    {
+      "id": "lam-q20",
+      "type": "multi",
+      "prompt": "Which are valid Lambda event sources?",
+      "choices": [
+        "API Gateway",
+        "S3 (object created/deleted)",
+        "DynamoDB Streams",
+        "EC2 instance state changes (via EventBridge)",
+        "RDS query results"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "explanation": "Lambda can be triggered by API Gateway, S3, DynamoDB Streams, SQS, SNS, EventBridge, Kinesis, Cognito, and many more. RDS query results are NOT a direct Lambda trigger.",
+      "tags": [
+        "event-sources"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "lam-fc1",
+      "front": "Cold start vs warm start",
+      "back": "Cold: new environment (download code + start runtime + init code + handler) — adds 100ms-2s. Warm: same environment reused (only handler runs). Initialize expensive objects OUTSIDE the handler.",
+      "tags": [
+        "cold-start"
+      ]
+    },
+    {
+      "id": "lam-fc2",
+      "front": "Reserved vs Provisioned Concurrency",
+      "back": "Reserved: caps max concurrent executions (guaranteed slots, prevents starving others). Provisioned: pre-warms N environments (eliminates cold starts, higher cost). Use provisioned for latency-sensitive APIs.",
+      "tags": [
+        "concurrency"
+      ]
+    },
+    {
+      "id": "lam-fc3",
+      "front": "Lambda + RDS = RDS Proxy",
+      "back": "Lambda can't maintain persistent DB connections. At scale → connection pool exhaustion. RDS Proxy sits between Lambda and RDS, pooling connections. Always use it for RDS + Lambda.",
+      "tags": [
+        "databases"
+      ]
+    },
+    {
+      "id": "lam-fc4",
+      "front": "Lambda memory ↑ = CPU ↑",
+      "back": "Memory and CPU are proportional. 128MB = tiny CPU. 1,769MB = 1 full vCPU. 3,008MB = 2 vCPUs. For CPU-bound work: increasing memory reduces duration, may reduce cost.",
+      "tags": [
+        "performance"
+      ]
+    },
+    {
+      "id": "lam-fc5",
+      "front": "SQS + Lambda error handling",
+      "back": "Failed messages return to SQS queue for retry. Use partial batch failure reporting to only retry failed messages. After max retries, SQS sends to a DLQ.",
+      "tags": [
+        "sqs",
+        "error-handling"
+      ]
+    },
+    {
+      "id": "lam-fc6",
+      "front": "Lambda timeout max + alternatives",
+      "back": "Max 15 minutes. For longer: Step Functions (orchestrate Lambdas), ECS Fargate (container), AWS Batch (batch jobs).",
+      "tags": [
+        "limits"
+      ]
+    },
+    {
+      "id": "lam-fc7",
+      "front": "Lambda concurrency formula",
+      "back": "Concurrent executions = requests/second × avg duration (seconds). 100 req/s at 500ms = 50 concurrent. Plan your reserved concurrency and account limit around this.",
+      "tags": [
+        "concurrency"
+      ]
+    },
+    {
+      "id": "lam-fc8",
+      "front": "Lambda Layers purpose",
+      "back": "Package shared dependencies/code separately. Attach up to 5 layers per function. Reduces deployment package size. Enables code sharing across functions. Versioned (immutable).",
+      "tags": [
+        "layers"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design a serverless image processing pipeline using Lambda. When a user uploads a photo to S3, it triggers: (1) a thumbnail generator Lambda, (2) a metadata extractor Lambda, (3) a DynamoDB write Lambda. The pipeline must handle: large files (50MB), occasional bursts of 1000 uploads/minute, failures in any step, and a tight cost budget. Design the architecture — Lambda configuration (memory/timeout), concurrency settings, error handling, and whether to chain directly or use SQS between steps.",
+    "checklist": [
+      {
+        "id": "lam-p1",
+        "text": "Choose memory/timeout for each Lambda based on workload characteristics",
+        "weight": 20
+      },
+      {
+        "id": "lam-p2",
+        "text": "Design concurrency strategy for burst traffic (1000 uploads/minute)",
+        "weight": 20
+      },
+      {
+        "id": "lam-p3",
+        "text": "Design error handling for each step (DLQ, retry policy, partial failure)",
+        "weight": 20
+      },
+      {
+        "id": "lam-p4",
+        "text": "Justify whether to chain Lambda directly or use SQS between steps",
+        "weight": 20
+      },
+      {
+        "id": "lam-p5",
+        "text": "Identify cold start concerns and mitigation strategy",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Thumbnail generation is CPU-bound: 512MB-1GB memory. Metadata extraction is I/O-bound: 256MB sufficient.",
+      "1000 uploads/minute = ~17/second. If thumbnailing takes 3 seconds: 17×3 = 51 concurrent executions needed. Set reserved concurrency to 60.",
+      "SQS between steps decouples failures: if DynamoDB write fails, it retries independently without re-processing the image.",
+      "S3 → Lambda is async (2 retries then DLQ). Use a DLQ (SQS) to capture failed events for inspection."
+    ]
+  }
+}

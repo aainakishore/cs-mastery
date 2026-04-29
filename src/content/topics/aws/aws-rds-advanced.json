@@ -1,0 +1,462 @@
+{
+  "id": "aws-rds-advanced",
+  "unit": 18,
+  "order": 127,
+  "title": "AWS RDS Advanced",
+  "summary": "Master RDS Multi-AZ, read replicas, Aurora, RDS Proxy, parameter groups, and backup/restore strategies.",
+  "prereqs": [
+    "aws-ecs-fargate"
+  ],
+  "guide": "# AWS RDS Advanced — Make Your Database Bulletproof\n\n## Mental Model\nRDS removes the undifferentiated heavy lifting of database operations: patching, backups, failover, scaling. But to use it well, you still need to understand WHAT it's doing under the hood.\n\n```\nRDS handles:          You still manage:\n  OS patching          Schema design\n  Disk management      Query optimisation\n  Backups              Connection pooling\n  Failover             Security groups\n  Read scaling         Parameter tuning\n```\n\n## Multi-AZ — High Availability\n\n```\nPrimary DB (AZ-A)  ──synchronous replication──►  Standby DB (AZ-B)\n      │                                                  │\n   Writes go here                              Hot standby (not readable)\n      │                                                  │\n   CNAME: mydb.cluster.us-east-1.rds.amazonaws.com\n      │ (DNS switches on failover — ~60 seconds)\n```\n\n**Key facts:**\n- Standby is NOT a read replica — it's an exact mirror, synchronously updated\n- Failover is automatic: RDS detects loss of primary, promotes standby, updates DNS\n- Failover takes ~60-120 seconds — applications must handle reconnection\n- Multi-AZ doubles your storage cost but provides 99.95% availability SLA\n\n**Failover triggers:** instance failure, AZ outage, OS maintenance reboot, storage failure, \"Reboot with failover\" in console.\n\n## Read Replicas — Horizontal Read Scaling\n\n```\nPrimary DB ──asynchronous replication──► Read Replica 1 (same region)\n           ──asynchronous replication──► Read Replica 2 (different region)\n           ──asynchronous replication──► Read Replica 3 (can be promoted to primary)\n```\n\n**Rules:**\n- Asynchronous = slight replication lag (milliseconds to seconds)\n- Read replicas ARE readable endpoints — send SELECT queries there\n- One primary can have up to 5 read replicas (MySQL/PostgreSQL)\n- Cross-region replicas add disaster recovery capability\n- A read replica CAN be promoted to become a standalone primary (breaks replication)\n\n**Use case:** Reporting queries, analytics dashboards, read-heavy mobile apps.\n\n## RDS Proxy — Connection Pooling\n\n```\nWithout proxy:\n  Lambda/ECS tasks (1000 concurrent) ──────────────► RDS (500 max connections) ← OVERWHELMED\n\nWith proxy:\n  Lambda/ECS tasks (1000 concurrent) ──► RDS Proxy (pools 50 DB connections) ──► RDS ← HAPPY\n```\n\nRDS Proxy maintains a warm pool of database connections and multiplexes thousands of application connections through them.\n\n**When to use:** Lambda functions (each invocation would open a new connection), ECS services with high concurrency, any workload that frequently opens/closes connections.\n\n**Supports:** MySQL/PostgreSQL/MariaDB. Integrates with Secrets Manager (no credentials in code). Failover detection: RDS Proxy detects failover and reconnects to new primary — reduces failover impact from ~60s to ~5s.\n\n## Aurora — AWS's Managed Database Cluster\n\n```\nAurora Cluster Architecture:\n  Writer Instance (Primary) ─── Cluster Storage Volume (6 copies across 3 AZs) ───┐\n  Reader Instance 1 ──────────────────────────────────────────────────────────────┤\n  Reader Instance 2 ──────────────────────────────────────────────────────────────┘\n         │\n  Cluster endpoint: writes → writer\n  Reader endpoint:  reads → auto load-balanced across readers\n```\n\n**Aurora vs RDS MySQL:**\n| | RDS MySQL | Aurora MySQL |\n|---|---|---|\n| Storage | EBS per instance | Shared cluster volume |\n| Replication | Async replication | All instances share same storage |\n| Replication lag | Tens of ms | Sub-10ms |\n| Read replicas | 5 max | 15 max |\n| Failover | ~60s | ~30s |\n| Storage auto-scaling | Manual (modify) | Automatic (up to 128TB) |\n| Cost | Lower | ~20% higher |\n\n**Aurora Serverless v2:** instances scale CPU/memory automatically between a min and max capacity — you pay per ACU-second. Great for dev/test or unpredictable workloads.\n\n## Backups and Point-in-Time Recovery\n\n```\nAutomated backups:\n  - Daily snapshot during maintenance window\n  - Transaction logs captured every 5 minutes\n  - Retention: 1-35 days\n  - Point-in-time restore: any point within retention window\n\nManual snapshots:\n  - Persist until you delete them\n  - Can be shared across accounts and regions\n  - Basis for database migration\n\nRestore creates a NEW RDS instance — update connection strings in app\n```\n\n## Parameter Groups — Tune Your Database\n\n```\nDefault parameter group (read-only, managed by AWS)\nCustom parameter group (you create, modify, assign to RDS instance)\n\nKey parameters:\n  max_connections:     max simultaneous DB connections\n  innodb_buffer_pool_size: MySQL buffer pool (use 75% of instance RAM)\n  work_mem:            PostgreSQL — per-query sort memory\n  log_slow_queries:    Enable slow query log (HUGE for performance tuning)\n  binlog_format:       Binary log format (ROW required for replication)\n```\n\n**Changes:** Static parameters require reboot. Dynamic parameters apply immediately.\n\n## Security Best Practices\n\n```\n1. Private subnets only — no public access\n2. Security groups: allow only app tier IPs (not 0.0.0.0/0)\n3. Encryption at rest (KMS) — enables at creation, can't add later\n4. Encryption in transit — use SSL/TLS for connections\n5. IAM authentication — authenticate with temporary IAM tokens instead of passwords\n6. Audit logging — enable CloudWatch logs (error, general, slow query logs)\n```\n\n## Common Pitfalls\n- **Assuming Multi-AZ = read scaling**: Multi-AZ standby is NOT readable. Use read replicas for read scaling.\n- **Not using connection pooling**: every Lambda invocation opening a new connection → RDS max_connections exhausted. Use RDS Proxy.\n- **Modifying production during peak hours**: modifications (instance resize, storage) may cause brief downtime. Use maintenance windows.\n- **Storing RDS password in env vars**: use Secrets Manager + IAM auth.\n- **Not setting max_connections properly**: default is based on instance size but often too high for Aurora with many small instances.\n- **Forgetting to encrypt at creation**: encryption can't be turned on after instance creation. Always check this box.\n\n## Connections\n- `aws-vpc-networking` — RDS lives in private subnets, protected by VPC security groups\n- `aws-lambda-deep-dive` — Lambda + RDS = must use RDS Proxy\n- `aws-ecs-fargate` — ECS task connects to RDS via security group rules\n- `database-internals` — understanding B-Tree indexes, WAL helps tune RDS\n- `caching-advanced` — ElastiCache (Redis) is the first line of defence before RDS reads\n",
+  "questions": [
+    {
+      "id": "rds-adv-q1",
+      "type": "mcq",
+      "prompt": "What does RDS Multi-AZ provide?",
+      "choices": [
+        "Read scaling with a readable standby",
+        "High availability with automatic failover — synchronous standby NOT readable",
+        "Cross-region replication",
+        "Horizontal write scaling"
+      ],
+      "answerIndex": 1,
+      "explanation": "Multi-AZ standby is hot-standby only — synchronously replicated but not readable. Failover is automatic (~60-120s). Multi-AZ is for HA, NOT for read scaling.",
+      "tags": [
+        "multi-az",
+        "ha"
+      ]
+    },
+    {
+      "id": "rds-adv-q2",
+      "type": "mcq",
+      "prompt": "What is the key difference between Multi-AZ and Read Replicas?",
+      "choices": [
+        "Both provide read scaling",
+        "Multi-AZ: synchronous, not readable, for HA. Read Replicas: asynchronous, readable, for read scaling.",
+        "Multi-AZ is cheaper",
+        "Read Replicas provide faster failover"
+      ],
+      "answerIndex": 1,
+      "explanation": "These solve different problems. Multi-AZ = availability. Read Replicas = read throughput. You can and should use both simultaneously.",
+      "tags": [
+        "multi-az",
+        "read-replicas"
+      ]
+    },
+    {
+      "id": "rds-adv-q3",
+      "type": "mcq",
+      "prompt": "What happens to client connections during an RDS Multi-AZ failover?",
+      "choices": [
+        "No impact — transparent",
+        "Existing connections break; new connections work after DNS TTL (~60s); app must reconnect",
+        "Only new connections fail",
+        "Writes are buffered and replayed"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDS updates the CNAME DNS entry to point to the new primary. Applications must handle reconnection. RDS Proxy reduces this disruption by pre-connecting to the new primary.",
+      "tags": [
+        "multi-az",
+        "failover"
+      ]
+    },
+    {
+      "id": "rds-adv-q4",
+      "type": "mcq",
+      "prompt": "What is RDS Proxy primarily used for?",
+      "choices": [
+        "Read caching",
+        "Connection pooling: reduces DB connection overhead for Lambda/ECS by multiplexing thousands of app connections through a small pool of DB connections",
+        "Multi-region replication",
+        "Query optimisation"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDS Proxy sits between app and RDS, maintaining a warm pool of connections. Critical for Lambda (stateless, many short-lived connections) and ECS with high concurrency.",
+      "tags": [
+        "rds-proxy"
+      ]
+    },
+    {
+      "id": "rds-adv-q5",
+      "type": "mcq",
+      "prompt": "Aurora read replicas vs RDS MySQL read replicas — key difference?",
+      "choices": [
+        "No difference",
+        "Aurora replicas share the same storage with the writer — sub-10ms lag. RDS MySQL replicas have async replication with tens-of-ms lag.",
+        "Aurora has fewer replicas",
+        "RDS MySQL replicas are cheaper"
+      ],
+      "answerIndex": 1,
+      "explanation": "Aurora's shared cluster storage means reader instances see writes almost immediately (shared volume, not replication). RDS MySQL uses binary log replication — has measurable lag.",
+      "tags": [
+        "aurora",
+        "read-replicas"
+      ]
+    },
+    {
+      "id": "rds-adv-q6",
+      "type": "mcq",
+      "prompt": "What is Aurora Serverless v2?",
+      "choices": [
+        "Aurora that runs without storage",
+        "Aurora capacity that auto-scales CPU/memory in fine-grained increments — pay per ACU-second",
+        "Aurora that doesn't need a VPC",
+        "Free-tier Aurora"
+      ],
+      "answerIndex": 1,
+      "explanation": "Aurora Serverless v2 scales from minimum capacity (0.5 ACU) to maximum (128 ACU) based on load — in seconds. Great for dev/test, variable workloads, or unpredictable traffic.",
+      "tags": [
+        "aurora",
+        "serverless"
+      ]
+    },
+    {
+      "id": "rds-adv-q7",
+      "type": "mcq",
+      "prompt": "What does RDS point-in-time recovery allow?",
+      "choices": [
+        "Restore to any snapshot",
+        "Restore to any point within the backup retention window (1-35 days) from automated backups + transaction logs",
+        "Undo last 10 queries",
+        "Instant rollback of schema changes"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDS captures daily snapshots + continuous transaction logs. You can restore to any second within the retention window by replaying logs from the nearest snapshot.",
+      "tags": [
+        "backups",
+        "pitr"
+      ]
+    },
+    {
+      "id": "rds-adv-q8",
+      "type": "mcq",
+      "prompt": "When restoring an RDS backup, what happens?",
+      "choices": [
+        "Original instance is restored in place",
+        "A NEW RDS instance is created — you must update connection strings",
+        "The instance is paused and snapshot is applied",
+        "Only in-place restore is supported"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDS restore always creates a NEW instance with a new endpoint. You must update your connection string or DNS alias. This is intentional — keeps old instance available while you validate.",
+      "tags": [
+        "backups"
+      ]
+    },
+    {
+      "id": "rds-adv-q9",
+      "type": "mcq",
+      "prompt": "Why must RDS encryption be enabled at creation time?",
+      "choices": [
+        "It can be added anytime",
+        "RDS cannot encrypt an existing unencrypted instance — you must snapshot, copy with encryption enabled, and restore",
+        "Encryption is automatic",
+        "Only Aurora supports encryption"
+      ],
+      "answerIndex": 1,
+      "explanation": "Encryption is tied to the underlying storage. To encrypt an existing unencrypted RDS: 1) take snapshot, 2) copy snapshot with encryption, 3) restore to new instance. Always enable encryption upfront.",
+      "tags": [
+        "security",
+        "encryption"
+      ]
+    },
+    {
+      "id": "rds-adv-q10",
+      "type": "mcq",
+      "prompt": "How many read replicas can Aurora MySQL support?",
+      "choices": [
+        "5",
+        "10",
+        "15",
+        "Unlimited"
+      ],
+      "answerIndex": 2,
+      "explanation": "Aurora supports up to 15 read replicas (vs 5 for RDS MySQL). Aurora readers share the cluster storage — each reader adds read capacity without storage overhead.",
+      "tags": [
+        "aurora",
+        "read-replicas"
+      ]
+    },
+    {
+      "id": "rds-adv-q11",
+      "type": "mcq",
+      "prompt": "What is an RDS Parameter Group?",
+      "choices": [
+        "A group of RDS instances",
+        "Database engine configuration settings (e.g., max_connections, buffer pool size) applied to an RDS instance",
+        "IAM permission group for RDS",
+        "Subnet routing configuration"
+      ],
+      "answerIndex": 1,
+      "explanation": "Parameter Groups contain engine-level config like `max_connections`, `innodb_buffer_pool_size`, and `log_slow_queries`. Default groups are managed by AWS (read-only). Create custom groups to change settings.",
+      "tags": [
+        "parameter-groups"
+      ]
+    },
+    {
+      "id": "rds-adv-q12",
+      "type": "mcq",
+      "prompt": "When does a Parameter Group change take effect?",
+      "choices": [
+        "Always immediately",
+        "Dynamic parameters: immediately. Static parameters: require DB instance reboot.",
+        "Only after 24 hours",
+        "On next backup window"
+      ],
+      "answerIndex": 1,
+      "explanation": "Static parameters (like `max_connections` in some configs) require a reboot. Dynamic parameters take effect without restart. Check the 'Apply type' column in the console.",
+      "tags": [
+        "parameter-groups"
+      ]
+    },
+    {
+      "id": "rds-adv-q13",
+      "type": "mcq",
+      "prompt": "How does RDS Proxy improve failover for Lambda functions?",
+      "choices": [
+        "It prevents failovers",
+        "RDS Proxy detects the failover and reconnects to the new primary — reduces connection interruption from ~60s to ~5s",
+        "Lambda automatically reconnects",
+        "Proxy caches queries during failover"
+      ],
+      "answerIndex": 1,
+      "explanation": "During Multi-AZ failover, RDS Proxy maintains connections and transparently reconnects to the new primary. Lambda functions using the proxy endpoint see much shorter disruption.",
+      "tags": [
+        "rds-proxy",
+        "failover"
+      ]
+    },
+    {
+      "id": "rds-adv-q14",
+      "type": "multi",
+      "prompt": "Which IAM authentication for RDS provides:",
+      "choices": [
+        "Temporary credentials that auto-expire (no long-lived passwords)",
+        "Integration with IAM roles (ECS/Lambda don't need to store DB credentials)",
+        "Audit trail in CloudTrail for every DB authentication",
+        "Faster query execution",
+        "Encryption at rest"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "IAM authentication generates short-lived authentication tokens. Applications authenticated via IAM role don't need stored DB passwords. Every auth attempt is logged in CloudTrail.",
+      "tags": [
+        "security",
+        "iam"
+      ]
+    },
+    {
+      "id": "rds-adv-q15",
+      "type": "mcq",
+      "prompt": "The primary Aurora cluster endpoint routes writes to:",
+      "choices": [
+        "All instances round-robin",
+        "Always the current writer instance — transparently updated on failover",
+        "The instance with lowest CPU",
+        "A load balancer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Aurora's cluster endpoint always resolves to the current writer. On failover, Aurora promotes a reader and updates the endpoint DNS (faster than RDS Multi-AZ thanks to shared storage).",
+      "tags": [
+        "aurora"
+      ]
+    },
+    {
+      "id": "rds-adv-q16",
+      "type": "mcq",
+      "prompt": "Why would you use cross-region read replicas?",
+      "choices": [
+        "Reduce latency for global users + Disaster Recovery (DR)",
+        "Cross-region replicas are bidirectional",
+        "Required for Multi-AZ",
+        "Only for compliance"
+      ],
+      "answerIndex": 0,
+      "explanation": "Cross-region read replicas serve two purposes: (1) local reads for globally distributed users; (2) DR — can be promoted to primary if entire primary region fails.",
+      "tags": [
+        "read-replicas",
+        "disaster-recovery"
+      ]
+    },
+    {
+      "id": "rds-adv-q17",
+      "type": "mcq",
+      "prompt": "What is the primary benefit of Aurora's shared cluster storage?",
+      "choices": [
+        "Lower cost",
+        "All instances (writer + readers) share the same 6-copy storage — no replication lag for readers, instant consistency",
+        "Larger storage capacity",
+        "Better encryption"
+      ],
+      "answerIndex": 1,
+      "explanation": "Aurora's storage is automatically replicated 6 ways across 3 AZs. Readers access the SAME data as the writer (only separated by a distributed lock). This eliminates replication lag.",
+      "tags": [
+        "aurora"
+      ]
+    },
+    {
+      "id": "rds-adv-q18",
+      "type": "mcq",
+      "prompt": "Enable slow query log in RDS Parameter Group to:",
+      "choices": [
+        "Breach compliance",
+        "Identify queries taking longer than long_query_time — critical for finding and fixing performance bottlenecks",
+        "Reduce query latency automatically",
+        "Required for Multi-AZ"
+      ],
+      "answerIndex": 1,
+      "explanation": "Slow query logs reveal N+1 queries, missing indexes, and inefficient JOINs. Set `long_query_time=1` (1 second threshold) and `slow_query_log=1` in your Parameter Group.",
+      "tags": [
+        "parameter-groups",
+        "performance"
+      ]
+    },
+    {
+      "id": "rds-adv-q19",
+      "type": "mcq",
+      "prompt": "RDS automated backup retention window maximum is:",
+      "choices": [
+        "7 days",
+        "14 days",
+        "35 days",
+        "90 days"
+      ],
+      "answerIndex": 2,
+      "explanation": "RDS automated backups can be retained for 1-35 days. For compliance or longer retention, take manual snapshots (they persist until manually deleted).",
+      "tags": [
+        "backups"
+      ]
+    },
+    {
+      "id": "rds-adv-q20",
+      "type": "multi",
+      "prompt": "Which are true about RDS encryption?",
+      "choices": [
+        "Must be enabled at creation time",
+        "Encrypts storage, automated backups, and read replicas",
+        "Read replicas of encrypted instances are also encrypted",
+        "Can be enabled on existing instances without data migration",
+        "Uses AES-256 via AWS KMS"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "explanation": "Encryption: must enable at creation (0), covers all storage + backups + replicas (1, 2), uses KMS AES-256 (4). You CANNOT enable encryption on an existing unencrypted instance (4 is false).",
+      "tags": [
+        "security",
+        "encryption"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "rds-adv-fc1",
+      "front": "Multi-AZ vs Read Replica",
+      "back": "Multi-AZ: synchronous standby, NOT readable, automatic HA failover. Read Replica: asynchronous, readable, for read scaling. Use both simultaneously for full HA + read scale.",
+      "tags": [
+        "multi-az",
+        "read-replicas"
+      ]
+    },
+    {
+      "id": "rds-adv-fc2",
+      "front": "When to use RDS Proxy",
+      "back": "Lambda functions (new DB connection per invocation), ECS services with high task count, any app that frequently opens/closes DB connections. Reduces max_connections pressure dramatically.",
+      "tags": [
+        "rds-proxy"
+      ]
+    },
+    {
+      "id": "rds-adv-fc3",
+      "front": "Aurora vs RDS MySQL key advantage",
+      "back": "Aurora readers share cluster storage — sub-10ms read lag (vs async replication). 15 read replicas (vs 5). Faster failover (~30s vs ~60s). ~20% higher cost.",
+      "tags": [
+        "aurora"
+      ]
+    },
+    {
+      "id": "rds-adv-fc4",
+      "front": "RDS encryption rule",
+      "back": "Enable at creation — cannot add later. Encrypts storage + backups + replicas + snapshots. Uses KMS (AES-256). Read replicas of encrypted DB must also be encrypted.",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "rds-adv-fc5",
+      "front": "RDS restore creates a new instance",
+      "back": "Always. Restoring a backup or snapshot creates a NEW RDS instance with a new endpoint. Update app connection strings or use a CNAME/Route53 alias to reduce downtime.",
+      "tags": [
+        "backups"
+      ]
+    },
+    {
+      "id": "rds-adv-fc6",
+      "front": "Aurora Serverless v2 use case",
+      "back": "Variable/unpredictable workloads (dev, staging, batch). Scales in ~seconds from 0.5 to 128 ACU. Pay per ACU-second. Not for latency-sensitive prod traffic with known steady load.",
+      "tags": [
+        "aurora",
+        "serverless"
+      ]
+    },
+    {
+      "id": "rds-adv-fc7",
+      "front": "Slow query log parameter",
+      "back": "`slow_query_log=1` + `long_query_time=1` in custom Parameter Group. Logs queries > 1 second to CloudWatch. Essential first step for RDS performance debugging.",
+      "tags": [
+        "performance"
+      ]
+    },
+    {
+      "id": "rds-adv-fc8",
+      "front": "Multi-AZ failover timing",
+      "back": "~60-120 seconds. Involves DNS flip. Apps must handle reconnection (exponential backoff). RDS Proxy reduces this to ~5s by maintaining connection state.",
+      "tags": [
+        "multi-az",
+        "failover"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the database tier for a high-traffic e-commerce platform. Requirements: 99.99% availability, < 100ms read latency, 10,000 concurrent app connections (from Lambda + ECS), point-in-time recovery, read-heavy traffic (80% reads, 20% writes). Choose between Aurora and RDS MySQL. Design: engine choice, Multi-AZ vs cluster, read replicas needed, RDS Proxy configuration, backup strategy, encryption, and how you'd route reads vs writes in application code.",
+    "checklist": [
+      {
+        "id": "rds-adv-p1",
+        "text": "Engine choice (Aurora vs RDS MySQL) with justification for all requirements",
+        "weight": 20
+      },
+      {
+        "id": "rds-adv-p2",
+        "text": "Read replica strategy: count, placement (same/cross-region), how app routes reads",
+        "weight": 20
+      },
+      {
+        "id": "rds-adv-p3",
+        "text": "RDS Proxy configuration: why needed, which connections it handles",
+        "weight": 20
+      },
+      {
+        "id": "rds-adv-p4",
+        "text": "Backup strategy: automated retention, manual snapshots, PITR for compliance",
+        "weight": 20
+      },
+      {
+        "id": "rds-adv-p5",
+        "text": "Security: encryption, IAM auth vs password, SG rules, VPC placement",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Aurora: 99.99% availability, up to 15 readers, sub-10ms replication lag — better for 99.99% SLA and 80% read traffic.",
+      "RDS Proxy: essential for Lambda connections. 10,000 concurrent connections → Proxy maintains ~50-100 actual DB connections.",
+      "Reads: use Aurora reader endpoint (auto load-balances). Writes: cluster endpoint. Use connection pool that separates read/write.",
+      "IAM authentication: Lambda and ECS Task Roles request IAM tokens — no stored passwords, auto-rotated, CloudTrail audit."
+    ]
+  }
+}

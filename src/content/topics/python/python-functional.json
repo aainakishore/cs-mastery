@@ -1,0 +1,469 @@
+{
+  "id": "python-functional",
+  "unit": 2,
+  "order": 14,
+  "title": "Python Functional Programming",
+  "summary": "Leverage lambdas, map/filter/reduce, comprehensions, and higher-order functions for cleaner, side-effect-free code.",
+  "prereqs": [
+    "python-fundamentals"
+  ],
+  "guide": "# Python Functional Programming — Transform, Don't Mutate\n\n## Mental Model\nFunctional programming treats computation as a series of data transformations, not a sequence of state changes.\nThink of a pipeline:\n\n```\nraw_data → filter → transform → reduce → result\n```\n\nInstead of a `for` loop that mutates a list, you describe *what* to produce, not *how*.\n\n## Core Building Blocks\n\n### Lambda Functions — Anonymous, Inline\n```python\n# Regular function\ndef double(x):\n    return x * 2\n\n# Lambda equivalent\ndouble = lambda x: x * 2\n\n# Typical use: as argument to another function\nnums = [3, 1, 4, 1, 5]\nnums.sort(key=lambda x: -x)   # sort descending\nprint(nums)  # [5, 4, 3, 1, 1]\n```\n\n**Rule:** Use lambdas only for simple, single-expression functions. If it needs a name or >1 line → use `def`.\n\n### map, filter, reduce\n```python\nfrom functools import reduce\n\nnumbers = [1, 2, 3, 4, 5, 6]\n\n# map — apply function to every element\ndoubled = list(map(lambda x: x * 2, numbers))\n# [2, 4, 6, 8, 10, 12]\n\n# filter — keep elements where function returns True\nevens = list(filter(lambda x: x % 2 == 0, numbers))\n# [2, 4, 6]\n\n# reduce — fold sequence to single value (left to right)\ntotal = reduce(lambda acc, x: acc + x, numbers)\n# 21  (((((1+2)+3)+4)+5)+6)\n```\n\n### Comprehensions — Preferred over map/filter\n```python\n# List comprehension\ndoubled = [x * 2 for x in numbers]\nevens   = [x for x in numbers if x % 2 == 0]\n\n# Dict comprehension\nsquares = {x: x**2 for x in range(5)}\n# {0: 0, 1: 1, 2: 4, 3: 9, 4: 16}\n\n# Set comprehension\nunique_lengths = {len(w) for w in ['hi', 'hello', 'hey']}\n# {2, 5, 3}\n\n# Generator expression (lazy — no [] )\ntotal = sum(x**2 for x in range(1000))   # doesn't build list in memory\n```\n\n**Python culture:** Prefer comprehensions over `map`/`filter`. More readable, no lambda needed.\n\n## Higher-Order Functions\n```python\n# A function that takes/returns functions\ndef apply_twice(fn, value):\n    return fn(fn(value))\n\ndef add3(x):\n    return x + 3\n\nprint(apply_twice(add3, 10))  # 16\n\n# Returning a function — closure\ndef multiplier(factor: int):\n    def multiply(x: int) -> int:\n        return x * factor          # captures `factor` from outer scope\n    return multiply\n\ntriple = multiplier(3)\nprint(triple(5))   # 15\nprint(triple(10))  # 30\n```\n\n## Closures — Functions that Remember\n```python\ndef make_counter(start: int = 0):\n    count = start          # captured in closure\n\n    def increment(step: int = 1) -> int:\n        nonlocal count     # tells Python: modify outer `count`, don't create local\n        count += step\n        return count\n\n    return increment\n\ncounter = make_counter(10)\nprint(counter())    # 11\nprint(counter(5))   # 16\nprint(counter())    # 17\n```\n\n## functools Toolkit\n```python\nfrom functools import partial, lru_cache, reduce\n\n# partial — pre-fill arguments\ndef power(base, exp):\n    return base ** exp\n\nsquare = partial(power, exp=2)\ncube   = partial(power, exp=3)\nprint(square(5))  # 25\nprint(cube(3))    # 27\n\n# lru_cache — memoize (cache results of pure functions)\n@lru_cache(maxsize=None)\ndef fibonacci(n: int) -> int:\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nprint(fibonacci(50))  # instant — cached results reused\n```\n\n## Immutability in Python\nPython doesn't enforce immutability, but functional style avoids mutation:\n```python\n# ❌ Mutating\ndef double_items(lst):\n    for i in range(len(lst)):\n        lst[i] *= 2     # mutates in place\n\n# ✅ Pure function — returns new list, original unchanged\ndef double_items(lst):\n    return [x * 2 for x in lst]\n```\n\n**Pure function rule:** Same input → always same output. No side effects (no global state changes, no I/O).\n\n## Pipeline Pattern with functools.reduce\n```python\nfrom functools import reduce\n\ndef pipeline(*fns):\n    pass  # Compose functions left-to-right\n    return lambda x: reduce(lambda v, f: f(v), fns, x)\n\nprocess = pipeline(\n    lambda x: x.strip(),\n    lambda x: x.lower(),\n    lambda x: x.replace(' ', '_'),\n)\nprint(process(\"  Hello World  \"))  # hello_world\n```\n\n## Common Pitfalls\n- **Late binding in closures**: `[lambda: i for i in range(3)]` — all lambdas capture the same `i`. Fix: `lambda i=i: i`\n- **Generator exhaustion**: generators can only be iterated once. `gen = (x for x in range(5)); list(gen); list(gen)` → second list is empty\n- **`reduce` with no initial value**: raises `TypeError` on empty sequence. Always provide an initializer: `reduce(fn, lst, 0)`\n- **Overusing lambdas**: `map(lambda x: x.upper(), strings)` is less readable than `[s.upper() for s in strings]`\n\n## Connections\n- `python-fundamentals` — core syntax needed first\n- `python-oop` — functional and OOP styles complement each other; use functional for transforms, OOP for state\n- `dsa-java-dp-intro` — memoization via `@lru_cache` is the functional approach to DP\n- `ts-advanced-types` — TypeScript functional patterns (map/filter/reduce) mirror Python's\n",
+  "questions": [
+    {
+      "id": "pyfun-q1",
+      "type": "mcq",
+      "prompt": "What does `list(map(lambda x: x**2, [1,2,3]))` return?",
+      "choices": [
+        "[1, 4, 9]",
+        "[2, 4, 6]",
+        "[1, 2, 3]",
+        "map object"
+      ],
+      "answerIndex": 0,
+      "explanation": "`map` applies the lambda to each element. Wrapping in `list()` materialises the generator.",
+      "tags": [
+        "map",
+        "lambda"
+      ]
+    },
+    {
+      "id": "pyfun-q2",
+      "type": "mcq",
+      "prompt": "What is a pure function?",
+      "choices": [
+        "A function with no parameters",
+        "A function that always returns the same output for the same input and has no side effects",
+        "A function defined with lambda",
+        "A function inside a class"
+      ],
+      "answerIndex": 1,
+      "explanation": "Pure functions are deterministic and side-effect-free — the core principle of functional programming.",
+      "tags": [
+        "pure-functions"
+      ]
+    },
+    {
+      "id": "pyfun-q3",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "fns = [lambda: i for i in range(3)]\nprint([f() for f in fns])",
+      "choices": [
+        "[0, 1, 2]",
+        "[2, 2, 2]",
+        "[0, 0, 0]",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "Late binding: all lambdas capture the variable `i`, not its value at creation time. After the loop, `i=2`, so all return 2. Fix: `lambda i=i: i`.",
+      "tags": [
+        "closures",
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyfun-q4",
+      "type": "mcq",
+      "prompt": "What does `@lru_cache` do?",
+      "choices": [
+        "Logs function calls",
+        "Caches return values for repeated inputs (memoization)",
+        "Limits recursion depth",
+        "Profiles function performance"
+      ],
+      "answerIndex": 1,
+      "explanation": "`@lru_cache` stores results keyed by arguments. On repeated calls with same args, returns cached value instantly — crucial for recursive algorithms.",
+      "tags": [
+        "lru_cache",
+        "memoization"
+      ]
+    },
+    {
+      "id": "pyfun-q5",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "from functools import reduce\nprint(reduce(lambda acc, x: acc + x, [1,2,3,4], 0))",
+      "choices": [
+        "10",
+        "0",
+        "[1,2,3,4]",
+        "Error"
+      ],
+      "answerIndex": 0,
+      "explanation": "`reduce` folds: 0+1=1, 1+2=3, 3+3=6, 6+4=10. The third argument is the initial accumulator.",
+      "tags": [
+        "reduce"
+      ]
+    },
+    {
+      "id": "pyfun-q6",
+      "type": "mcq",
+      "prompt": "What does `nonlocal` enable in a closure?",
+      "choices": [
+        "Access global variables",
+        "Modify a variable from an enclosing (but non-global) scope",
+        "Create a new local variable",
+        "Import from outer module"
+      ],
+      "answerIndex": 1,
+      "explanation": "`nonlocal` tells Python to look up the variable in the enclosing function scope, not create a new local one. Without it, assignment creates a local shadowing variable.",
+      "tags": [
+        "closures",
+        "nonlocal"
+      ]
+    },
+    {
+      "id": "pyfun-q7",
+      "type": "mcq",
+      "prompt": "Generator expressions vs list comprehensions: key difference?",
+      "choices": [
+        "Generators use (), lists use []",
+        "Generators are lazy (compute on demand), lists eager (compute all at once)",
+        "Both are the same",
+        "Generators are faster for small data"
+      ],
+      "answerIndexes": [
+        0,
+        1
+      ],
+      "explanation": "Both syntax and lazy evaluation differ. Generators use `()` and produce values one at a time, saving memory for large sequences.",
+      "tags": [
+        "generators"
+      ]
+    },
+    {
+      "id": "pyfun-q8",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "gen = (x * 2 for x in range(3))\nprint(list(gen))\nprint(list(gen))",
+      "choices": [
+        "[0, 2, 4]\\n[0, 2, 4]",
+        "[0, 2, 4]\\n[]",
+        "Error",
+        "0 2 4\\n0 2 4"
+      ],
+      "answerIndex": 1,
+      "explanation": "Generators are exhausted after one iteration. The second `list(gen)` yields an empty list — this is a common bug.",
+      "tags": [
+        "generators",
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyfun-q9",
+      "type": "mcq",
+      "prompt": "What does `partial(power, exp=2)` do?",
+      "choices": [
+        "Creates a new function with exp pre-set to 2",
+        "Calls power(exp=2)",
+        "Creates a class with exp=2",
+        "Raises an error"
+      ],
+      "answerIndex": 0,
+      "explanation": "`functools.partial` returns a new callable with some arguments pre-filled. Calling `square(5)` is then like calling `power(5, exp=2)`.",
+      "tags": [
+        "partial",
+        "higher-order"
+      ]
+    },
+    {
+      "id": "pyfun-q10",
+      "type": "mcq",
+      "prompt": "Which is the most Pythonic way to square all even numbers in a list?",
+      "choices": [
+        "map(lambda x: x**2, filter(lambda x: x%2==0, nums))",
+        "[x**2 for x in nums if x%2==0]",
+        "reduce(lambda a,b: a+[b**2], [x for x in nums if x%2==0], [])",
+        "list(filter(lambda x: x**2, nums))"
+      ],
+      "answerIndex": 1,
+      "explanation": "List comprehension with condition is the clearest and most Pythonic. Nested map/filter with lambdas is harder to read.",
+      "tags": [
+        "comprehensions",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "pyfun-q11",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "def make_adder(n):\n    return lambda x: x + n\n\nadd5 = make_adder(5)\nadd10 = make_adder(10)\nprint(add5(3), add10(3))",
+      "choices": [
+        "8 13",
+        "3 3",
+        "5 10",
+        "Error"
+      ],
+      "answerIndex": 0,
+      "explanation": "Each call to `make_adder` creates a new closure capturing a different `n`. `add5(3)` = 3+5=8, `add10(3)` = 3+10=13.",
+      "tags": [
+        "closures",
+        "higher-order"
+      ]
+    },
+    {
+      "id": "pyfun-q12",
+      "type": "multi",
+      "prompt": "Which are side effects in a function?",
+      "choices": [
+        "Modifying a global variable",
+        "Writing to a file",
+        "Returning a computed value",
+        "Printing to stdout",
+        "Reading a function argument"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Side effects are changes to state outside the function: global mutation, I/O (files, print). Returning a value and reading arguments are not side effects.",
+      "tags": [
+        "pure-functions",
+        "side-effects"
+      ]
+    },
+    {
+      "id": "pyfun-q13",
+      "type": "mcq",
+      "prompt": "What does `{x: x**2 for x in range(4)}` produce?",
+      "choices": [
+        "{0, 1, 4, 9}",
+        "{0: 0, 1: 1, 2: 4, 3: 9}",
+        "[0, 1, 4, 9]",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "This is a dict comprehension (key: value syntax inside `{}`). Keys are 0-3, values are squares.",
+      "tags": [
+        "comprehensions"
+      ]
+    },
+    {
+      "id": "pyfun-q14",
+      "type": "mcq",
+      "prompt": "When is a generator preferable to a list comprehension?",
+      "choices": [
+        "Always — generators are always faster",
+        "When processing large sequences where you don't need all values in memory at once",
+        "When you need to iterate multiple times",
+        "When the function has side effects"
+      ],
+      "answerIndex": 1,
+      "explanation": "Generators evaluate lazily — they don't build the full list. For large datasets (files, API responses, infinite sequences), generators save significant memory.",
+      "tags": [
+        "generators",
+        "performance"
+      ]
+    },
+    {
+      "id": "pyfun-q15",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "from functools import reduce\nwords = ['hello', 'world']\nresult = reduce(lambda a, b: a + ' ' + b, words)\nprint(result)",
+      "choices": [
+        "['hello', 'world']",
+        "helloworld",
+        "hello world",
+        "Error"
+      ],
+      "answerIndex": 2,
+      "explanation": "`reduce` combines 'hello' and 'world' with ' ' separator → 'hello world'.",
+      "tags": [
+        "reduce"
+      ]
+    },
+    {
+      "id": "pyfun-q16",
+      "type": "mcq",
+      "prompt": "Why is `lambda x: x.upper()` typically unnecessary in `map(lambda x: x.upper(), strings)`?",
+      "choices": [
+        "lambda is deprecated",
+        "str.upper is already a method; use `map(str.upper, strings)` instead",
+        "map doesn't accept lambdas",
+        "str.upper doesn't work on lists"
+      ],
+      "answerIndex": 1,
+      "explanation": "Methods can be passed directly as callables: `map(str.upper, strings)` is cleaner. But list comprehension `[s.upper() for s in strings]` is even more Pythonic.",
+      "tags": [
+        "best-practices",
+        "map"
+      ]
+    },
+    {
+      "id": "pyfun-q17",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "nums = [1, 2, 3, 4, 5]\nresult = [x for x in nums if x > 2 if x < 5]\nprint(result)",
+      "choices": [
+        "[3, 4]",
+        "[1, 2, 5]",
+        "[3, 4, 5]",
+        "Error"
+      ],
+      "answerIndex": 0,
+      "explanation": "Multiple conditions in a comprehension are ANDed together: x > 2 AND x < 5 → 3 and 4.",
+      "tags": [
+        "comprehensions"
+      ]
+    },
+    {
+      "id": "pyfun-q18",
+      "type": "mcq",
+      "prompt": "What is a closure?",
+      "choices": [
+        "A class with private methods",
+        "A function that captures variables from its enclosing scope",
+        "A function with no return value",
+        "A decorator pattern"
+      ],
+      "answerIndex": 1,
+      "explanation": "A closure is a function that remembers variables from the scope where it was created, even after that scope has ended.",
+      "tags": [
+        "closures"
+      ]
+    },
+    {
+      "id": "pyfun-q19",
+      "type": "mcq",
+      "prompt": "What does `sorted(people, key=lambda p: p['age'])` do?",
+      "choices": [
+        "Sorts people in place by age",
+        "Returns a new list sorted by the 'age' value in each dict",
+        "Modifies the original list",
+        "Raises TypeError if age is missing"
+      ],
+      "answerIndex": 1,
+      "explanation": "`sorted()` returns a NEW sorted list. The `key` function extracts the comparison value from each element.",
+      "tags": [
+        "sorting",
+        "lambda"
+      ]
+    },
+    {
+      "id": "pyfun-q20",
+      "type": "multi",
+      "prompt": "Which are true about list comprehensions vs map/filter?",
+      "choices": [
+        "Comprehensions are generally more readable in Python",
+        "map/filter are always faster",
+        "Comprehensions can combine filter and transform in one expression",
+        "map returns a list in Python 3",
+        "Generator expressions are the lazy version of comprehensions"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        4
+      ],
+      "explanation": "Comprehensions are preferred for readability. `map` returns a map object (not list) in Python 3. Generator expressions use `()` and are lazy.",
+      "tags": [
+        "comprehensions",
+        "map"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "pyfun-fc1",
+      "front": "lambda vs def — when to use each",
+      "back": "`lambda`: single expression, used inline as argument (sort key, map/filter). `def`: anything with logic, multiple lines, or needs a name. If you assign lambda to variable, use `def` instead.",
+      "tags": [
+        "lambda"
+      ]
+    },
+    {
+      "id": "pyfun-fc2",
+      "front": "Late binding closure trap",
+      "back": "`[lambda: i for i in range(3)]` — all lambdas return 2 (last value of i). Fix: `lambda i=i: i` captures the current value as default arg.",
+      "tags": [
+        "closures",
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyfun-fc3",
+      "front": "Generator exhaustion",
+      "back": "Generators are single-use. After iterating, they're empty. If you need to iterate multiple times, use a list comprehension `[...]` instead of `(...)`, or call `list(gen)` once.",
+      "tags": [
+        "generators"
+      ]
+    },
+    {
+      "id": "pyfun-fc4",
+      "front": "@lru_cache use case",
+      "back": "Pure functions called repeatedly with same args. Classic: Fibonacci, dynamic programming, expensive computations. WARNING: don't use on functions with side effects or mutable args.",
+      "tags": [
+        "lru_cache"
+      ]
+    },
+    {
+      "id": "pyfun-fc5",
+      "front": "reduce(fn, iterable, initializer)",
+      "back": "Folds left-to-right: `reduce(lambda a,b: a+b, [1,2,3], 0)` → ((0+1)+2)+3 = 6. Always provide initializer — avoids TypeError on empty input.",
+      "tags": [
+        "reduce"
+      ]
+    },
+    {
+      "id": "pyfun-fc6",
+      "front": "Pure function rule",
+      "back": "Same input → same output. No side effects (no global mutations, no I/O). Pure functions are testable, composable, and safe to cache.",
+      "tags": [
+        "pure-functions"
+      ]
+    },
+    {
+      "id": "pyfun-fc7",
+      "front": "nonlocal keyword",
+      "back": "Used inside a nested function to modify a variable from an enclosing (non-global) scope. Without it, assignment creates a new local variable, shadowing the outer one.",
+      "tags": [
+        "closures",
+        "nonlocal"
+      ]
+    },
+    {
+      "id": "pyfun-fc8",
+      "front": "partial() use case",
+      "back": "`partial(fn, arg)` pre-fills arguments, creating a new callable. Use to specialise generic functions: `double = partial(multiply, factor=2)`. Cleaner than writing a new lambda.",
+      "tags": [
+        "partial"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design a data processing pipeline using functional patterns. You have a stream of user event records (dicts with: user_id, event_type, timestamp, amount). Write pseudo-code (no execution needed) using map, filter, reduce, and comprehensions to: (1) Filter events from the last 30 days, (2) Exclude cancelled events, (3) Group by user_id, (4) Sum amounts per user, (5) Find the top 10 spenders. Design the pipeline composition. Discuss: Where would @lru_cache help? What makes each transform pure? How would you handle errors in a functional style?",
+    "checklist": [
+      {
+        "id": "pyfun-p1",
+        "text": "Design each pipeline stage as a pure function (filter, transform, reduce)",
+        "weight": 20
+      },
+      {
+        "id": "pyfun-p2",
+        "text": "Use comprehensions or map/filter correctly for each stage",
+        "weight": 20
+      },
+      {
+        "id": "pyfun-p3",
+        "text": "Compose the pipeline using reduce or a pipeline() helper",
+        "weight": 20
+      },
+      {
+        "id": "pyfun-p4",
+        "text": "Identify where @lru_cache could help and justify",
+        "weight": 20
+      },
+      {
+        "id": "pyfun-p5",
+        "text": "Explain how to handle malformed records functionally (without exceptions polluting pure functions)",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Use a generator for the full stream so you don't load all records into memory.",
+      "The grouping step (by user_id) could use a dict comprehension or itertools.groupby after sorting.",
+      "For error handling in functional style: use Result/Option pattern — transform invalid records to None, then filter(None, stream).",
+      "Top-10 spenders: `sorted(user_totals.items(), key=lambda kv: kv[1], reverse=True)[:10]`"
+    ]
+  }
+}

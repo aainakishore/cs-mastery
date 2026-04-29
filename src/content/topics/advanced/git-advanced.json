@@ -1,0 +1,477 @@
+{
+  "id": "git-advanced",
+  "unit": 16,
+  "order": 119,
+  "title": "Git Advanced",
+  "summary": "Rebase, interactive history editing, cherry-pick, bisect for debugging, git hooks, and monorepo strategies.",
+  "prereqs": [
+    "git-fundamentals"
+  ],
+  "guide": "# Git Advanced\n\n## Prerequisites\nYou should know: git add, commit, push, pull, branch, merge. This guide covers\nthe powerful tools beyond basics that senior developers use daily.\n\n---\n\n## Rebase — Rewriting History\n\n```\nMerge vs Rebase — two ways to integrate changes:\n\nMERGE: creates a merge commit, preserves history exactly as it happened\n  main: A─B─C────────M  (M = merge commit)\n               \\   /\n  feat:          D─E\n\nREBASE: replays your commits on top of target branch (rewrites commit SHAs!)\n  Before rebase:               After git rebase main:\n  main: A─B─C                  main: A─B─C\n               \\                              \\\n  feat:    D─E                  feat:           D'─E'\n\n  D' and E' have new SHAs but same changes as D and E.\n  Result: LINEAR history — looks like you branched from current main\n\nWhen to use what:\n  merge:  public branches, preserving exact history, team-shared branches\n  rebase: cleaning up local commits before PR, linear history preference\n```\n\n```bash\n# Standard rebase workflow (before opening a PR):\ngit checkout feature/my-feature\ngit fetch origin\ngit rebase origin/main\n# If conflicts: fix them, then:\ngit add .\ngit rebase --continue\n# To abort: git rebase --abort\n\n# Interactive rebase — rewrite last 3 commits:\ngit rebase -i HEAD~3\n# Opens editor:\n#  pick abc123 Add user model\n#  pick def456 Fix typo in user model\n#  pick ghi789 Add user service\n# Change 'pick' to:\n#  fixup  = merge into previous (discard this commit's message)\n#  squash = merge into previous (edit combined message)\n#  reword = keep commit but edit message\n#  drop   = delete this commit entirely\n#  edit   = pause to amend this commit\n\n# Squash 'Fix typo' into 'Add user model':\n#  pick abc123 Add user model\n#  fixup def456 Fix typo in user model    ← becomes part of abc123\n#  pick ghi789 Add user service\n```\n\n**GOLDEN RULE: Never rebase shared/public branches.** Rebase rewrites SHAs.\nIf teammates have your old commits, they'll have conflicts from the rewritten history.\nOnly rebase local branches or feature branches you haven't shared yet.\n\n---\n\n## Cherry-pick — Pick Individual Commits\n\n```bash\n# Scenario: hotfix is needed in main AND in release branch\n# Fix made on main (commit abc123). Need it on release/2.0 too.\n\ngit checkout release/2.0\ngit cherry-pick abc123\n# Creates a NEW commit on release/2.0 with same changes\n# New commit has different SHA (different parent)\n\n# Cherry-pick a range of commits:\ngit cherry-pick abc123..def456   # commits from abc123 to def456\n\n# Cherry-pick without committing (just stage the changes):\ngit cherry-pick -n abc123  # -n = --no-commit\ngit add .  # review/modify before committing\ngit commit\n\n# If conflicts: fix, then:\ngit cherry-pick --continue\n# or abort:\ngit cherry-pick --abort\n```\n\n---\n\n## Git Bisect — Binary Search for Bug Introduction\n\n```\nPROBLEM: The app was working 6 months ago. 300 commits later, it's broken.\nWhich commit introduced the bug?\n\nMANUAL: check 150 commits manually → tedious\nBISECT: binary search → check only log2(300) ≈ 8 commits\n\nPROCESS:\n  1. Mark current HEAD as bad\n  2. Mark a known good commit\n  3. Git checks out a midpoint commit\n  4. Test your app: good or bad?\n  5. Mark accordingly → git checks out next midpoint\n  6. Repeat until first bad commit identified\n```\n\n```bash\ngit bisect start\ngit bisect bad                    # current HEAD is bad\ngit bisect good v1.2.0            # this tag/commit was working\n# Git checks out midpoint: 'Bisecting: 150 revisions left'\n\n# Test your app...\ngit bisect good  # or bad\n# Git checks out next midpoint\n\n# Repeat until:\n# 'abc123 is the first bad commit'\n\ngit bisect reset  # back to HEAD\n\n# Automated bisect (if you have a test script):\ngit bisect run ./test.sh\n# test.sh exits 0 = good, exits non-0 = bad. Fully automated!\n```\n\n---\n\n## Git Hooks — Automate on Events\n\n```\nGit hooks = scripts that run automatically on git events.\nStored in .git/hooks/ — not committed by default.\nUse tools like husky (JS) or pre-commit (Python) to commit hooks.\n\nCommon hooks:\n  pre-commit:     runs before commit is created\n                  → lint, format, test, secrets scan\n  commit-msg:     validates commit message format\n                  → enforce Conventional Commits\n  pre-push:       runs before pushing\n                  → run full test suite\n  post-checkout:  runs after branch switch\n  post-merge:     runs after merge\n```\n\n```bash\n# .git/hooks/pre-commit (must be executable: chmod +x)\n#!/bin/sh\n# Run lint before committing\nnpm run lint\nexit_code=$?\nif [ $exit_code -ne 0 ]; then\n  echo 'Lint failed. Fix errors before committing.'\n  exit 1  # Non-zero = abort commit\nfi\n\n# Using husky (Node.js project):\nnpm install --save-dev husky\nnpx husky init\necho 'npm run lint' > .husky/pre-commit\n\n# commitlint — enforce conventional commits:\nnpm install --save-dev @commitlint/{config-conventional,cli}\necho \"module.exports = { extends: ['@commitlint/config-conventional'] }\" > commitlint.config.js\necho 'npx commitlint --edit $1' > .husky/commit-msg\n# Now: 'feat: add login' passes, 'added login' fails\n```\n\n---\n\n## Monorepo Strategies\n\n```\nPOLYREPO: one repo per service/app\n  + Simple per-service CI/CD\n  - Dependency coordination hell (service A uses lib v1, B uses v2)\n  - Cross-repo changes need multiple PRs\n\nMONOREPO: all code in one repo\n  + Atomic cross-project changes in one commit\n  + Shared tooling, lint, test setup\n  + Dependency consistency\n  - Slower git operations at scale\n  - Need smart build tools (only rebuild what changed)\n\nTools for JS/TS monorepos:\n  Nx:       smart caching, affected commands (only build changed packages)\n  Turborepo: similar to Nx, from Vercel\n  pnpm workspaces: package management for monorepos\n\nGit sparse checkout (checkout only subset of monorepo):\n  git sparse-checkout init --cone\n  git sparse-checkout set packages/frontend services/auth\n  # Only those folders checked out, rest on remote\n```\n\n---\n\n## Git Stash, Worktrees, and Reflog\n\n```bash\n# STASH: temporarily save uncommitted work\ngit stash                       # stash all changes\ngit stash push -m 'wip auth'    # named stash\ngit stash list                  # list stashes\ngit stash pop                   # apply latest + remove from stash\ngit stash apply stash@{2}       # apply specific stash (keep in list)\ngit stash drop stash@{0}        # delete stash\n\n# WORKTREES: check out multiple branches simultaneously\ngit worktree add ../hotfix-branch hotfix/payment-crash\n# Creates ../hotfix-branch folder on hotfix branch\n# You can work in both folders at same time!\n# Perfect for: reviewing a PR while keep working on your branch\n\n# REFLOG: the 'undo' of undos — records every HEAD movement\ngit reflog\n# Shows: abc123 HEAD@{0}: checkout: moving from main to feat\n#        def456 HEAD@{1}: commit: Add button component\n# Recover 'deleted' commits:\ngit checkout def456  # or git reset --hard def456\n```\n\n---\n\n## Mind Map\n\n```\nGIT ADVANCED\n|\n+-- REBASE\n|   +-- Replay commits on new base\n|   +-- Interactive: squash, fixup, reword, drop\n|   +-- NEVER rebase shared branches\n|   +-- git rebase -i HEAD~N\n|\n+-- CHERRY-PICK\n|   +-- Apply specific commit to another branch\n|   +-- git cherry-pick <sha>\n|   +-- Use for hotfixes across branches\n|\n+-- BISECT\n|   +-- Binary search for bug-introducing commit\n|   +-- log2(N) steps\n|   +-- automate with test script\n|\n+-- HOOKS\n|   +-- pre-commit, commit-msg, pre-push\n|   +-- husky for JS projects\n|   +-- Enforce linting, testing, commit format\n|\n+-- MONOREPO\n    +-- Nx / Turborepo for smart rebuilds\n    +-- pnpm workspaces\n    +-- sparse checkout for large repos\n```\n\n---\n\n## References\n\n### Videos\n- **Git Rebase and Merge** by Atlassian:\n  https://www.youtube.com/watch?v=dO9BtPDIHJ8\n- **Advanced Git Techniques** by Fireship:\n  https://www.youtube.com/watch?v=ecK3EnyGD8o\n\n### Articles\n- **Pro Git Book** (free): https://git-scm.com/book/en/v2 — Chapters 6-7 cover advanced topics\n- **Conventional Commits**: https://www.conventionalcommits.org\n- **Oh Shit Git**: https://ohshitgit.com — how to recover from every mistake",
+  "questions": [
+    {
+      "id": "gitadv-q1",
+      "type": "mcq",
+      "prompt": "What does git rebase main do on your feature branch?",
+      "choices": [
+        "Creates a merge commit on main",
+        "Replays your feature branch commits on top of the current tip of main, creating new commits with new SHAs but same changes — linearising history",
+        "Deletes main",
+        "Merges main into feature without rewriting"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rebase re-applies your commits one by one after the new base (main). The commits get new SHAs because their parent changes. This makes it look like you branched from current main even if you branched weeks ago.",
+      "tags": [
+        "git",
+        "rebase"
+      ]
+    },
+    {
+      "id": "gitadv-q2",
+      "type": "mcq",
+      "prompt": "Why is rebasing public/shared branches dangerous?",
+      "choices": [
+        "Rebase is slow",
+        "Rebase rewrites commit SHAs. If teammates have your old commits, their histories diverge from yours — they'll get conflicts and duplicate commits when they try to pull. Never rebase shared branches.",
+        "Rebase has bugs",
+        "Rebase doesn't work on GitHub"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rebase changes commit SHAs. If Alice has commit abc123 and you rebase to get abc456 (same content, different SHA), when Alice pulls she has both: the old abc123 AND the new abc456 — confusing duplicate history.",
+      "tags": [
+        "git",
+        "rebase",
+        "safety"
+      ]
+    },
+    {
+      "id": "gitadv-q3",
+      "type": "mcq",
+      "prompt": "Interactive rebase with 'fixup' vs 'squash' — difference?",
+      "choices": [
+        "fixup is faster",
+        "fixup: merges commit into previous AND discards its commit message. squash: merges commit into previous AND opens editor to write combined message.",
+        "They are identical",
+        "squash deletes the commit"
+      ],
+      "answerIndex": 1,
+      "explanation": "fixup silently collapses. squash prompts you to write a new commit message for the combined commit. Use fixup for tiny fix commits (typos, formatting). Use squash when you want to craft a meaningful combined message.",
+      "tags": [
+        "git",
+        "interactive-rebase"
+      ]
+    },
+    {
+      "id": "gitadv-q4",
+      "type": "mcq",
+      "prompt": "When is git cherry-pick the right tool?",
+      "choices": [
+        "Integrating a feature branch into main",
+        "Applying a specific commit (e.g., a hotfix) from one branch to another without merging the entire branch — e.g., patch v2.0 release branch with a fix made on main",
+        "Renaming commits",
+        "Checking out a file from another branch"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cherry-pick = selective commit application. You made a hotfix on main (commit abc123). Release branch release/2.0 needs this fix too, but not all of main. git cherry-pick abc123 on release/2.0 applies just that fix.",
+      "tags": [
+        "git",
+        "cherry-pick"
+      ]
+    },
+    {
+      "id": "gitadv-q5",
+      "type": "mcq",
+      "prompt": "git bisect uses what algorithm to find the bug-introducing commit?",
+      "choices": [
+        "Linear search",
+        "Binary search — starts at midpoint of good..bad range. Mark good/bad. Git picks new midpoint. Repeat until done. Finds the commit in O(log N) steps.",
+        "Depth-first search",
+        "Random sampling"
+      ],
+      "answerIndex": 1,
+      "explanation": "300 commits. Manual linear: 300 tests. Binary search: log2(300) ≈ 8 tests. git bisect automates this: marks good/bad commits, checks out midpoints. With an automated test script, fully hands-off.",
+      "tags": [
+        "git",
+        "bisect"
+      ]
+    },
+    {
+      "id": "gitadv-q6",
+      "type": "mcq",
+      "prompt": "A pre-commit hook exits with code 1 (non-zero). What happens?",
+      "choices": [
+        "Hook runs again",
+        "The commit is aborted — git only proceeds with the commit if the hook exits 0",
+        "A warning is shown but commit proceeds",
+        "Git asks for confirmation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Non-zero exit = signal to git to abort the operation. pre-commit exits 1 → commit stops. This is how lint/test hooks enforce quality: if lint fails, commit fails. Developers must fix before committing.",
+      "tags": [
+        "git",
+        "hooks"
+      ]
+    },
+    {
+      "id": "gitadv-q7",
+      "type": "mcq",
+      "prompt": "husky is a tool for:",
+      "choices": [
+        "Git hosting",
+        "Managing git hooks in JavaScript/Node.js projects — hooks are defined in .husky/ folder, committed to the repo so all team members get the same hooks automatically",
+        "SQL migrations",
+        "Branch protection"
+      ],
+      "answerIndex": 1,
+      "explanation": "Default git hooks live in .git/hooks/ which is never committed. Husky puts hooks in .husky/ which is committed. When a new developer clones and runs npm install, husky automatically installs the hooks. Team-wide enforcement.",
+      "tags": [
+        "git",
+        "hooks",
+        "husky"
+      ]
+    },
+    {
+      "id": "gitadv-q8",
+      "type": "mcq",
+      "prompt": "git reflog vs git log — key difference?",
+      "choices": [
+        "reflog shows remote history",
+        "git log shows commit history on the current branch. git reflog records ALL movements of HEAD (commits, checkouts, rebases, resets) — lets you recover from accidental resets/deletes by finding the old SHA.",
+        "They are identical",
+        "reflog is faster"
+      ],
+      "answerIndex": 1,
+      "explanation": "git log: commits reachable from HEAD. git reflog: everything that happened to HEAD in this repo. If you ran git reset --hard and 'lost' commits, they're still in the object store. Find them in reflog, then git checkout <sha> or git reset --hard <sha>.",
+      "tags": [
+        "git",
+        "reflog"
+      ]
+    },
+    {
+      "id": "gitadv-q9",
+      "type": "mcq",
+      "prompt": "What is git stash and when should you use it?",
+      "choices": [
+        "Backup of the repo",
+        "Temporarily saves uncommitted changes to a stack, leaving working directory clean. Use when: you need to switch branches urgently but aren't ready to commit. git stash pop restores later.",
+        "Archives old commits",
+        "Remote backup feature"
+      ],
+      "answerIndex": 1,
+      "explanation": "Scenario: you're mid-feature when a critical bug needs immediate attention. git stash saves your work-in-progress. You switch branches, fix bug, commit, push. Back on feature branch: git stash pop restores where you left off.",
+      "tags": [
+        "git",
+        "stash"
+      ]
+    },
+    {
+      "id": "gitadv-q10",
+      "type": "mcq",
+      "prompt": "Conventional Commits specification: what does 'feat(auth): add OAuth login' mean?",
+      "choices": [
+        "Random prefix",
+        "feat = feature type (triggers MINOR version bump in semver). (auth) = scope (optional, which area changed). 'add OAuth login' = description. Other types: fix, chore, docs, refactor, test, perf.",
+        "Feature file name",
+        "Feature author"
+      ],
+      "answerIndex": 1,
+      "explanation": "Conventional Commits: <type>(scope): description. Enables: automated CHANGELOG generation, semantic versioning (feat=minor, fix=patch, BREAKING CHANGE=major), better git log readability. Enforced by commitlint + husky.",
+      "tags": [
+        "git",
+        "conventional-commits"
+      ]
+    },
+    {
+      "id": "gitadv-q11",
+      "type": "mcq",
+      "prompt": "git merge --squash vs git merge what is the difference?",
+      "choices": [
+        "--squash is faster",
+        "--squash: takes all commits from feature branch, combines them into one set of staged changes WITHOUT a merge commit. You then commit manually as one clean commit. git merge: preserves all commits + merge commit.",
+        "--squash keeps all history",
+        "No difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "Squash merge: feature/abc (10 messy commits) merged into main as one clean commit 'Add authentication system'. Loses individual commit history but keeps main history clean. Alternative to interactive rebase. Many teams squash all PRs.",
+      "tags": [
+        "git",
+        "merge",
+        "squash"
+      ]
+    },
+    {
+      "id": "gitadv-q12",
+      "type": "mcq",
+      "prompt": "git worktree add — what problem does it solve?",
+      "choices": [
+        "Adds more disk space",
+        "Allows you to check out multiple branches simultaneously in separate directories — same git repo, multiple working trees. Solve: review a PR while keeping your current work untouched without stashing.",
+        "Creates a git backup",
+        "Remote worktrees"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without worktrees: to review PR you'd need to stash, switch branch, review, switch back, stash pop. With worktrees: add worktree in another folder on the PR branch, review there, continue working in original folder simultaneously.",
+      "tags": [
+        "git",
+        "worktree"
+      ]
+    },
+    {
+      "id": "gitadv-q13",
+      "type": "mcq",
+      "prompt": "What is git sparse-checkout used for?",
+      "choices": [
+        "Checkout only committed files",
+        "Checkout only a subset of a large monorepo — specify which folders you want, only those are downloaded/present in working directory. Reduces disk usage and git operations time.",
+        "Speed up git status",
+        "Checkout from remote only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Large monorepos (Meta, Google scale) can't be fully checked out. sparse-checkout lets you specify paths: only packages/frontend and shared/utils are present locally. Git still tracks full history but working directory is subset.",
+      "tags": [
+        "git",
+        "monorepo",
+        "sparse-checkout"
+      ]
+    },
+    {
+      "id": "gitadv-q14",
+      "type": "mcq",
+      "prompt": "During git rebase, you get a conflict. What is the correct sequence of commands?",
+      "choices": [
+        "git rebase --abort then merge instead",
+        "Fix conflicting files manually, git add <resolved-files>, git rebase --continue — repeat for each conflicting commit in the rebase",
+        "git push --force",
+        "git merge main to fix"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rebase conflict: fix file, git add (marks resolved), git rebase --continue (applies next commit). Repeat for each commit that has conflicts. If overwhelmed: git rebase --abort returns to pre-rebase state safely.",
+      "tags": [
+        "git",
+        "rebase",
+        "conflicts"
+      ]
+    },
+    {
+      "id": "gitadv-q15",
+      "type": "multi",
+      "prompt": "Which commands are safe to run on a branch that teammates are also working on?",
+      "choices": [
+        "git merge main (creates merge commit)",
+        "git rebase origin/main (rewrites SHAs)",
+        "git cherry-pick <sha> (creates new commit)",
+        "git push --force (overwrites remote history)"
+      ],
+      "answerIndexes": [
+        0,
+        2
+      ],
+      "explanation": "Merge and cherry-pick add new commits without rewriting existing ones — safe on shared branches. Rebase and force push rewrite history — dangerous on shared branches as they conflict with teammates' copies.",
+      "tags": [
+        "git",
+        "safety",
+        "shared-branches"
+      ]
+    },
+    {
+      "id": "gitadv-q16",
+      "type": "mcq",
+      "prompt": "You ran 'git reset --hard HEAD~1' accidentally deleting a commit. How do you recover?",
+      "choices": [
+        "The commit is gone forever",
+        "git reflog to find the deleted commit SHA (Git keeps objects for 30 days). git reset --hard <that-sha> to restore it.",
+        "git undo",
+        "git pull --force"
+      ],
+      "answerIndex": 1,
+      "explanation": "Git never immediately deletes objects. reset --hard just moves HEAD pointer. The commit object still exists. reflog shows every HEAD movement including the previous state. Find SHA before the reset. git reset --hard <sha> restores it.",
+      "tags": [
+        "git",
+        "recovery",
+        "reflog"
+      ]
+    },
+    {
+      "id": "gitadv-q17",
+      "type": "codeOutput",
+      "prompt": "What does this interactive rebase config do?",
+      "code": "pick abc Add user model\nfixup def Fix typo\nreword ghi Add user service",
+      "choices": [
+        "Creates 3 separate commits",
+        "Creates 2 commits: 'Add user model' (includes typo fix silently), then opens editor to rename 'Add user service'",
+        "Deletes all commits",
+        "Squashes all 3 into one"
+      ],
+      "answerIndex": 1,
+      "explanation": "fixup: merges 'Fix typo' into 'Add user model', discards typo commit message. reword: opens editor on 'Add user service' to rename. Result: 2 commits: 1) Add user model (with typo fix inside), 2) [whatever you renamed it to].",
+      "tags": [
+        "git",
+        "interactive-rebase"
+      ]
+    },
+    {
+      "id": "gitadv-q18",
+      "type": "mcq",
+      "prompt": "Monorepo benefit: why does 'atomic commits' matter?",
+      "choices": [
+        "Commits are faster",
+        "In a monorepo, one commit can change frontend + backend + shared library simultaneously, deploying as one unit. Polyrepo: coordinating 3 PRs across 3 repos with correct ordering is error-prone.",
+        "Monorepos are smaller",
+        "Atomic means encrypted"
+      ],
+      "answerIndex": 1,
+      "explanation": "API change: you modify the API (backend), update the client SDK (shared lib), and update the UI (frontend) in ONE commit. They all deploy together, atomically. Polyrepo: sync 3 separate PRs, risk of partial deployment mismatch.",
+      "tags": [
+        "git",
+        "monorepo"
+      ]
+    },
+    {
+      "id": "gitadv-q19",
+      "type": "mcq",
+      "prompt": "git cherry-pick creates a new commit with a different SHA than the original. Why?",
+      "choices": [
+        "Git randomises SHAs",
+        "The cherry-picked commit has a different parent commit — SHA is computed from content + parent + author + timestamp. Same changes, different parent = different SHA.",
+        "Bug in git",
+        "SHA includes file names"
+      ],
+      "answerIndex": 1,
+      "explanation": "Git SHA (commit hash) is computed from: tree hash, parent hash, author, timestamp, message. Cherry-pick applies same changes but onto different parent (different branch tip). Different parent = different SHA.",
+      "tags": [
+        "git",
+        "cherry-pick",
+        "internals"
+      ]
+    },
+    {
+      "id": "gitadv-q20",
+      "type": "mcq",
+      "prompt": "What is the purpose of git bisect run <script>?",
+      "choices": [
+        "Runs git bisect multiple times",
+        "Fully automates bisect — git checks out each midpoint and runs <script>. Script exits 0 = good, exits non-0 = bad. Git finds the first bad commit with no human intervention needed.",
+        "Runs scripts in hooks",
+        "Tests all commits"
+      ],
+      "answerIndex": 1,
+      "explanation": "git bisect run ./test.sh: git picks midpoint, runs test.sh, reads exit code (0=good/non-0=bad), picks next midpoint. Fully automated binary search. Takes same number of steps (log2(N)) but zero human intervention between steps.",
+      "tags": [
+        "git",
+        "bisect",
+        "automation"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "gitadv-fc1",
+      "front": "Rebase workflow before PR",
+      "back": "git fetch origin && git rebase origin/main. Fix conflicts: fix file, git add, git rebase --continue. If stuck: git rebase --abort. NEVER rebase already-pushed shared branches.",
+      "tags": [
+        "git",
+        "rebase"
+      ]
+    },
+    {
+      "id": "gitadv-fc2",
+      "front": "Interactive rebase commands",
+      "back": "pick: keep as-is. squash: merge + edit message. fixup: merge + discard message. reword: keep changes, edit message. drop: delete commit. edit: pause to amend. git rebase -i HEAD~N to open.",
+      "tags": [
+        "git",
+        "interactive-rebase"
+      ]
+    },
+    {
+      "id": "gitadv-fc3",
+      "front": "Cherry-pick use case",
+      "back": "Hotfix on main needs to go to release branch too: git checkout release/2.0 && git cherry-pick <hotfix-sha>. Creates new commit, different SHA, same changes. -n flag to cherry-pick without auto-committing.",
+      "tags": [
+        "git",
+        "cherry-pick"
+      ]
+    },
+    {
+      "id": "gitadv-fc4",
+      "front": "Bisect workflow",
+      "back": "git bisect start → git bisect bad (HEAD) → git bisect good <working-sha> → test → mark good/bad → repeat → first bad commit found. git bisect reset to finish. Log2(N) steps only.",
+      "tags": [
+        "git",
+        "bisect"
+      ]
+    },
+    {
+      "id": "gitadv-fc5",
+      "front": "Recover lost commits",
+      "back": "1. git reflog — find SHA before the mistake. 2. git reset --hard <sha> to restore. Git keeps unreachable objects for 30 days. reflog also shows: rebase checkpoints, stash entries, checkout history.",
+      "tags": [
+        "git",
+        "recovery",
+        "reflog"
+      ]
+    },
+    {
+      "id": "gitadv-fc6",
+      "front": "husky setup (Node.js)",
+      "back": "npm install --save-dev husky && npx husky init. Edit .husky/pre-commit: add commands (npm run lint). Edit .husky/commit-msg: npx commitlint --edit $1. Hooks committed to repo = team-wide enforcement.",
+      "tags": [
+        "git",
+        "hooks",
+        "husky"
+      ]
+    },
+    {
+      "id": "gitadv-fc7",
+      "front": "Squash merge vs rebase merge",
+      "back": "Squash: all PR commits → one commit on main (clean main history, lose feature detail). Rebase: all PR commits replayed on main (linear history, feature commits preserved). Merge: merge commit (preserves all, non-linear). Teams pick one and stay consistent.",
+      "tags": [
+        "git",
+        "merge-strategy"
+      ]
+    },
+    {
+      "id": "gitadv-fc8",
+      "front": "Stash workflow",
+      "back": "git stash (save WIP) → switch branch → fix → commit → switch back → git stash pop. Named stash: git stash push -m 'name'. List: git stash list. Apply without removing: git stash apply stash@{N}.",
+      "tags": [
+        "git",
+        "stash"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Your team is adopting a trunk-based development workflow: all feature branches short-lived (max 2 days), squash merged to main, all merges gated by CI passing. Design the git workflow: branch naming, commit message standard, hooks to enforce it, and the process for hotfixes. Document how to handle a case where main is broken by a bad merge.",
+    "checklist": [
+      {
+        "id": "g1",
+        "text": "Branch naming: feat/ABC-123-description, fix/ABC-456-title. Branch protection requiring PR + CI pass.",
+        "weight": 20
+      },
+      {
+        "id": "g2",
+        "text": "Conventional Commits enforced via commitlint + husky commit-msg hook. CI validates too.",
+        "weight": 20
+      },
+      {
+        "id": "g3",
+        "text": "Squash merge all PRs to keep main history clean and linear. Branch deleted after merge.",
+        "weight": 20
+      },
+      {
+        "id": "g4",
+        "text": "Hotfix: branch hotfix/brief-name from main, fast-track CI, squash merge, tag release.",
+        "weight": 20
+      },
+      {
+        "id": "g5",
+        "text": "Broken main: git bisect on CI history to find breaking PR. Revert that PR's commit (git revert <sha>).",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "git revert <sha> creates a new commit that undoes the bad one — safe for shared branches unlike reset.",
+      "Conventional Commits semver: feat = minor bump, fix = patch, BREAKING CHANGE in footer = major.",
+      "GitHub Actions: use branch protection rules requiring status checks. Prevents merging if CI red."
+    ]
+  }
+}

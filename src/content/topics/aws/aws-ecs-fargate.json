@@ -1,0 +1,455 @@
+{
+  "id": "aws-ecs-fargate",
+  "unit": 18,
+  "order": 126,
+  "title": "AWS ECS & Fargate",
+  "summary": "Run containerised workloads without managing servers: ECS task definitions, services, Fargate, ECR, and auto-scaling.",
+  "prereqs": [
+    "aws-vpc-networking"
+  ],
+  "guide": "# AWS ECS & Fargate — Containers Without the Ops\n\n## Mental Model\nECS (Elastic Container Service) is AWS's container orchestrator. Think: Kubernetes but with less YAML.\nFargate is the serverless compute engine for ECS: you define CPU/memory requirements and AWS runs your containers — no EC2 instance fleet to manage.\n\n```\nYou provide:  Docker image + CPU + memory + config\nAWS provides: VM, OS, Docker daemon, network plumbing\n\nECS on EC2:                         ECS on Fargate:\n  ┌─────────────────┐                 ┌─────────────────┐\n  │ EC2 Instance    │                 │ AWS Managed     │\n  │ ┌─────────────┐ │                 │ ┌─────────────┐ │\n  │ │ ECS Agent   │ │                 │ │  Your Task  │ │\n  │ │  Container  │ │                 │ │  Container  │ │\n  │ └─────────────┘ │                 │ └─────────────┘ │\n  └─────────────────┘                 └─────────────────┘\n  You manage EC2 fleet                  AWS manages host\n```\n\n## Core Concepts\n\n### Task Definition — The Blueprint\n```json\n{\n  \"family\": \"my-app\",\n  \"cpu\": \"256\",\n  \"memory\": \"512\",\n  \"networkMode\": \"awsvpc\",\n  \"requiresCompatibilities\": [\"FARGATE\"],\n  \"containerDefinitions\": [{\n    \"name\": \"app\",\n    \"image\": \"123456789.dkr.ecr.us-east-1.amazonaws.com/my-app:latest\",\n    \"portMappings\": [{\"containerPort\": 8080}],\n    \"environment\": [{\"name\": \"ENV\", \"value\": \"prod\"}],\n    \"secrets\": [{\"name\": \"DB_PASS\", \"valueFrom\": \"arn:aws:secretsmanager:...\"}],\n    \"logConfiguration\": {\n      \"logDriver\": \"awslogs\",\n      \"options\": {\n        \"awslogs-group\": \"/ecs/my-app\",\n        \"awslogs-region\": \"us-east-1\",\n        \"awslogs-stream-prefix\": \"ecs\"\n      }\n    }\n  }]\n}\n```\n\n### Cluster, Service, Task\n```\nCluster: logical group of tasks/services (like a namespace)\n  └── Service: long-running tasks, maintains desired count, integrates with ALB\n      └── Task: one running instance of a task definition (like a pod in K8s)\n```\n\n**Service**: \"Always keep 3 copies of this task running. Attach to ALB. Replace unhealthy tasks.\"\n\n### Fargate CPU/Memory Combinations\n```\nCPU (vCPU units)  |  Memory options\n256  (0.25 vCPU)  |  0.5, 1, 2 GB\n512  (0.5  vCPU)  |  1-4 GB\n1024 (1    vCPU)  |  2-8 GB\n2048 (2    vCPU)  |  4-16 GB\n4096 (4    vCPU)  |  8-30 GB\n```\n\n## ECR — Elastic Container Registry\n```bash\n# Push workflow:\naws ecr get-login-password | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com\n\ndocker build -t my-app .\ndocker tag my-app:latest <account>.dkr.ecr.<region>.amazonaws.com/my-app:latest\ndocker push <account>.dkr.ecr.<region>.amazonaws.com/my-app:latest\n```\nECR is private, encrypted at rest, integrated with IAM. Enable image scanning for CVEs.\n\n## Networking — awsvpc Mode\nEach Fargate task gets its own ENI (Elastic Network Interface) with its own private IP:\n```\nALB (public subnet)\n└── Target Group (IP-based)\n    ├── Task 1: 10.0.1.50:8080 (private subnet AZ-A)\n    ├── Task 2: 10.0.2.51:8080 (private subnet AZ-B)\n    └── Task 3: 10.0.1.52:8080 (private subnet AZ-A)\n```\nSecurity Group on the task directly controls inbound/outbound.\n\n## Auto Scaling\n```\nTarget Tracking: \"Keep average CPU at 60%\"\n  → ECS automatically adds/removes tasks\n\nStep Scaling: \"Add 2 tasks when CPU > 70%, remove 1 when CPU < 30%\"\n\nScheduled: \"Scale up to 10 tasks at 9am, down to 2 at 10pm\"\n```\n\n## IAM — Two Roles You Need\n```\nTask Execution Role: allows ECS agent to pull image from ECR, write logs to CloudWatch\n  → AmazonECSTaskExecutionRolePolicy (managed policy)\n\nTask Role: permissions your APPLICATION code needs (S3, DynamoDB, etc.)\n  → Custom policy specific to what your code accesses\n```\n**Rule:** Never hardcode AWS credentials in containers. Use the Task Role — ECS injects temporary credentials via instance metadata.\n\n## Fargate vs EC2 launch type\n| | Fargate | EC2 |\n|---|---|---|\n| Server management | None | You manage fleet |\n| Cost | Per-task billing | EC2 instance billing |\n| Startup time | ~30-60s | Faster (pre-warm) |\n| Use when | Default choice, variable load | GPU, custom AMI, spot instances needed |\n\n## Blue/Green Deployments with CodeDeploy\n```\nOld version (Blue):  100% traffic → Task v1\nDeploy starts:\n  → Launch Task v2 (new ALB target group)\n  → Shift traffic: 10% → v2\n  → Monitor (alarms, X-Ray traces)\n  → Shift: 100% → v2\n  → Terminate v1 (Blue)\n```\nInstant rollback: flip traffic back to Blue if alarms fire.\n\n## Common Pitfalls\n- **Using task execution role for app permissions**: separate execution role (pulling image) from task role (app access)\n- **Not setting resource limits**: Fargate tasks without memory limits can OOM and restart repeatedly\n- **Storing secrets in environment variables as plain text**: use `secrets` array to pull from AWS Secrets Manager or SSM Parameter Store\n- **Single AZ deployment**: run services in at least 2 AZs — ECS spreads tasks if you configure multiple subnets\n- **Large container images**: slow cold starts. Use multi-stage builds, Alpine base images, and ECR lifecycle policies to remove old images\n\n## Connections\n- `aws-vpc-networking` — Fargate tasks live in VPC subnets, use Security Groups\n- `aws-mastery` — ECS integrates with ALB, CloudWatch, CodeDeploy\n- `docker` — Fargate runs Docker containers; know Dockerfiles before ECS\n- `kubernetes` — ECS is the AWS alternative to K8s; compare orchestration models\n",
+  "questions": [
+    {
+      "id": "ecs-q1",
+      "type": "mcq",
+      "prompt": "What does AWS Fargate eliminate compared to ECS on EC2?",
+      "choices": [
+        "Container management",
+        "Managing the underlying EC2 instance fleet and ECS agent",
+        "Load balancing",
+        "IAM permissions"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fargate is serverless compute for containers — you specify CPU/memory and AWS handles the host VM, OS, and Docker daemon. You only manage your container.",
+      "tags": [
+        "fargate",
+        "ecs-basics"
+      ]
+    },
+    {
+      "id": "ecs-q2",
+      "type": "mcq",
+      "prompt": "What is an ECS Task Definition?",
+      "choices": [
+        "A running container instance",
+        "The blueprint: defines container image, CPU, memory, ports, env vars, IAM roles, logging",
+        "A group of running tasks",
+        "An auto-scaling rule"
+      ],
+      "answerIndex": 1,
+      "explanation": "Task Definition is immutable (versioned). It describes WHAT to run. A Service decides HOW MANY to run and maintains that count.",
+      "tags": [
+        "task-definition"
+      ]
+    },
+    {
+      "id": "ecs-q3",
+      "type": "mcq",
+      "prompt": "What is the difference between a Task and a Service in ECS?",
+      "choices": [
+        "No difference",
+        "Task: one-time job. Service: long-running, maintains desired count, integrates with ALB, replaces unhealthy tasks",
+        "Service is a premium feature",
+        "Tasks run on EC2, Services run on Fargate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Tasks are ephemeral (batch jobs, one-off scripts). Services are for web APIs, microservices — ECS keeps N copies running and restarts failed tasks automatically.",
+      "tags": [
+        "ecs-basics"
+      ]
+    },
+    {
+      "id": "ecs-q4",
+      "type": "mcq",
+      "prompt": "What does 'awsvpc' network mode give each Fargate task?",
+      "choices": [
+        "Shared IP with the host",
+        "Its own ENI and private IP address — direct security group control",
+        "A public IP automatically",
+        "Bridge network access only"
+      ],
+      "answerIndex": 1,
+      "explanation": "In awsvpc mode, each task gets its own Elastic Network Interface. This allows task-level security groups (not instance-level), and ALB can target the task IP directly.",
+      "tags": [
+        "networking"
+      ]
+    },
+    {
+      "id": "ecs-q5",
+      "type": "mcq",
+      "prompt": "What is the ECS Task Execution Role vs Task Role?",
+      "choices": [
+        "Same role",
+        "Execution role: used by ECS agent (pull image, write logs). Task Role: used by your application code (S3, DynamoDB access)",
+        "Task role is deprecated",
+        "Execution role is optional"
+      ],
+      "answerIndex": 1,
+      "explanation": "These are separate IAM roles. Execution role has the `AmazonECSTaskExecutionRolePolicy` managed policy. Task role has your custom application permissions. Never mix them.",
+      "tags": [
+        "iam",
+        "security"
+      ]
+    },
+    {
+      "id": "ecs-q6",
+      "type": "mcq",
+      "prompt": "How should you provide database passwords to Fargate containers?",
+      "choices": [
+        "Hardcode in Dockerfile",
+        "Plain text environment variable in task definition",
+        "Use the `secrets` field in task definition pointing to Secrets Manager or SSM Parameter Store",
+        "Store in S3 and download on startup"
+      ],
+      "answerIndex": 2,
+      "explanation": "The `secrets` field in the container definition pulls values from Secrets Manager/SSM at task startup and injects them as environment variables — never visible in the task definition JSON.",
+      "tags": [
+        "security",
+        "secrets"
+      ]
+    },
+    {
+      "id": "ecs-q7",
+      "type": "mcq",
+      "prompt": "What is ECR (Elastic Container Registry)?",
+      "choices": [
+        "A Docker Hub alternative provided by AWS, private, IAM-integrated, with image scanning",
+        "An EC2 image registry",
+        "A Kubernetes manifest store",
+        "An AWS code repository"
+      ],
+      "answerIndex": 0,
+      "explanation": "ECR is a fully managed private Docker container registry. Integrated with IAM (no separate credentials needed from EC2/ECS). Supports vulnerability scanning via Amazon Inspector.",
+      "tags": [
+        "ecr"
+      ]
+    },
+    {
+      "id": "ecs-q8",
+      "type": "mcq",
+      "prompt": "What is the minimum Fargate CPU allocation?",
+      "choices": [
+        "128 units (0.125 vCPU)",
+        "256 units (0.25 vCPU)",
+        "512 units (0.5 vCPU)",
+        "1024 units (1 vCPU)"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fargate minimum is 256 CPU units (0.25 vCPU) with 0.5-2GB memory. Useful for lightweight sidecars, cron jobs, or low-traffic APIs.",
+      "tags": [
+        "fargate"
+      ]
+    },
+    {
+      "id": "ecs-q9",
+      "type": "mcq",
+      "prompt": "ECS auto-scaling with Target Tracking policy — what does it do?",
+      "choices": [
+        "Scales at specific times",
+        "Maintains a target metric (e.g., average CPU 60%) by automatically adding/removing tasks",
+        "Scales based on SQS depth only",
+        "Only scale up, never down"
+      ],
+      "answerIndex": 1,
+      "explanation": "Target Tracking is the simplest scaling policy — set a target metric and ECS Application Auto Scaling handles the math. Works for CPU, memory, ALB request count, and custom metrics.",
+      "tags": [
+        "auto-scaling"
+      ]
+    },
+    {
+      "id": "ecs-q10",
+      "type": "mcq",
+      "prompt": "For a Fargate task to pull an image from ECR, which IAM role needs the permission?",
+      "choices": [
+        "Task Role",
+        "Task Execution Role",
+        "EC2 Instance Role",
+        "CodeDeploy Role"
+      ],
+      "answerIndex": 1,
+      "explanation": "The ECS agent runs as the Task Execution Role. It needs ECR pull permissions (`ecr:GetDownloadUrlForLayer`, `ecr:BatchGetImage`) to fetch the image before starting your container.",
+      "tags": [
+        "iam",
+        "ecr"
+      ]
+    },
+    {
+      "id": "ecs-q11",
+      "type": "mcq",
+      "prompt": "What is ECS Blue/Green deployment?",
+      "choices": [
+        "Deploying two container versions simultaneously",
+        "Gradually shifting traffic from old (Blue) to new (Green) version via two ALB target groups, with instant rollback capability",
+        "Running containers in two AZs",
+        "Blue = EC2, Green = Fargate"
+      ],
+      "answerIndex": 1,
+      "explanation": "CodeDeploy manages the traffic shift between Blue (current) and Green (new). If CloudWatch alarms fire during shift, automatic rollback returns traffic to Blue instantly.",
+      "tags": [
+        "deployments"
+      ]
+    },
+    {
+      "id": "ecs-q12",
+      "type": "multi",
+      "prompt": "Which are benefits of running ECS on Fargate vs EC2?",
+      "choices": [
+        "No EC2 fleet management",
+        "Lower cost for steady high load",
+        "Per-task resource billing",
+        "Faster startup times vs EC2",
+        "No server patching"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        4
+      ],
+      "explanation": "Fargate: no fleet management, per-task billing, no OS patching. EC2 is cheaper for steady, predictable high load (EC2 Spot) and has faster startup (pre-warmed instances).",
+      "tags": [
+        "fargate"
+      ]
+    },
+    {
+      "id": "ecs-q13",
+      "type": "mcq",
+      "prompt": "What CloudWatch log configuration should you always add to Fargate containers?",
+      "choices": [
+        "awslogs with log group, region, and stream prefix",
+        "Logging is automatic — no config needed",
+        "CloudTrail for container logs",
+        "Only works with ECS on EC2"
+      ],
+      "answerIndex": 0,
+      "explanation": "The `awslogs` log driver sends container stdout/stderr to CloudWatch Logs. Without it, you have no visibility into your running containers.",
+      "tags": [
+        "logging",
+        "observability"
+      ]
+    },
+    {
+      "id": "ecs-q14",
+      "type": "mcq",
+      "prompt": "Why should Fargate services be deployed to multiple subnets in different AZs?",
+      "choices": [
+        "Required by AWS",
+        "ECS distributes tasks across AZs — if one AZ fails, tasks in other AZs continue serving traffic",
+        "Reduces load on a single subnet",
+        "Multi-AZ is only for RDS"
+      ],
+      "answerIndex": 1,
+      "explanation": "Multi-subnet (multi-AZ) deployment ensures availability if an AZ becomes unavailable. ECS tries to spread tasks evenly across the provided subnets.",
+      "tags": [
+        "high-availability"
+      ]
+    },
+    {
+      "id": "ecs-q15",
+      "type": "mcq",
+      "prompt": "How does ALB know which Fargate task to send requests to?",
+      "choices": [
+        "EC2 instance IDs",
+        "IP-based target group pointing to the task's ENI private IP on the container port",
+        "DNS resolution",
+        "ECS does a round-robin via metadata service"
+      ],
+      "answerIndex": 1,
+      "explanation": "With awsvpc networking, ALB uses IP-based target groups. Each task registers its private IP and container port. ALB health-checks the IPs directly.",
+      "tags": [
+        "networking",
+        "alb"
+      ]
+    },
+    {
+      "id": "ecs-q16",
+      "type": "mcq",
+      "prompt": "What is an ECS Cluster?",
+      "choices": [
+        "A group of EC2 instances only",
+        "A logical namespace grouping ECS services and tasks — can contain Fargate tasks, EC2 instances, or both",
+        "An auto-scaling group",
+        "A VPC subnet"
+      ],
+      "answerIndex": 1,
+      "explanation": "A cluster is a logical boundary. You can mix Fargate and EC2 tasks in the same cluster. Useful for separating prod/staging or different applications.",
+      "tags": [
+        "ecs-basics"
+      ]
+    },
+    {
+      "id": "ecs-q17",
+      "type": "mcq",
+      "prompt": "What reduces Fargate cold start time significantly?",
+      "choices": [
+        "Using more memory",
+        "Using smaller container images (multi-stage builds, Alpine base)",
+        "More vCPUs",
+        "Using ECS on EC2 instead"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fargate pulls the container image before starting the task. A 2GB image takes much longer than a 50MB Alpine-based image. Multi-stage builds + minimal base images are critical for fast starts.",
+      "tags": [
+        "performance",
+        "docker"
+      ]
+    },
+    {
+      "id": "ecs-q18",
+      "type": "mcq",
+      "prompt": "ECS Service discovery allows services to find each other via:",
+      "choices": [
+        "Static IP addresses",
+        "AWS Cloud Map DNS names (e.g., service.namespace.local)",
+        "AWS Direct Connect",
+        "API Gateway only"
+      ],
+      "answerIndex": 1,
+      "explanation": "ECS integrates with AWS Cloud Map for service discovery. Tasks register DNS names on creation and deregister on termination — services can call each other by DNS name.",
+      "tags": [
+        "service-discovery"
+      ]
+    },
+    {
+      "id": "ecs-q19",
+      "type": "mcq",
+      "prompt": "Where should container secrets (API keys, DB passwords) come from in production?",
+      "choices": [
+        "Dockerfile ENV instructions",
+        "Plain text in task definition environment variables",
+        "AWS Secrets Manager or SSM Parameter Store via the secrets field",
+        "Baked into the Docker image"
+      ],
+      "answerIndex": 2,
+      "explanation": "Environment variables are visible in AWS console and to anyone with DescribeTaskDefinition IAM permission. Secrets Manager/SSM integration encrypts secrets at rest and in transit.",
+      "tags": [
+        "security",
+        "secrets"
+      ]
+    },
+    {
+      "id": "ecs-q20",
+      "type": "multi",
+      "prompt": "Which AWS services integrate natively with ECS Fargate?",
+      "choices": [
+        "ALB (Application Load Balancer)",
+        "AWS Secrets Manager",
+        "Amazon ECR",
+        "Amazon RDS (direct)",
+        "CloudWatch Logs"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "explanation": "ALB, Secrets Manager, ECR, and CloudWatch Logs all have native ECS integration. RDS is used by applications inside Fargate tasks but doesn't integrate at the ECS level directly.",
+      "tags": [
+        "integrations"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ecs-fc1",
+      "front": "Task vs Service in ECS",
+      "back": "Task: one-time or short-lived job. Service: always-running workload (web API) — ECS maintains desired count, replaces failed tasks, integrates with ALB.",
+      "tags": [
+        "ecs-basics"
+      ]
+    },
+    {
+      "id": "ecs-fc2",
+      "front": "Execution Role vs Task Role",
+      "back": "Execution Role: ECS agent uses this to pull image from ECR + write logs to CloudWatch. Task Role: YOUR application uses this to call S3, DynamoDB, etc. Keep them separate.",
+      "tags": [
+        "iam"
+      ]
+    },
+    {
+      "id": "ecs-fc3",
+      "front": "awsvpc networking benefit",
+      "back": "Each Fargate task gets its own ENI = own private IP = own Security Group. ALB targets task IPs directly. No port collision between tasks on the same host.",
+      "tags": [
+        "networking"
+      ]
+    },
+    {
+      "id": "ecs-fc4",
+      "front": "How to inject secrets into Fargate",
+      "back": "Use `secrets` array in container definition. Point to Secrets Manager ARN or SSM Parameter Store path. ECS fetches at runtime, injects as env var. Never use plaintext env vars for secrets.",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "ecs-fc5",
+      "front": "Fargate cold start reduction",
+      "back": "Smaller images = faster pulls = faster start. Use multi-stage Docker builds + Alpine/distroless base images. ECR image caching helps on subsequent starts in the same region.",
+      "tags": [
+        "performance"
+      ]
+    },
+    {
+      "id": "ecs-fc6",
+      "front": "ECS Service Auto Scaling modes",
+      "back": "Target Tracking: maintain metric (CPU 60%). Step Scaling: rule-based add/remove. Scheduled: time-based. Target Tracking is the default recommendation — simple and reactive.",
+      "tags": [
+        "auto-scaling"
+      ]
+    },
+    {
+      "id": "ecs-fc7",
+      "front": "Blue/Green ECS deployment",
+      "back": "CodeDeploy shifts traffic between two ALB target groups (Blue=old, Green=new). Monitor with CloudWatch alarms. Auto-rollback if alarms fire. Zero downtime.",
+      "tags": [
+        "deployments"
+      ]
+    },
+    {
+      "id": "ecs-fc8",
+      "front": "ECR image scanning",
+      "back": "Enable `scanOnPush: true` on ECR repository. Amazon Inspector scans for OS and package CVEs. View findings in ECR console or Security Hub. No extra cost for basic scanning.",
+      "tags": [
+        "ecr",
+        "security"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the containerised deployment architecture for a Node.js REST API. The API needs: 3 replicas minimum, automatic scaling from 3-20 based on HTTP request count, zero-downtime deployments, database password from Secrets Manager, logs in CloudWatch, and access to S3 for file storage. Design: task definition structure (CPU/memory/roles), Service configuration, scaling policy, deployment strategy, and networking (which subnets, SG rules). No code — architecture decisions only.",
+    "checklist": [
+      {
+        "id": "ecs-p1",
+        "text": "Define task definition: CPU/memory, both IAM roles, logging config, secrets reference",
+        "weight": 20
+      },
+      {
+        "id": "ecs-p2",
+        "text": "Configure ECS Service: desired count, deployment circuit breaker, ALB integration",
+        "weight": 20
+      },
+      {
+        "id": "ecs-p3",
+        "text": "Design auto-scaling: metric choice, min/max, target value",
+        "weight": 20
+      },
+      {
+        "id": "ecs-p4",
+        "text": "Choose deployment strategy (rolling vs blue/green) and justify",
+        "weight": 20
+      },
+      {
+        "id": "ecs-p5",
+        "text": "Define networking: private subnets, SG rules (ALB → task, task → RDS, task → S3 via endpoint)",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "CPU: 512 (0.5 vCPU), Memory: 1024MB for a Node.js API. Scale by ALBRequestCountPerTarget metric.",
+      "Secrets Manager: Task Execution Role needs secretsmanager:GetSecretValue. Task Role needs s3:GetObject for S3 access.",
+      "Blue/Green (CodeDeploy) for zero-downtime. Rolling update also works but doesn't support instant rollback.",
+      "SG: ALB SG allows 443 from 0.0.0.0/0. Task SG allows 8080 from ALB SG. RDS SG allows 5432 from Task SG. Task SG allows HTTPS out for Secrets Manager (or use VPC endpoint)."
+    ]
+  }
+}

@@ -1,0 +1,475 @@
+{
+  "id": "distributed-systems",
+  "unit": 13,
+  "order": 104,
+  "title": "Distributed Systems",
+  "summary": "CAP theorem, Raft consensus, vector clocks, eventual consistency, and SAGA pattern for microservices.",
+  "prereqs": [
+    "system-design-fundamentals"
+  ],
+  "guide": "# Distributed Systems\n\n## What Is a Distributed System?\n\nA distributed system is a collection of independent computers that appear to users\nas a single coherent system. Your laptop calling an API, that API calling a database\nreplica in another region — that's a distributed system.\n\n```\nSingle machine (simple):\n  App ──► DB\n  If DB crashes → app down. But: easy consistency, no network issues.\n\nDistributed (complex but scalable):\n  App servers (3) ──► DB primary\n                   └─► DB replica (Europe)\n                   └─► DB replica (Asia)\n  More capacity. But: what if primary → Europe replica is slow?\n  Is the replica stale? Did the write reach it?\n```\n\nDistributed systems introduce a new class of problems:\n- **Partial failures**: some nodes work, others don't\n- **Network partitions**: nodes can't communicate but both think they're right\n- **Clocks**: different machines have different times\n- **Consistency**: does everyone see the same data?\n\n---\n\n## CAP Theorem\n\n```\nCAP Theorem (Eric Brewer, 2000):\nA distributed data store can guarantee at most TWO of these three properties:\n\n  C — Consistency:          Every read returns the most recent write\n                            (or an error, never stale data)\n  A — Availability:         Every request receives a response\n                            (not an error, though might be stale)\n  P — Partition tolerance:  System continues operating during\n                            network partition (message loss)\n\n                    CAP Triangle:\n                       C\n                      / \\\n                     /   \\\n               CP   /     \\  CA\n                   /  AP   \\\n                  A─────────P\n\nIn practice: P is NOT optional. Network partitions happen.\nSo real choice is: CP or AP during a partition.\n\nCP (Consistency + Partition tolerance):\n  Example: HBase, Zookeeper, Etcd\n  During partition: refuse writes to avoid inconsistency\n  Use when: financial transactions, inventory (you can't oversell)\n\nAP (Availability + Partition tolerance):\n  Example: Cassandra, CouchDB, DynamoDB (default)\n  During partition: accept writes, risk inconsistency (stale reads)\n  Use when: social feeds, shopping cart, DNS\n\nMongoDB claim: 'CP' but configurable.\nCassandra: 'AP' by default, can tune toward CP with quorum reads/writes.\n```\n\n---\n\n## Consistency Models — A Spectrum\n\n```\nStrong ◄────────────────────────────────────────► Eventual\n(Slower, simpler reasoning)              (Faster, harder reasoning)\n\nLINEARISABILITY (strongest):\n  Every operation appears instantaneous. Reads always see latest write.\n  Like a single machine. Very expensive in distributed systems.\n  Use: coordination services (Zookeeper, etcd), leader election.\n\nSEQUENTIAL CONSISTENCY:\n  All operations appear in same global order to all nodes.\n  Not necessarily real-time order though.\n\nCAUSAL CONSISTENCY:\n  Causally related operations are seen in order.\n  If you see 'Reply to Post X', you must first see 'Post X'.\n  Facebook: posts and replies causally consistent.\n\nEVENTUAL CONSISTENCY (weakest):\n  Given no new updates, all replicas converge to same value eventually.\n  Reads may return stale data.\n  Cassandra default. DNS. Shopping cart.\n  'Eventually' could be milliseconds or minutes.\n```\n\n---\n\n## Consensus — How Nodes Agree\n\n```\nPROBLEM: Distributed database has 5 nodes. A client writes value X.\nHow do we ensure most nodes agree this write happened?\nWhat if the node that received the write crashes immediately?\n\nCONSENSUS ALGORITHM: makes nodes agree on a value even with failures.\n\nPAXOS (Leslie Lamport, 1989):\n  - Notoriously hard to understand and implement correctly\n  - Phases: Prepare → Promise → Accept → Accepted\n  - Used in: Google Spanner, Chubby\n\nRAFT (2013 — designed to be understandable):\n  Three roles: Leader, Follower, Candidate\n\n  Normal operation:\n    Leader receives write request\n    Leader appends to its log\n    Leader sends AppendEntries to all followers\n    Majority (quorum) acknowledge → commit\n    Leader responds OK to client\n\n  Leader election (on timeout with no heartbeat):\n    Follower → Candidate → sends RequestVote to all\n    If majority vote → becomes new Leader\n    Term number increments → old leader's messages rejected\n\n  Guarantee: if majority of nodes alive → system makes progress\n  5-node cluster tolerates 2 failures (majority = 3)\n  3-node cluster tolerates 1 failure\n\n  Used in: etcd (Kubernetes uses this!), CockroachDB, TiKV\n```\n\n---\n\n## Vector Clocks — Tracking Causality Without Clocks\n\n```\nPROBLEM: Two nodes both update the same key. Which update is newer?\nCan't use wall-clock time — distributed systems have clock skew.\n\nVECTOR CLOCK: each node tracks a counter for each other node.\n\n  Node A: [A:1, B:0, C:0]\n  Node B: [A:0, B:1, C:0]\n  Node C: [A:0, B:0, C:1]\n\n  A writes → A's clock: [A:2, B:0, C:0]\n  A sends to B → B updates: max each component → [A:2, B:1, C:0]\n  C writes independently → [A:0, B:0, C:2]\n\n  Compare [A:2, B:1, C:0] vs [A:0, B:0, C:2]:\n  Neither is ≥ the other in all components → CONCURRENT (conflict!)\n  Must be reconciled by application\n\n  Used in: Amazon DynamoDB (with last-write-wins or vector clock merge)\n  Simpler alternative: Logical clocks (Lamport clocks) — just a counter\n```\n\n---\n\n## Two-Phase Commit (2PC) — Distributed Transactions\n\n```\nPROBLEM: Transfer $100 from DB1 (bank A) to DB2 (bank B).\nBoth must succeed or both must fail — atomically across two databases.\n\n2PC Protocol:\n  Phase 1 — PREPARE:\n    Coordinator asks all participants: 'Can you commit?'\n    Each participant:\n      Executes transaction up to commit point\n      Writes to transaction log (durably)\n      Replies YES or NO\n\n  Phase 2 — COMMIT or ABORT:\n    If all YES → Coordinator sends COMMIT to all\n    If any NO  → Coordinator sends ABORT to all\n\n  Problem: Coordinator can crash after Phase 1 but before Phase 2\n  → Participants locked in prepared state, waiting forever\n  → This is called the 'blocking' problem of 2PC\n\n  3PC (Three-Phase Commit) was invented to fix this but rarely used in practice.\n  Modern systems: SAGA pattern instead of 2PC.\n```\n\n---\n\n## SAGA Pattern — Distributed Transactions Without 2PC\n\n```\nSAGA: sequence of local transactions with compensating transactions for rollback.\n\nOrder placement saga:\n  1. Create order           → compensate: cancel order\n  2. Reserve inventory      → compensate: release inventory\n  3. Charge payment         → compensate: refund\n  4. Schedule shipping      → compensate: cancel shipping\n  5. Send confirmation      → compensate: send cancellation email\n\nIf step 3 (payment) fails:\n  Run compensating transactions backwards: release inventory, cancel order\n\nTwo saga coordination styles:\n  Choreography: each service emits events, next service listens\n    + Simple, no central coordinator\n    - Hard to track overall state\n\n  Orchestration: central SAGA orchestrator (like AWS Step Functions) controls flow\n    + Easy to monitor and debug\n    - Single orchestrator point\n\nUsed in: microservices, e-commerce order flows, financial workflows\n```\n\n---\n\n## Mind Map\n\n```\nDISTRIBUTED SYSTEMS\n|\n+-- CAP THEOREM\n|   +-- C: every read = latest write\n|   +-- A: every request gets response\n|   +-- P: survives network partition\n|   +-- Choose CP or AP (P is mandatory)\n|\n+-- CONSISTENCY MODELS\n|   +-- Linearisable (strongest) → etcd\n|   +-- Causal → social feeds\n|   +-- Eventual (weakest) → Cassandra, DNS\n|\n+-- CONSENSUS\n|   +-- Raft: Leader+Followers, quorum writes\n|   +-- Paxos: proven but complex\n|   +-- Quorum: majority of nodes must agree\n|\n+-- TRANSACTIONS\n|   +-- 2PC: coordinator + prepare + commit (blocking)\n|   +-- SAGA: local txns + compensations\n|\n+-- CLOCKS\n    +-- Vector clocks (causality tracking)\n    +-- Lamport clocks (simpler logical clock)\n    +-- NTP: sync wall clocks (not reliable for ordering)\n```\n\n---\n\n## References\n\n### Videos\n- **Distributed Systems in One Lesson** by Tim Berglund (Confluent):\n  https://www.youtube.com/watch?v=Y6Ev8GIlbxc\n- **Raft Consensus Algorithm explained** by Martin Kleppmann:\n  https://www.youtube.com/watch?v=uXEYuDwm7e4\n\n### Books\n- **Designing Data-Intensive Applications** by Martin Kleppmann — THE book on this topic\n- **The Raft Paper** (readable!): https://raft.github.io/raft.pdf\n- **CAP FAQ**: https://www.the-paper-trail.org/page/cap-faq/\n\n### Practice\n- **Fly.io distributed systems challenges**: https://fly.io/dist-sys/ — hands-on Raft/gossip",
+  "questions": [
+    {
+      "id": "ds-q1",
+      "type": "mcq",
+      "prompt": "CAP theorem: during a network partition you must choose between:",
+      "choices": [
+        "Speed vs correctness",
+        "Consistency vs Availability — you can't have both. Nodes can't communicate; do you refuse requests (C) or serve potentially stale data (A)?",
+        "SQL vs NoSQL",
+        "Sync vs async"
+      ],
+      "answerIndex": 1,
+      "explanation": "Partition tolerance is mandatory (networks fail). The real choice: CP (consistency over availability — block writes during partition) or AP (availability — serve stale reads). Financial systems choose CP; social feeds often choose AP.",
+      "tags": [
+        "cap",
+        "consistency",
+        "availability"
+      ]
+    },
+    {
+      "id": "ds-q2",
+      "type": "mcq",
+      "prompt": "Cassandra is described as AP. What does this mean in practice?",
+      "choices": [
+        "Cassandra never has consistency issues",
+        "During a partition, Cassandra continues accepting reads and writes (available) but different replicas may have different data (inconsistency). Nodes reconcile after partition heals.",
+        "Cassandra always uses consensus",
+        "AP means it's async only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cassandra's default: highly available, eventually consistent. You can write to any node even if some replicas are unreachable. After the network heals, anti-entropy repair reconciles diverged replicas. Use QUORUM consistency level to trade availability for stronger consistency.",
+      "tags": [
+        "cassandra",
+        "cap",
+        "eventual-consistency"
+      ]
+    },
+    {
+      "id": "ds-q3",
+      "type": "mcq",
+      "prompt": "What is eventual consistency?",
+      "choices": [
+        "Consistency will be fixed in a future version",
+        "If no new updates occur, all replicas will converge to the same value eventually. Reads may return stale data temporarily. 'Eventually' is typically milliseconds to seconds.",
+        "Consistency only at end of day",
+        "Requires 100% uptime"
+      ],
+      "answerIndex": 1,
+      "explanation": "Eventual consistency is a liveness guarantee (not safety). It says: things will be OK eventually. DNS is eventually consistent — propagation takes up to 48 hours. Shopping carts: adding to cart is eventually consistent. Order placement requires stronger consistency.",
+      "tags": [
+        "eventual-consistency",
+        "cap"
+      ]
+    },
+    {
+      "id": "ds-q4",
+      "type": "mcq",
+      "prompt": "Raft consensus: what is a 'quorum'?",
+      "choices": [
+        "Maximum number of nodes",
+        "Majority of nodes — for N nodes, quorum = floor(N/2)+1. A write is committed only when quorum nodes acknowledge. 5-node cluster: quorum=3, tolerates 2 failures.",
+        "Minimum 2 nodes",
+        "Quorum is specific to Raft"
+      ],
+      "answerIndex": 1,
+      "explanation": "Quorum = majority. For 5 nodes: 3 needed. For 3 nodes: 2 needed. A leader can only commit a log entry when a majority has acknowledged it. This ensures at least one quorum member has the data even if others fail. Two disjoint quorums can't form simultaneously.",
+      "tags": [
+        "raft",
+        "quorum",
+        "consensus"
+      ]
+    },
+    {
+      "id": "ds-q5",
+      "type": "mcq",
+      "prompt": "How does Raft elect a new leader when the current leader crashes?",
+      "choices": [
+        "Random node claims leadership",
+        "Followers detect timeout (no heartbeat), become Candidates, request votes from peers. Node with most up-to-date log wins majority vote → becomes new Leader. Term number increments to invalidate old leader.",
+        "Admin manually promotes leader",
+        "Leader promotes a successor before crashing"
+      ],
+      "answerIndex": 1,
+      "explanation": "Raft leader sends heartbeats every ~150ms. No heartbeat within election timeout (150-300ms): follower → candidate. Requests votes. Each node votes for one candidate per term. Majority vote = new leader. Term number prevents split-brain: old leader's messages rejected (stale term).",
+      "tags": [
+        "raft",
+        "leader-election"
+      ]
+    },
+    {
+      "id": "ds-q6",
+      "type": "mcq",
+      "prompt": "Two-Phase Commit (2PC) main weakness:",
+      "choices": [
+        "Too slow",
+        "If coordinator crashes between Phase 1 (prepare) and Phase 2 (commit/abort), all participants are blocked in prepared state indefinitely — can't commit or abort without coordinator. 'Blocking' protocol.",
+        "Too many messages",
+        "Only works for 2 databases"
+      ],
+      "answerIndex": 1,
+      "explanation": "2PC is blocking. Participants vote YES (prepared), write to WAL, wait. Coordinator crashes. Participants can't unilaterally commit (might contradict other participant's state) or abort (coordinator might have committed). System stuck until coordinator recovers.",
+      "tags": [
+        "2pc",
+        "distributed-transactions"
+      ]
+    },
+    {
+      "id": "ds-q7",
+      "type": "mcq",
+      "prompt": "SAGA pattern compensating transactions: what IS a compensating transaction?",
+      "choices": [
+        "A transaction that runs twice",
+        "A business-logic operation that semantically undoes the effect of a previous transaction — e.g., if 'Charge $100' succeeded but a later step failed, the compensating transaction is 'Refund $100'.",
+        "A timeout",
+        "Database rollback"
+      ],
+      "answerIndex": 1,
+      "explanation": "SAGA can't do database rollback (each step is a LOCAL transaction already committed). Compensation is a new forward transaction that semantically negates the previous: cancel order, refund payment, release inventory. Must be idempotent — could be executed more than once.",
+      "tags": [
+        "saga",
+        "compensation"
+      ]
+    },
+    {
+      "id": "ds-q8",
+      "type": "mcq",
+      "prompt": "Vector clocks: when are two events [A:2,B:1] and [A:1,B:2] considered 'concurrent'?",
+      "choices": [
+        "When timestamps are different",
+        "When neither vector clock is component-wise ≥ the other — neither happened-before the other. [A:2,B:1] is not ≤ [A:1,B:2] and vice versa. They diverged independently = write conflict.",
+        "When they have same values",
+        "When clocks differ by >1"
+      ],
+      "answerIndex": 1,
+      "explanation": "Vector clock A ≤ B when every component of A ≤ corresponding component of B. [A:2,B:1] vs [A:1,B:2]: A has higher A-component, B has higher B-component — neither dominates. CONCURRENT = possible write conflict. Application must resolve.",
+      "tags": [
+        "vector-clocks",
+        "causality"
+      ]
+    },
+    {
+      "id": "ds-q9",
+      "type": "mcq",
+      "prompt": "Linearisability vs Eventual Consistency — main trade-off?",
+      "choices": [
+        "No trade-off",
+        "Linearisability: every read returns latest write globally (strong guarantees), requires coordination across nodes (slow, availability impact). Eventual: reads may be stale (weak guarantee), no coordination needed (fast, always available).",
+        "Eventual is stronger",
+        "Linearisability is only for relational databases"
+      ],
+      "answerIndex": 1,
+      "explanation": "Linearisability requires consensus on each operation — every read and write goes through a leader. Single-digit millisecond latency becomes tens of ms with global coordination. Eventual consistency: any replica answers immediately. Choose based on whether stale reads are acceptable in your domain.",
+      "tags": [
+        "consistency-models",
+        "linearisability",
+        "eventual"
+      ]
+    },
+    {
+      "id": "ds-q10",
+      "type": "mcq",
+      "prompt": "Etcd (used by Kubernetes) uses Raft. What does it store?",
+      "choices": [
+        "Container images",
+        "All Kubernetes cluster state: Pod specs, Service configs, ConfigMaps, node registrations, leader elections for controllers. It's the source of truth — if etcd is corrupted, K8s cluster state is lost.",
+        "Application logs",
+        "Network routing tables only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Etcd is a CP distributed key-value store (strong consistency). Kubernetes uses it as its backing store. Every kubectl apply writes to etcd. All controllers watch etcd for state changes. etcd uses Raft to stay consistent across its 3-5 node cluster.",
+      "tags": [
+        "etcd",
+        "raft",
+        "kubernetes"
+      ]
+    },
+    {
+      "id": "ds-q11",
+      "type": "mcq",
+      "prompt": "In Raft, can a node with a stale log become leader?",
+      "choices": [
+        "Yes — any node can become leader",
+        "No — Raft's election safety: a node only votes for a candidate if candidate's log is at least as up-to-date as its own. Most up-to-date node always wins election. Ensures new leader has all committed entries.",
+        "Leaders are randomly assigned",
+        "Log staleness doesn't matter"
+      ],
+      "answerIndex": 1,
+      "explanation": "Raft election restriction: candidates include their last log index and term in RequestVote. Voters reject candidates with less up-to-date logs. This guarantees: whoever wins election has all previously committed log entries — no data loss on failover.",
+      "tags": [
+        "raft",
+        "safety"
+      ]
+    },
+    {
+      "id": "ds-q12",
+      "type": "mcq",
+      "prompt": "SAGA choreography vs orchestration — key difference?",
+      "choices": [
+        "Orchestration is faster",
+        "Choreography: each service publishes events and reacts to others' events (decentralised, no central coordinator). Orchestration: central SAGA orchestrator sends commands and tracks state (centralised, easier to monitor/debug).",
+        "Choreography requires a database",
+        "They are identical"
+      ],
+      "answerIndex": 1,
+      "explanation": "Choreography: OrderService publishes 'OrderCreated' → InventoryService listens → publishes 'InventoryReserved' → PaymentService listens. Decoupled but state tracking is implicit in event flow. Orchestration: SagaOrchestrator tells InventoryService 'reserve', waits, tells PaymentService 'charge'.",
+      "tags": [
+        "saga",
+        "choreography",
+        "orchestration"
+      ]
+    },
+    {
+      "id": "ds-q13",
+      "type": "mcq",
+      "prompt": "Why can't you simply use NTP-synchronised wall clocks for ordering events in distributed systems?",
+      "choices": [
+        "NTP is too expensive",
+        "Clock drift: even NTP-synced clocks can be off by 100ms+. A write at 'time T' on Node A might actually happen before a write at 'time T-50ms' on Node B due to drift. Use logical clocks (Lamport/vector) for ordering.",
+        "NTP is not available",
+        "Wall clocks are fine for ordering"
+      ],
+      "answerIndex": 1,
+      "explanation": "NTP achieves ~100ms accuracy in practice (can be worse). Two servers might have timestamps:  Server A writes at 10:00:00.000, Server B writes at 09:59:59.950 (50ms behind). Wall-clock order: B first. Actual causal order: A first. Logical clocks (Lamport) don't have this problem.",
+      "tags": [
+        "clocks",
+        "lamport",
+        "distributed"
+      ]
+    },
+    {
+      "id": "ds-q14",
+      "type": "mcq",
+      "prompt": "What is the 'split-brain' problem in distributed systems?",
+      "choices": [
+        "Memory corruption",
+        "Network partition causes two groups of nodes to each elect their own leader and independently accept writes — data diverges. When partition heals, conflicting writes must be resolved.",
+        "Database fragmentation",
+        "Slow network"
+      ],
+      "answerIndex": 1,
+      "explanation": "Split-brain: Cluster of 5 nodes. Network split: {A,B} can't see {C,D,E}. If consensus is broken, {A,B} might elect leader A and {C,D,E} elect leader C. Both accept writes. Conflicting data. Raft prevents this: group of 2 can't form quorum (needs 3) — no leader elected, no writes accepted.",
+      "tags": [
+        "split-brain",
+        "consensus"
+      ]
+    },
+    {
+      "id": "ds-q15",
+      "type": "mcq",
+      "prompt": "Gossip protocol in distributed systems — what is it used for?",
+      "choices": [
+        "Security",
+        "Decentralised information spreading: nodes randomly pick 2-3 peers and exchange state information. State spreads exponentially like a rumour. Used for: failure detection, memberlist maintenance, state propagation in Cassandra.",
+        "Consensus",
+        "Database replication"
+      ],
+      "answerIndex": 1,
+      "explanation": "Gossip: each round, each node shares its info with K random nodes. After log N rounds, all nodes have the information. Scales to thousands of nodes with constant per-node overhead. Cassandra uses gossip for cluster membership and state. Consul uses gossip for service discovery.",
+      "tags": [
+        "gossip",
+        "protocols"
+      ]
+    },
+    {
+      "id": "ds-q16",
+      "type": "mcq",
+      "prompt": "Read repair in Cassandra — what is it?",
+      "choices": [
+        "Fixing corrupted data",
+        "During a read with QUORUM consistency: Cassandra reads from multiple replicas. If they disagree, it returns the most recent value AND asynchronously updates stale replicas. Self-healing consistency without background jobs.",
+        "Repairing disk errors",
+        "Re-reading failed queries"
+      ],
+      "answerIndex": 1,
+      "explanation": "Read repair is one of Cassandra's anti-entropy mechanisms. QUORUM read: contact 3 of 5 replicas, compare values. Two agree on version 5, one has version 4 (stale) → return version 5 to client, asynchronously send version 5 to stale replica. Gradual convergence.",
+      "tags": [
+        "cassandra",
+        "eventual-consistency",
+        "read-repair"
+      ]
+    },
+    {
+      "id": "ds-q17",
+      "type": "mcq",
+      "prompt": "What is the difference between replication and sharding?",
+      "choices": [
+        "No difference",
+        "Replication: same data on multiple nodes (redundancy + read scalability). Sharding: different data on different nodes (horizontal partitioning for write scalability). Production: usually both — each shard has multiple replicas.",
+        "Sharding is for SQL only",
+        "Replication is only for backup"
+      ],
+      "answerIndex": 1,
+      "explanation": "Replication: copy all data to replicas. Node A: users 1-1M. Node B: users 1-1M (same). Benefits: fault tolerance, read scale-out. Sharding: Node A: users 1-500K. Node B: users 500K-1M. Benefits: write scale (each node handles less data/load). Most large systems use both.",
+      "tags": [
+        "replication",
+        "sharding",
+        "distributed"
+      ]
+    },
+    {
+      "id": "ds-q18",
+      "type": "mcq",
+      "prompt": "Last-Write-Wins (LWW) conflict resolution — main problem?",
+      "choices": [
+        "Too slow",
+        "Concurrent writes both have same timestamp due to clock skew → one arbitrarily wins, other silently lost. Or: write with earlier timestamp arrives late (network delay) but still wins vs earlier arrival. Data loss.",
+        "Requires consensus",
+        "Only works for SQL"
+      ],
+      "answerIndex": 1,
+      "explanation": "LWW: keep the write with the latest timestamp, discard others. In distributed systems with clock skew: server A's clock is 50ms ahead. A's write at T+50 beats B's write at T, even if B's write was actually submitted later. Silent data loss. CRDTs (Conflict-Free Replicated Data Types) solve this properly.",
+      "tags": [
+        "conflict-resolution",
+        "lww"
+      ]
+    },
+    {
+      "id": "ds-q19",
+      "type": "multi",
+      "prompt": "Which systems use Raft or Paxos for consensus? (Select all that apply)",
+      "choices": [
+        "etcd (Kubernetes cluster state)",
+        "CockroachDB (distributed SQL)",
+        "Redis (default single-node)",
+        "Google Spanner"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "etcd: Raft. CockroachDB: Raft per range. Google Spanner: Paxos per shard. Redis default is single-node, no consensus protocol. Redis Cluster uses gossip for topology but not Raft/Paxos for data consistency.",
+      "tags": [
+        "raft",
+        "consensus",
+        "systems"
+      ]
+    },
+    {
+      "id": "ds-q20",
+      "type": "mcq",
+      "prompt": "Why is 3-node Raft cluster preferred over 2-node for fault tolerance?",
+      "choices": [
+        "3 is a lucky number",
+        "3-node tolerates 1 failure (quorum=2). 2-node tolerates 0 failures (quorum=2, any failure breaks quorum). Adding a 3rd node doubles fault tolerance from 0 to 1. 5-node tolerates 2 failures.",
+        "2-node uses more bandwidth",
+        "3-node is faster"
+      ],
+      "answerIndex": 1,
+      "explanation": "Quorum formula: floor(N/2)+1. N=2: quorum=2 (both nodes needed, zero fault tolerance). N=3: quorum=2 (one node can fail). N=5: quorum=3 (two nodes can fail). Rule: use odd numbers to avoid tie votes. 3 or 5 nodes are the standard choices.",
+      "tags": [
+        "raft",
+        "fault-tolerance",
+        "quorum"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "ds-fc1",
+      "front": "CAP theorem practical choice",
+      "back": "P (partition tolerance) is mandatory — networks fail. Real choice: CP (refuse writes when uncertain, stay consistent — banks) vs AP (serve stale reads, stay available — social feeds). Configure per use case (Cassandra: tune consistency level per query).",
+      "tags": [
+        "cap"
+      ]
+    },
+    {
+      "id": "ds-fc2",
+      "front": "Raft quorum rule",
+      "back": "Quorum = floor(N/2)+1. 3 nodes → quorum=2, tolerates 1 failure. 5 nodes → quorum=3, tolerates 2 failures. Write committed only when quorum acknowledges. Leader sends heartbeats; no heartbeat within timeout → election.",
+      "tags": [
+        "raft",
+        "quorum"
+      ]
+    },
+    {
+      "id": "ds-fc3",
+      "front": "Eventual vs Linearisable consistency",
+      "back": "Linearisable: every read sees latest write (requires coordination, slower). Eventual: replicas converge over time, reads may be stale (no coordination, fast). Choose based on domain: banking = linearisable, social feed = eventual.",
+      "tags": [
+        "consistency"
+      ]
+    },
+    {
+      "id": "ds-fc4",
+      "front": "SAGA vs 2PC",
+      "back": "2PC: atomic but blocking (coordinator crash = stuck). SAGA: local transactions + compensating transactions. Not atomic but non-blocking. Use SAGA for microservices. Compensating txns must be idempotent (may run multiple times).",
+      "tags": [
+        "saga",
+        "2pc",
+        "distributed-transactions"
+      ]
+    },
+    {
+      "id": "ds-fc5",
+      "front": "Vector clock concurrent events",
+      "back": "VCs are concurrent when neither is component-wise ≥ the other. A=[A:2,B:0] and B=[A:0,B:2] → concurrent (conflict). A=[A:2,B:0] and B=[A:1,B:1] → B happened after A (B.A >= A.A and B.B >= A.B).",
+      "tags": [
+        "vector-clocks"
+      ]
+    },
+    {
+      "id": "ds-fc6",
+      "front": "Split-brain prevention",
+      "back": "Raft/Paxos prevents split-brain: leader only accepts writes when quorum available. Minority partition (2 of 5 nodes) cannot form quorum → rejects writes → no diverging state. Partition heals → rejoin leader and catch up via log replication.",
+      "tags": [
+        "split-brain",
+        "raft"
+      ]
+    },
+    {
+      "id": "ds-fc7",
+      "front": "Gossip protocol properties",
+      "back": "Decentralised, scale-well (O(log N) rounds to reach all nodes). Used for: cluster membership, failure detection, state propagation. Cassandra uses gossip. Consul uses gossip. Alternative to centralised registry (no SPOF).",
+      "tags": [
+        "gossip",
+        "protocols"
+      ]
+    },
+    {
+      "id": "ds-fc8",
+      "front": "Replication vs sharding",
+      "back": "Replication: same data on multiple nodes (fault tolerance + read scale). Sharding: different data on different nodes (write scale + storage scale). Production systems use both: each shard is replicated. Adds 2D reliability.",
+      "tags": [
+        "replication",
+        "sharding"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "You are building a distributed key-value store that will span 3 data centres. Key requirements: writes must be acknowledged by majority before returning to client, leadership changes must be transparent to clients, and the system must continue working if one entire data centre goes offline. Design the replication strategy, leader election, and client failover mechanism. What consistency guarantees can you offer?",
+    "checklist": [
+      {
+        "id": "dist1",
+        "text": "Raft with 5 nodes (2 per DC, 1 shared) or 3 nodes one per DC. Quorum = 3 means 1 DC failure tolerated.",
+        "weight": 20
+      },
+      {
+        "id": "dist2",
+        "text": "Write flow: client → leader → log → replicate to quorum → commit → ACK client. Clients retry on leader change.",
+        "weight": 20
+      },
+      {
+        "id": "dist3",
+        "text": "Client discovers leader via service discovery (etcd/Consul). On leader change: client retries, cluster redirects to new leader.",
+        "weight": 20
+      },
+      {
+        "id": "dist4",
+        "text": "Consistency: linearisable reads by routing to leader. Eventual reads possible via any replica with staleness warning.",
+        "weight": 20
+      },
+      {
+        "id": "dist5",
+        "text": "DC failure scenario: 2 remaining DCs have 4 nodes, quorum=3 still achievable. System continues. Healed DC catches up via log replication.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Raft term numbers prevent a recovered old leader from causing split-brain — its messages are rejected as stale term.",
+      "Client library tracks last known leader. On connection refused: try other nodes, they respond with current leader address.",
+      "Log compaction (snapshotting): long-running cluster's Raft log grows unbounded. Periodically snapshot state, truncate old log entries."
+    ]
+  }
+}

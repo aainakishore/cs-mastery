@@ -1,0 +1,459 @@
+{
+  "id": "python-error-handling",
+  "unit": 2,
+  "order": 13,
+  "title": "Python Error Handling",
+  "summary": "Master exceptions, context managers, and defensive programming patterns.",
+  "prereqs": [
+    "python-fundamentals"
+  ],
+  "guide": "# Python Error Handling — Fail Gracefully, Not Silently\n\n## Mental Model\nAn exception is an event that disrupts the normal flow. Think of it like a fire alarm: when it rings (exception raised), execution jumps to the nearest handler (except block). If nobody handles it, the program crashes.\n\n```\nNormal flow:\n  try block → runs completely → else block → finally block\n\nException raised in try:\n  try block (partial) → except block (matching) → finally block\n```\n\n## Exception Hierarchy\n```\nBaseException\n├── KeyboardInterrupt\n├── SystemExit\n└── Exception          ← catch this, not BaseException\n    ├── ValueError\n    ├── TypeError\n    ├── AttributeError\n    ├── KeyError\n    ├── IndexError\n    ├── FileNotFoundError  (subclass of OSError)\n    ├── ZeroDivisionError\n    └── RuntimeError\n        └── StopIteration\n```\n\n## try / except / else / finally\n```python\ndef read_config(path: str) -> dict:\n    try:\n        with open(path) as f:\n            return json.load(f)\n    except FileNotFoundError:\n        print(f\"Config not found at {path}, using defaults\")\n        return {}\n    except json.JSONDecodeError as e:\n        raise ValueError(f\"Invalid JSON in {path}: {e}\") from e   # re-raise with context\n    else:\n        # Only runs if no exception occurred\n        print(\"Config loaded successfully\")\n    finally:\n        # ALWAYS runs — cleanup goes here\n        print(\"read_config() finished\")\n```\n\n**Rule:** `else` = success path. `finally` = always cleanup.\n\n## Raising Exceptions\n```python\ndef set_age(age: int) -> None:\n    if not isinstance(age, int):\n        raise TypeError(f\"age must be int, got {type(age).__name__}\")\n    if age < 0 or age > 150:\n        raise ValueError(f\"age must be 0–150, got {age}\")\n    # ...\n```\n\n## Custom Exceptions — Build a Hierarchy\n```python\nclass AppError(Exception):           # base for all app errors\n    pass  # Base application error\n\nclass DatabaseError(AppError):       # specialise\n    def __init__(self, message: str, query: str = \"\"):\n        super().__init__(message)\n        self.query = query\n\nclass ConnectionError(DatabaseError):\n    pass\n\n# Usage\ntry:\n    raise ConnectionError(\"Timeout\", query=\"SELECT *\")\nexcept DatabaseError as e:\n    print(f\"DB error: {e}, query: {e.query}\")  # catches ConnectionError too\n```\n\n```\nAppError\n└── DatabaseError\n    └── ConnectionError   ← specific, caught by DatabaseError handler too\n```\n\n## Context Managers — The `with` Statement\n```python\n# File auto-closes even if exception occurs\nwith open(\"data.txt\") as f:\n    content = f.read()\n\n# Custom context manager — class style\nclass Timer:\n    def __enter__(self):\n        import time\n        self.start = time.time()\n        return self                    # available as `as` target\n\n    def __exit__(self, exc_type, exc_val, exc_tb):\n        elapsed = time.time() - self.start\n        print(f\"Elapsed: {elapsed:.3f}s\")\n        return False                   # False = don't suppress exceptions\n\nwith Timer() as t:\n    expensive_operation()\n\n# Context manager via decorator (simpler)\nfrom contextlib import contextmanager\n\n@contextmanager\ndef managed_resource():\n    resource = acquire()\n    try:\n        yield resource             # code inside `with` runs here\n    finally:\n        release(resource)          # always cleanup\n```\n\n## Exception Chaining\n```python\ntry:\n    result = int(\"abc\")\nexcept ValueError as e:\n    raise RuntimeError(\"Failed to parse config\") from e\n    # ^ attaches original exception as __cause__\n    # traceback shows both: \"The above exception was the direct cause of...\"\n```\n\n**Rule:** Always chain when re-raising — preserves the root cause for debugging.\n\n## Common Pitfalls\n- **Bare `except:`** catches everything including `KeyboardInterrupt` and `SystemExit` — use `except Exception:`\n- **Swallowing exceptions silently**: `except: pass` — bugs become invisible. At minimum log them.\n- **Catching too broadly**: `except Exception` when you only expected `ValueError` hides unexpected bugs\n- **Not cleaning up**: forgetting `finally` or `with` leaves resources open (files, DB connections, locks)\n- **Raising `Exception(\"message\")` directly** — prefer a specific type (ValueError, TypeError) or a custom exception\n- **`except (A, B):` vs `except A, B:`** — the latter is Python 2 syntax and silently does something else in Python 3\n\n## LBYL vs EAFP\n```python\n# LBYL — Look Before You Leap (C/Java style)\nif key in d:\n    value = d[key]\n\n# EAFP — Easier to Ask Forgiveness than Permission (Pythonic)\ntry:\n    value = d[key]\nexcept KeyError:\n    value = default\n```\nPython culture prefers EAFP — it's often faster (one lookup vs two) and handles race conditions better.\n\n## Connections\n- `python-oop` — custom exceptions are classes; `__enter__/__exit__` are dunder methods\n- `python-fundamentals` — base syntax needed first\n- `observability` — structured exception logging is the foundation of good observability\n",
+  "questions": [
+    {
+      "id": "pyeh-q1",
+      "type": "mcq",
+      "prompt": "Which block ALWAYS executes, whether an exception occurred or not?",
+      "choices": [
+        "except",
+        "else",
+        "finally",
+        "raise"
+      ],
+      "answerIndex": 2,
+      "explanation": "`finally` always runs — on success, on exception, even if a `return` is hit inside `try`. Use it for cleanup.",
+      "tags": [
+        "try-except",
+        "finally"
+      ]
+    },
+    {
+      "id": "pyeh-q2",
+      "type": "mcq",
+      "prompt": "What does the `else` block in a try/except execute?",
+      "choices": [
+        "When an exception is caught",
+        "When no exception occurs in the try block",
+        "Always",
+        "When finally completes"
+      ],
+      "answerIndex": 1,
+      "explanation": "`else` runs only if the `try` block completed without raising any exception. It separates 'success logic' from 'error handling logic'.",
+      "tags": [
+        "try-except",
+        "else"
+      ]
+    },
+    {
+      "id": "pyeh-q3",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "try:\n    x = 1/0\nexcept ZeroDivisionError:\n    print('A')\nelse:\n    print('B')\nfinally:\n    print('C')",
+      "choices": [
+        "A",
+        "B C",
+        "A C",
+        "C"
+      ],
+      "answerIndex": 2,
+      "explanation": "ZeroDivisionError is raised → except prints 'A' → else is SKIPPED → finally always prints 'C'. Output: A\\nC.",
+      "tags": [
+        "try-except"
+      ]
+    },
+    {
+      "id": "pyeh-q4",
+      "type": "mcq",
+      "prompt": "What is the problem with `except: pass`?",
+      "choices": [
+        "Syntax error in Python 3",
+        "Catches all exceptions including KeyboardInterrupt, silently hiding bugs",
+        "Only works for RuntimeError",
+        "It re-raises the exception"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bare `except:` (or `except Exception: pass`) swallows everything. You'll never know when bugs occur. Always at minimum log the exception.",
+      "tags": [
+        "pitfalls",
+        "exception-handling"
+      ]
+    },
+    {
+      "id": "pyeh-q5",
+      "type": "mcq",
+      "prompt": "How do you create a custom exception hierarchy?",
+      "choices": [
+        "Decorate a function with @exception",
+        "Inherit from Exception (or a subclass)",
+        "Use the `error` keyword",
+        "Override __raise__"
+      ],
+      "answerIndex": 1,
+      "explanation": "Custom exceptions are regular classes that inherit from `Exception` or a more specific base. This lets you catch by hierarchy.",
+      "tags": [
+        "custom-exceptions"
+      ]
+    },
+    {
+      "id": "pyeh-q6",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "try:\n    raise ValueError('bad')\nexcept TypeError:\n    print('type')\nexcept ValueError:\n    print('value')\nexcept Exception:\n    print('general')",
+      "choices": [
+        "type",
+        "value",
+        "general",
+        "value\\ngeneral"
+      ],
+      "answerIndex": 1,
+      "explanation": "Python checks except clauses in order. ValueError matches the second clause → 'value' prints. The third clause is NOT reached.",
+      "tags": [
+        "exception-matching"
+      ]
+    },
+    {
+      "id": "pyeh-q7",
+      "type": "mcq",
+      "prompt": "What does `raise ValueError('x') from e` do?",
+      "choices": [
+        "Replaces e with ValueError",
+        "Chains exceptions — ValueError's __cause__ is set to e, traceback shows both",
+        "Silences e",
+        "Converts e to ValueError"
+      ],
+      "answerIndex": 1,
+      "explanation": "Exception chaining with `from e` sets `__cause__`, so the traceback shows the original error and the new one. Crucial for debugging.",
+      "tags": [
+        "exception-chaining"
+      ]
+    },
+    {
+      "id": "pyeh-q8",
+      "type": "mcq",
+      "prompt": "What does `__enter__` return in a context manager?",
+      "choices": [
+        "self always",
+        "None always",
+        "The value bound to the `as` variable",
+        "The exception if any"
+      ],
+      "answerIndex": 2,
+      "explanation": "`__enter__`'s return value is what gets assigned to the variable after `as`. Returning `self` is common but not required.",
+      "tags": [
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyeh-q9",
+      "type": "mcq",
+      "prompt": "`__exit__(self, exc_type, exc_val, exc_tb)` — returning True does what?",
+      "choices": [
+        "Re-raises the exception",
+        "Suppresses the exception (swallows it)",
+        "Logs the exception",
+        "Does nothing"
+      ],
+      "answerIndex": 1,
+      "explanation": "Returning a truthy value from `__exit__` suppresses the exception. Returning False (or None) lets it propagate. Usually you want False.",
+      "tags": [
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyeh-q10",
+      "type": "multi",
+      "prompt": "Which are good practices for exception handling?",
+      "choices": [
+        "Catch the most specific exception type",
+        "Use `except Exception: pass` to be safe",
+        "Chain exceptions with `raise X from e`",
+        "Use `with` for resource management",
+        "Catch BaseException for all errors"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Specific catches, exception chaining, and context managers are best practices. Bare `pass` and catching `BaseException` are anti-patterns.",
+      "tags": [
+        "best-practices"
+      ]
+    },
+    {
+      "id": "pyeh-q11",
+      "type": "mcq",
+      "prompt": "What is EAFP in Python?",
+      "choices": [
+        "Error And Failure Prevention",
+        "Easier to Ask Forgiveness than Permission — try first, handle exception if it fails",
+        "Exception Aware Function Pattern",
+        "Every Action Fails Predictably"
+      ],
+      "answerIndex": 1,
+      "explanation": "EAFP is the Pythonic style: try the operation and catch exceptions, rather than checking preconditions first (LBYL). Often faster and handles race conditions better.",
+      "tags": [
+        "eafp",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "pyeh-q12",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "def f():\n    try:\n        return 1\n    finally:\n        return 2\n\nprint(f())",
+      "choices": [
+        "1",
+        "2",
+        "1\\n2",
+        "Error"
+      ],
+      "answerIndex": 1,
+      "explanation": "`finally` always runs, and if it contains a `return`, that value wins over the `try` block's return. Returning from `finally` is usually a bug.",
+      "tags": [
+        "finally",
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyeh-q13",
+      "type": "mcq",
+      "prompt": "What is `@contextmanager` from contextlib?",
+      "choices": [
+        "Decorator to auto-catch exceptions",
+        "Decorator to turn a generator function into a context manager",
+        "Class for managing multiple contexts",
+        "Replaces try/finally"
+      ],
+      "answerIndex": 1,
+      "explanation": "The `@contextmanager` decorator turns a generator function into a context manager. Code before `yield` = `__enter__`, code after = `__exit__`.",
+      "tags": [
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyeh-q14",
+      "type": "mcq",
+      "prompt": "You have `except (ValueError, TypeError) as e:`. What does it catch?",
+      "choices": [
+        "Only ValueError",
+        "Only TypeError",
+        "Both ValueError and TypeError (either one)",
+        "ValueError then TypeError in sequence"
+      ],
+      "answerIndex": 2,
+      "explanation": "A tuple of exception types catches any matching one. The caught exception is bound to `e`.",
+      "tags": [
+        "exception-matching"
+      ]
+    },
+    {
+      "id": "pyeh-q15",
+      "type": "codeOutput",
+      "prompt": "What prints?",
+      "code": "class MyError(ValueError):\n    pass\n\ntry:\n    raise MyError('oops')\nexcept ValueError as e:\n    print('caught:', e)",
+      "choices": [
+        "Error not caught",
+        "caught: oops",
+        "caught: MyError",
+        "ValueError: oops"
+      ],
+      "answerIndex": 1,
+      "explanation": "`MyError` inherits from `ValueError`, so `except ValueError` catches it too. Exception hierarchy enables catching by base class.",
+      "tags": [
+        "custom-exceptions",
+        "inheritance"
+      ]
+    },
+    {
+      "id": "pyeh-q16",
+      "type": "mcq",
+      "prompt": "When should you define a custom exception class?",
+      "choices": [
+        "Never — use built-in exceptions always",
+        "When callers need to distinguish your library's errors from others",
+        "Only in large codebases",
+        "When you need extra attributes on the exception"
+      ],
+      "answerIndexes": [
+        1,
+        3
+      ],
+      "explanation": "Both are valid reasons. Custom exceptions allow fine-grained catching and can carry structured data (e.g., error codes, HTTP status).",
+      "tags": [
+        "custom-exceptions"
+      ]
+    },
+    {
+      "id": "pyeh-q17",
+      "type": "mcq",
+      "prompt": "What is wrong: `except Exception, e:`?",
+      "choices": [
+        "Nothing, valid Python 3",
+        "Python 2 syntax — use `except Exception as e:` in Python 3",
+        "Must specify exception type",
+        "Catches too broadly"
+      ],
+      "answerIndex": 1,
+      "explanation": "The comma syntax is Python 2. Python 3 requires `as`. Using the comma in Python 3 silently does something different (and wrong).",
+      "tags": [
+        "syntax",
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyeh-q18",
+      "type": "mcq",
+      "prompt": "A `with` statement guarantees:",
+      "choices": [
+        "The block runs without exceptions",
+        "The `__exit__` method always runs, even if an exception occurs",
+        "The resource is never shared",
+        "The block runs in a new thread"
+      ],
+      "answerIndex": 1,
+      "explanation": "`__exit__` (and therefore cleanup) always runs after a `with` block — success or exception. This is why file/lock/connection management should use `with`.",
+      "tags": [
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyeh-q19",
+      "type": "codeOutput",
+      "prompt": "What is `e.__cause__` after: `try: int('x') \\nexcept ValueError as e: raise RuntimeError('bad') from e`?",
+      "choices": [
+        "None",
+        "The ValueError instance",
+        "The RuntimeError instance",
+        "AttributeError"
+      ],
+      "answerIndex": 1,
+      "explanation": "Using `from e` sets `__cause__` on the new exception to the original exception. The traceback shows both.",
+      "tags": [
+        "exception-chaining"
+      ]
+    },
+    {
+      "id": "pyeh-q20",
+      "type": "multi",
+      "prompt": "Which exceptions does `except Exception:` NOT catch?",
+      "choices": [
+        "ValueError",
+        "KeyboardInterrupt",
+        "SystemExit",
+        "ZeroDivisionError",
+        "GeneratorExit"
+      ],
+      "answerIndexes": [
+        1,
+        2,
+        4
+      ],
+      "explanation": "`KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` inherit from `BaseException` but NOT `Exception`. This is intentional so they can't be accidentally swallowed.",
+      "tags": [
+        "exception-hierarchy"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "pyeh-fc1",
+      "front": "try/except/else/finally order",
+      "back": "`try`: attempt. `except`: handle error. `else`: runs only on success. `finally`: ALWAYS runs (cleanup). Remember: else = happy path, finally = guaranteed cleanup.",
+      "tags": [
+        "try-except"
+      ]
+    },
+    {
+      "id": "pyeh-fc2",
+      "front": "When to use `with` statement",
+      "back": "Any time you acquire a resource that must be released: files, DB connections, locks, network sockets. `with` guarantees `__exit__` runs even on exception.",
+      "tags": [
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyeh-fc3",
+      "front": "EAFP vs LBYL",
+      "back": "EAFP (Pythonic): try it, catch the exception. LBYL: check before you act. Prefer EAFP — less race-prone, often faster (one lookup instead of two).",
+      "tags": [
+        "best-practices"
+      ]
+    },
+    {
+      "id": "pyeh-fc4",
+      "front": "Exception chaining syntax",
+      "back": "`raise NewError('msg') from original_error` — sets `__cause__`, shows both in traceback. Always chain when re-raising to preserve root cause.",
+      "tags": [
+        "exception-chaining"
+      ]
+    },
+    {
+      "id": "pyeh-fc5",
+      "front": "Custom exception rule",
+      "back": "Inherit from `Exception` (not `BaseException`). Create a base `class AppError(Exception)` for your library, then specialise. Callers can catch by base class.",
+      "tags": [
+        "custom-exceptions"
+      ]
+    },
+    {
+      "id": "pyeh-fc6",
+      "front": "@contextmanager pattern",
+      "back": "Generator function: code before `yield` = setup (`__enter__`). `yield value` = what `as` receives. Code after `yield` (in `finally`) = teardown (`__exit__`).",
+      "tags": [
+        "context-manager"
+      ]
+    },
+    {
+      "id": "pyeh-fc7",
+      "front": "Bare except trap",
+      "back": "`except:` (no type) or `except BaseException:` catches Ctrl+C and SystemExit. Always use `except Exception:` minimum. Prefer specific types.",
+      "tags": [
+        "pitfalls"
+      ]
+    },
+    {
+      "id": "pyeh-fc8",
+      "front": "__exit__ return value",
+      "back": "Return `True` to suppress the exception (swallow it). Return `False` or `None` to let it propagate. Usually return `False` — silently swallowing exceptions hides bugs.",
+      "tags": [
+        "context-manager"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design the error handling strategy for a file-processing pipeline. The pipeline reads CSV files, validates rows, transforms data, and writes results. Errors can occur at: file open, CSV parsing, row validation, transformation, and write. Design: (1) a custom exception hierarchy for each failure type, (2) which exceptions to catch vs let propagate, (3) where to use context managers, (4) how to report errors without crashing the whole pipeline (process 1000 rows, collect errors, report at end). Think through each decision without writing working code — just map out the error flow.",
+    "checklist": [
+      {
+        "id": "pyeh-p1",
+        "text": "Define custom exception hierarchy (AppError base + 3+ subclasses for different failure stages)",
+        "weight": 20
+      },
+      {
+        "id": "pyeh-p2",
+        "text": "Identify which operations need `with` statements and why",
+        "weight": 20
+      },
+      {
+        "id": "pyeh-p3",
+        "text": "Design the error collection strategy — catch per-row errors, accumulate, report at end",
+        "weight": 20
+      },
+      {
+        "id": "pyeh-p4",
+        "text": "Decide what gets logged vs re-raised vs silently skipped (with justification)",
+        "weight": 20
+      },
+      {
+        "id": "pyeh-p5",
+        "text": "Show exception chaining: where you'd use `raise X from e` and why",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Think of a hierarchy: PipelineError → FileError, ParseError, ValidationError, TransformError, WriteError",
+      "File open and write both need `with open(...)` — context managers prevent resource leaks even on partial failure.",
+      "For per-row error collection: catch ValidationError per row, append to an errors list, continue processing. Raise at the end if errors: raise PipelineError(f'{len(errors)} rows failed') from errors[0]",
+      "Use exception chaining when wrapping lower-level errors: `raise ParseError('CSV malformed') from csv_exception`"
+    ]
+  }
+}

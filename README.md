@@ -325,3 +325,12 @@ cs-mastery/
 ## License
 
 Personal project. No license granted.
+
+
+## Deployment
+git add .
+git commit -m "feat: update unit and order for multiple topics, enhance light mode styles, and improve layout components"  
+git remote add origin https://github.com/aainakishore/cs-mastery.git  
+git branch -M main
+git push -u origin main  
+git push -u origin main 2>&1

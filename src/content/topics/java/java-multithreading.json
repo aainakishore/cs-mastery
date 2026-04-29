@@ -1,0 +1,447 @@
+{
+  "id": "java-multithreading",
+  "unit": 14,
+  "order": 107,
+  "title": "Java Multithreading",
+  "summary": "Master Thread lifecycle, synchronization, volatile, wait/notify, and thread-safe patterns in Java.",
+  "prereqs": [
+    "dsa-java-arrays"
+  ],
+  "guide": "# Java Multithreading — Make Your Code Do Two Things At Once\n\n## Mental Model\nA thread is an independent path of execution inside a JVM process. Every Java program starts with one thread (main). Creating more lets you do work in parallel — but sharing state between them is where bugs hide.\n\n```\nProcess (JVM)\n├── Thread: main()          ← always exists\n├── Thread: http-handler-1  ← your server handling request 1\n├── Thread: http-handler-2  ← your server handling request 2\n└── Thread: GC              ← JVM internal\n```\n\n## Creating Threads\n\n### Way 1 — extend Thread\n```java\nclass CounterThread extends Thread {\n    @Override\n    public void run() {\n        for (int i = 0; i < 5; i++) {\n            System.out.println(getName() + \": \" + i);\n        }\n    }\n}\nnew CounterThread().start();  // start(), NOT run() — run() executes in current thread!\n```\n\n### Way 2 — implement Runnable (preferred — decouples task from thread)\n```java\nRunnable task = () -> System.out.println(\"Hello from: \" + Thread.currentThread().getName());\nThread t = new Thread(task);\nt.start();\n```\n\n### Way 3 — ExecutorService (production way)\n```java\nExecutorService pool = Executors.newFixedThreadPool(4);\npool.submit(() -> processRequest(req));\npool.shutdown();   // graceful: wait for submitted tasks to finish\n```\n\n## Thread Lifecycle\n```\nNEW → start() → RUNNABLE ⟷ (scheduler decides) ⟷ RUNNING\n                  │                                    │\n                  └── wait() / sleep() ──→ WAITING/TIMED_WAITING\n                  └── synchronized block busy ──→ BLOCKED\n                  └── run() returns ──→ TERMINATED\n```\n\n## The Race Condition Problem\n```java\nclass Counter {\n    int count = 0;                // shared mutable state — DANGER\n    void increment() { count++; } // NOT atomic: read → add → write (3 ops)\n}\nCounter c = new Counter();\n// Two threads calling c.increment() 1000 times each\n// Expected: 2000. Actual: somewhere between 1000 and 2000. BUG.\n```\n\n## Synchronized — Mutual Exclusion Lock\n```java\nclass SafeCounter {\n    private int count = 0;\n\n    synchronized void increment() {  // only one thread at a time\n        count++;\n    }\n\n    synchronized int get() { return count; }\n}\n```\n`synchronized` acquires the object's intrinsic lock. Other threads block until it's released.\n\n### Synchronized block (finer granularity)\n```java\nprivate final Object lock = new Object();\n\nvoid transfer(Account from, Account to, int amount) {\n    synchronized(lock) {     // lock specific object, not `this`\n        from.debit(amount);\n        to.credit(amount);\n    }\n}\n```\n\n## volatile — Visibility Guarantee\n```java\nclass FlagExample {\n    volatile boolean running = true;    // force reads/writes to main memory\n\n    void stop() { running = false; }\n\n    void run() {\n        while (running) { /* work */ }  // without volatile, compiler may cache `running` in register\n    }\n}\n```\n`volatile` solves visibility (every thread sees the latest value) but NOT atomicity. Don't use for compound operations like `count++`.\n\n## wait / notify — Thread Coordination\n```java\nclass BoundedQueue<T> {\n    private final Queue<T> queue = new LinkedList<>();\n    private final int max;\n\n    synchronized void put(T item) throws InterruptedException {\n        while (queue.size() == max) wait();    // release lock, pause\n        queue.add(item);\n        notifyAll();                            // wake waiting consumers\n    }\n\n    synchronized T take() throws InterruptedException {\n        while (queue.isEmpty()) wait();\n        T item = queue.poll();\n        notifyAll();                            // wake waiting producers\n        return item;\n    }\n}\n```\n**Rule:** always call `wait()` inside a `while` loop — not `if` — because of spurious wakeups.\n\n## Common Pitfalls\n- **Calling `run()` instead of `start()`**: runs in current thread — no new thread created\n- **Deadlock**: Thread A holds lock 1, waits for lock 2. Thread B holds lock 2, waits for lock 1. Both stuck forever. Fix: always acquire locks in the same order.\n- **Using `volatile` for `count++`**: volatile doesn't make compound ops atomic. Use `AtomicInteger`.\n- **Not calling `pool.shutdown()`**: threads keep running, JVM won't exit.\n- **`synchronized(this)` in different instances**: each instance has its own lock — no mutual exclusion across instances.\n\n## Connections\n- `java-concurrency-advanced` — builds on this with java.util.concurrent tools\n- `dsa-java-queues` — BlockingQueue is the thread-safe version\n- `system-design-fundamentals` — thread pools are core to server architecture\n",
+  "questions": [
+    {
+      "id": "jmt-q1",
+      "type": "mcq",
+      "prompt": "What is the correct way to start a new thread from a `Thread` subclass instance `t`?",
+      "choices": [
+        "t.run()",
+        "t.start()",
+        "t.execute()",
+        "Thread.run(t)"
+      ],
+      "answerIndex": 1,
+      "explanation": "`start()` creates a new OS thread and calls `run()` in it. Calling `run()` directly executes in the current thread — no concurrency.",
+      "tags": [
+        "thread-basics"
+      ]
+    },
+    {
+      "id": "jmt-q2",
+      "type": "mcq",
+      "prompt": "What does `volatile` guarantee in Java?",
+      "choices": [
+        "Atomicity of compound operations",
+        "Visibility: every thread reads the latest written value from main memory",
+        "Thread-safe increment",
+        "Lock acquisition"
+      ],
+      "answerIndex": 1,
+      "explanation": "`volatile` ensures visibility — no CPU cache or compiler register caching. It does NOT make `count++` atomic (that's 3 operations).",
+      "tags": [
+        "volatile"
+      ]
+    },
+    {
+      "id": "jmt-q3",
+      "type": "codeOutput",
+      "prompt": "What is the expected value of `count` after two threads each call `increment()` 1000 times, where `increment()` does `count++` without synchronization?",
+      "choices": [
+        "Always 2000",
+        "Always 1000",
+        "Somewhere between 1000 and 2000 (non-deterministic)",
+        "Compilation error"
+      ],
+      "answerIndex": 2,
+      "explanation": "Without synchronization, `count++` is a read-add-write race condition. Both threads can read the same value, both add 1, and one write is lost.",
+      "tags": [
+        "race-condition"
+      ]
+    },
+    {
+      "id": "jmt-q4",
+      "type": "mcq",
+      "prompt": "What does `synchronized` on a method do?",
+      "choices": [
+        "Runs the method in a new thread",
+        "Acquires the object's intrinsic lock — only one thread can execute it at a time",
+        "Makes the method atomic at CPU level",
+        "Prevents the method from being overridden"
+      ],
+      "answerIndex": 1,
+      "explanation": "`synchronized` on an instance method acquires `this` object's monitor lock. On a static method, it acquires the class object's lock.",
+      "tags": [
+        "synchronized"
+      ]
+    },
+    {
+      "id": "jmt-q5",
+      "type": "mcq",
+      "prompt": "Why must `wait()` always be called inside a `while` loop (not `if`)?",
+      "choices": [
+        "It's just style convention",
+        "Spurious wakeups — a thread can wake up without being notified, so the condition must be re-checked",
+        "while loops are faster",
+        "If causes a deadlock"
+      ],
+      "answerIndex": 1,
+      "explanation": "The JVM can wake up a waiting thread without an explicit notify (spurious wakeup). Always recheck the condition after waking.",
+      "tags": [
+        "wait-notify"
+      ]
+    },
+    {
+      "id": "jmt-q6",
+      "type": "mcq",
+      "prompt": "What causes a deadlock?",
+      "choices": [
+        "Too many threads",
+        "Two threads waiting for locks held by each other, indefinitely",
+        "A thread calling sleep()",
+        "Forgetting to call start()"
+      ],
+      "answerIndex": 1,
+      "explanation": "Deadlock: Thread A holds lock 1, waits for lock 2. Thread B holds lock 2, waits for lock 1. Neither can proceed. Prevention: always acquire multiple locks in the same order.",
+      "tags": [
+        "deadlock"
+      ]
+    },
+    {
+      "id": "jmt-q7",
+      "type": "mcq",
+      "prompt": "What is `Executors.newFixedThreadPool(4)`?",
+      "choices": [
+        "Creates 4 threads immediately and runs 4 tasks",
+        "Creates a pool of 4 reusable threads — tasks queue up when all are busy",
+        "Creates 4 thread groups",
+        "Limits JVM to 4 threads total"
+      ],
+      "answerIndex": 1,
+      "explanation": "A fixed thread pool reuses threads. New tasks queue in a `LinkedBlockingQueue` when all threads are busy. Better than creating a new `Thread` per task.",
+      "tags": [
+        "thread-pool",
+        "executor"
+      ]
+    },
+    {
+      "id": "jmt-q8",
+      "type": "mcq",
+      "prompt": "What happens if you call `pool.shutdown()` vs `pool.shutdownNow()`?",
+      "choices": [
+        "Both immediately kill all threads",
+        "shutdown() waits for running tasks to finish; shutdownNow() interrupts running threads and returns queued tasks",
+        "shutdownNow() is deprecated",
+        "No difference"
+      ],
+      "answerIndex": 1,
+      "explanation": "`shutdown()` is graceful — no new tasks accepted, running tasks finish. `shutdownNow()` is forceful — interrupts running threads via interrupt().",
+      "tags": [
+        "executor",
+        "thread-pool"
+      ]
+    },
+    {
+      "id": "jmt-q9",
+      "type": "codeOutput",
+      "prompt": "Thread A acquires lock on `obj1` then tries `obj2`. Thread B acquires lock on `obj2` then tries `obj1`. What happens?",
+      "choices": [
+        "One thread wins",
+        "Deadlock — both threads block indefinitely",
+        "java.lang.DeadlockException is thrown",
+        "The JVM detects and resolves it automatically"
+      ],
+      "answerIndex": 1,
+      "explanation": "Classic deadlock scenario. Java does NOT automatically resolve deadlocks — the threads freeze forever. Fix: enforce lock ordering (always acquire obj1 before obj2).",
+      "tags": [
+        "deadlock"
+      ]
+    },
+    {
+      "id": "jmt-q10",
+      "type": "multi",
+      "prompt": "Which are valid Thread states in Java?",
+      "choices": [
+        "NEW",
+        "RUNNABLE",
+        "SLEEPING",
+        "BLOCKED",
+        "TERMINATED",
+        "IDLE"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "explanation": "Java Thread.State enum: NEW, RUNNABLE, BLOCKED, WAITING, TIMED_WAITING, TERMINATED. SLEEPING and IDLE are not Java thread states.",
+      "tags": [
+        "thread-lifecycle"
+      ]
+    },
+    {
+      "id": "jmt-q11",
+      "type": "mcq",
+      "prompt": "What is the difference between `notify()` and `notifyAll()`?",
+      "choices": [
+        "No difference",
+        "notify() wakes one random waiting thread; notifyAll() wakes all waiting threads",
+        "notifyAll() is deprecated",
+        "notify() broadcasts to all threads in the JVM"
+      ],
+      "answerIndex": 1,
+      "explanation": "Prefer `notifyAll()` in most cases — safer because `notify()` might wake the wrong thread. `notifyAll()` ensures the right thread eventually re-evaluates its condition.",
+      "tags": [
+        "wait-notify"
+      ]
+    },
+    {
+      "id": "jmt-q12",
+      "type": "mcq",
+      "prompt": "What is a race condition?",
+      "choices": [
+        "Two threads running at the same speed",
+        "Outcome depends on relative timing/interleaving of threads — non-deterministic result",
+        "A thread that finishes before another",
+        "A synchronized method that is too slow"
+      ],
+      "answerIndex": 1,
+      "explanation": "A race condition occurs when correctness depends on timing. The classic example: read-modify-write without synchronization.",
+      "tags": [
+        "race-condition"
+      ]
+    },
+    {
+      "id": "jmt-q13",
+      "type": "mcq",
+      "prompt": "Which of the following makes `count++` thread-safe without synchronized?",
+      "choices": [
+        "volatile int count",
+        "AtomicInteger count; count.incrementAndGet()",
+        "final int count",
+        "static int count"
+      ],
+      "answerIndex": 1,
+      "explanation": "`AtomicInteger.incrementAndGet()` uses CPU-level compare-and-swap (CAS) instructions — atomic without a lock. `volatile` alone doesn't make `++` atomic.",
+      "tags": [
+        "atomics",
+        "volatile"
+      ]
+    },
+    {
+      "id": "jmt-q14",
+      "type": "codeOutput",
+      "prompt": "What does `Thread.sleep(1000)` do?",
+      "choices": [
+        "Terminates the thread after 1 second",
+        "Pauses the current thread for at least 1000ms, releasing CPU but NOT releasing locks",
+        "Pauses all threads for 1 second",
+        "Releases all held locks for 1 second"
+      ],
+      "answerIndex": 1,
+      "explanation": "`sleep()` pauses the thread but retains any locks it holds. This is different from `wait()` which releases the lock.",
+      "tags": [
+        "sleep",
+        "thread-basics"
+      ]
+    },
+    {
+      "id": "jmt-q15",
+      "type": "mcq",
+      "prompt": "What is a ThreadLocal variable?",
+      "choices": [
+        "A variable accessible by all threads",
+        "Each thread has its own independent copy of the variable",
+        "A variable that can only be written by one thread",
+        "A variable stored on the heap"
+      ],
+      "answerIndex": 1,
+      "explanation": "`ThreadLocal<T>` provides thread-isolated storage. Each thread sees its own copy — no synchronization needed. Common use: per-request state in web servers.",
+      "tags": [
+        "thread-local"
+      ]
+    },
+    {
+      "id": "jmt-q16",
+      "type": "mcq",
+      "prompt": "What does `Runnable` provide over extending `Thread`?",
+      "choices": [
+        "Better performance",
+        "Decouples the task from thread lifecycle; class can still extend another class",
+        "Access to more Thread methods",
+        "Automatic synchronization"
+      ],
+      "answerIndex": 1,
+      "explanation": "Java is single-inheritance. `Runnable` lets your class extend a business class AND be scheduled on a thread. Extending `Thread` wastes your one inheritance slot.",
+      "tags": [
+        "runnable",
+        "thread-basics"
+      ]
+    },
+    {
+      "id": "jmt-q17",
+      "type": "mcq",
+      "prompt": "What is a daemon thread?",
+      "choices": [
+        "A thread that runs with root privileges",
+        "A background thread that JVM kills when all non-daemon threads finish",
+        "A thread that never throws exceptions",
+        "A thread with higher priority"
+      ],
+      "answerIndex": 1,
+      "explanation": "Daemon threads (e.g., GC thread) exist to serve others. Set via `t.setDaemon(true)` before start(). JVM exits when only daemon threads remain.",
+      "tags": [
+        "daemon-thread"
+      ]
+    },
+    {
+      "id": "jmt-q18",
+      "type": "multi",
+      "prompt": "Which problems does `synchronized` solve?",
+      "choices": [
+        "Visibility (ensures value written by one thread is seen by another)",
+        "Atomicity (compound operations treated as one)",
+        "Deadlock prevention",
+        "Performance improvement"
+      ],
+      "answerIndexes": [
+        0,
+        1
+      ],
+      "explanation": "`synchronized` provides both visibility (happens-before relationship) and mutual exclusion (atomicity). It does NOT prevent deadlocks and can reduce performance.",
+      "tags": [
+        "synchronized"
+      ]
+    },
+    {
+      "id": "jmt-q19",
+      "type": "mcq",
+      "prompt": "What does `Thread.join()` do?",
+      "choices": [
+        "Merges two threads into one",
+        "Causes the calling thread to wait until the target thread terminates",
+        "Starts the thread",
+        "Interrupts the thread"
+      ],
+      "answerIndex": 1,
+      "explanation": "`t.join()` blocks the calling thread until `t` finishes. Used to wait for results from a thread before proceeding.",
+      "tags": [
+        "thread-basics",
+        "join"
+      ]
+    },
+    {
+      "id": "jmt-q20",
+      "type": "mcq",
+      "prompt": "When is `synchronizedMap` preferred over `ConcurrentHashMap`?",
+      "choices": [
+        "Always — it's safer",
+        "Never — ConcurrentHashMap is always better",
+        "When you need full-map locking (e.g., iterating + modifying atomically); ConcurrentHashMap allows concurrent reads/writes but iteration may not be fully consistent",
+        "When performance is not important"
+      ],
+      "answerIndex": 2,
+      "explanation": "`ConcurrentHashMap` uses segment-level locks for high throughput. `synchronizedMap` locks the entire map per operation. Use `synchronizedMap` only when you need atomic compound operations on the whole map.",
+      "tags": [
+        "concurrent-collections"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "jmt-fc1",
+      "front": "start() vs run()",
+      "back": "`start()` creates a new OS thread and calls `run()` in it. `run()` directly executes in the current thread — no new thread. Always call `start()`.",
+      "tags": [
+        "thread-basics"
+      ]
+    },
+    {
+      "id": "jmt-fc2",
+      "front": "volatile — what it does and doesn't do",
+      "back": "DOES: guarantees visibility (latest value from main memory, no caching). DOESN'T: make compound operations (count++) atomic. Use AtomicInteger for that.",
+      "tags": [
+        "volatile"
+      ]
+    },
+    {
+      "id": "jmt-fc3",
+      "front": "Deadlock prevention rule",
+      "back": "Always acquire multiple locks in the same global order. Thread A: lock(obj1) then lock(obj2). Thread B: lock(obj1) then lock(obj2). Never reverse the order.",
+      "tags": [
+        "deadlock"
+      ]
+    },
+    {
+      "id": "jmt-fc4",
+      "front": "wait() must be in while, not if",
+      "back": "Spurious wakeups: JVM can wake a thread without notify(). Always: `while (!condition) wait()`. The condition must be re-checked after every wakeup.",
+      "tags": [
+        "wait-notify"
+      ]
+    },
+    {
+      "id": "jmt-fc5",
+      "front": "Thread pool sizing rule of thumb",
+      "back": "CPU-bound tasks: pool size ≈ CPU cores. I/O-bound tasks: pool size = cores × (1 + wait_time/compute_time). Too many threads → context-switch overhead.",
+      "tags": [
+        "thread-pool"
+      ]
+    },
+    {
+      "id": "jmt-fc6",
+      "front": "sleep() vs wait()",
+      "back": "`sleep()`: pauses thread, KEEPS locks, requires no monitor. `wait()`: pauses thread, RELEASES lock, must be called inside synchronized block. Both throw InterruptedException.",
+      "tags": [
+        "sleep",
+        "wait-notify"
+      ]
+    },
+    {
+      "id": "jmt-fc7",
+      "front": "ThreadLocal use case",
+      "back": "Per-thread state without synchronization. Classic uses: database connection per thread, user session in web framework, SimpleDateFormat (not thread-safe). Set via `tl.set(val)`, get via `tl.get()`.",
+      "tags": [
+        "thread-local"
+      ]
+    },
+    {
+      "id": "jmt-fc8",
+      "front": "AtomicInteger vs synchronized",
+      "back": "AtomicInteger: lock-free using CAS hardware instruction. Faster for single-variable increments. synchronized: heavier lock, needed for multi-variable atomic operations.",
+      "tags": [
+        "atomics"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design a thread-safe producer-consumer task queue in Java. Producers submit tasks (Runnable). Consumers pull and execute tasks. Requirements: bounded queue (max 10 tasks), producers block when full, consumers block when empty, graceful shutdown (drain queue then stop). Design the class structure: fields, constructors, methods. Identify every point where synchronization is needed and why. Note which operations must be atomic. You don't need to write running code — map out the design decisions.",
+    "checklist": [
+      {
+        "id": "jmt-p1",
+        "text": "Identify shared mutable state and the synchronization primitive for each",
+        "weight": 25
+      },
+      {
+        "id": "jmt-p2",
+        "text": "Design put() and take() with correct wait/notifyAll logic in while loops",
+        "weight": 25
+      },
+      {
+        "id": "jmt-p3",
+        "text": "Design shutdown() that drains the queue before stopping consumer threads",
+        "weight": 25
+      },
+      {
+        "id": "jmt-p4",
+        "text": "Identify 2 potential bugs (e.g., calling run() instead of start(), spurious wakeup, deadlock scenario) and explain how your design avoids them",
+        "weight": 25
+      }
+    ],
+    "hints": [
+      "The queue, a `running` flag, and the count are shared state — each needs careful handling.",
+      "For shutdown: set `running=false`, then `notifyAll()` so blocked consumers can check the flag.",
+      "Use `while (queue.isEmpty() && running) wait()` in take() — not `if` — to handle spurious wakeups.",
+      "Consider using `java.util.concurrent.BlockingQueue` and explaining why it's preferable to a hand-rolled solution."
+    ]
+  }
+}

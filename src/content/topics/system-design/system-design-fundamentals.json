@@ -1,0 +1,481 @@
+{
+  "id": "system-design-fundamentals",
+  "unit": 13,
+  "order": 102,
+  "title": "System Design Fundamentals",
+  "summary": "Design URL shorteners, Twitter feeds, and chat systems. Learn estimation, trade-offs, and how to think at scale.",
+  "prereqs": [
+    "caching",
+    "sharding",
+    "kafka"
+  ],
+  "guide": "# System Design Fundamentals\n\n## What Is System Design?\n\nSystem design is the process of defining the architecture, components, and interfaces\nof a system to satisfy specified requirements. It is the bridge between 'write code'\nand 'run a product serving millions of users'.\n\nA junior developer thinks: 'How do I write this function?'\nA senior developer thinks: 'How do I build this feature so it handles 1M users,\nrecovers from failures, and can be maintained by 10 engineers?'\n\n```\nInterview: 'Design a URL shortener (like bit.ly)'\n\nBad answer: 'I'd use a database with a table mapping short -> long URL.'\n\nGood answer structure:\n  1. Clarify requirements (read vs write ratio, geographic scale, SLA)\n  2. Estimate scale (QPS, storage, bandwidth)\n  3. High-level design (API, DB schema, core logic)\n  4. Deep dive (ID generation, caching, CDN, rate limiting)\n  5. Trade-offs discussed explicitly\n```\n\n---\n\n## The RESHADED Framework (System Design Interview Structure)\n\n```\nR - Requirements clarification\nE - Estimation (scale, storage, QPS)\nS - System interface (API design)\nH - High-level design\nA - Algorithm/Data design (core logic)\nD - Data store choice\nE - Extend (bottlenecks, improvements)\nD - Discussion of trade-offs\n```\n\n---\n\n## Scale Numbers to Memorise\n\n```\nLATENCY (approx):\n  L1 cache access:          0.5 ns\n  RAM access:               100 ns\n  SSD random read:          100 μs\n  Network (same DC):        500 μs\n  Network (cross-region):   50 ms\n  HDD seek:                 10 ms\n\nSTORAGE:\n  1 char / 1 byte\n  1KB = 1,000 bytes\n  1MB = 1,000 KB\n  1GB = 1,000 MB\n  1TB = 1,000 GB\n  10M users × 1KB profile = 10GB\n  1B tweets/day × 300 bytes = 300GB/day = ~100TB/year\n\nQPS BENCHMARKS (rough per single server):\n  MySQL (simple query):     ~1,000 QPS\n  Redis (GET):              ~100,000 QPS\n  Static file server:       ~10,000 QPS\n  Application server:       ~1,000-10,000 QPS\n\nCOMMON NUMBERS:\n  Twitter: 6,000 tweets/sec average, 150K peak\n  Facebook: 3B users, 500M posts/day\n  Netflix: 15% of world internet traffic\n```\n\n---\n\n## Case Study 1: URL Shortener (bit.ly)\n\n```\nREQUIREMENTS:\n  Functional: create short URL, redirect to original, optional expiry\n  Non-functional: low latency, high availability, no duplicates\n\nESTIMATION:\n  100M URLs created/day = 1160/sec writes\n  10B redirects/day = 115,000/sec reads\n  Read:Write ratio = 100:1 (read-heavy)\n  URL avg size: 200 bytes → 100M × 200 = 20GB/day storage\n  10 years: 73TB\n\nAPI:\n  POST /shorten { longUrl, customAlias?, expiresAt? } → { shortUrl }\n  GET  /{shortCode} → 301 Redirect to longUrl\n\nDB SCHEMA:\n  urls table:\n    short_code  CHAR(7)  PRIMARY KEY\n    long_url    TEXT     NOT NULL\n    user_id     BIGINT\n    created_at  TIMESTAMP\n    expires_at  TIMESTAMP\n    clicks      BIGINT DEFAULT 0\n\nSHORT CODE GENERATION:\n  Option 1: Hash (MD5 of longUrl, take first 7 chars)\n    Problem: collisions! 2 different URLs → same 7 chars occasionally\n    Fix: check DB, if collision increment counter suffix\n\n  Option 2: Auto-increment ID converted to Base62\n    ID 100 → Base62 = '1C'\n    Base62 = [a-z A-Z 0-9] = 62 chars\n    7 chars of Base62 = 62^7 = 3.5 trillion unique codes\n    Problem: predictable sequential IDs\n\n  Option 3: Distributed ID generator (Twitter Snowflake) → Base62\n    Best: unique, non-sequential, sortable by time\n\nSCALING:\n  Cache layer: Redis stores short_code → long_url\n    300K QPS: Redis handles this easily\n    Cache hit: ~0.5ms (no DB needed)\n    Cache miss rate: 1% (long tail of unique links)\n\n  301 vs 302 redirect:\n    301 (permanent): browser caches it, future visits don't hit your server\n              → lower server load but can't track clicks accurately\n    302 (temporary): every visit hits your server → accurate analytics\n```\n\n---\n\n## Case Study 2: Design Twitter/X Feed\n\n```\nREQUIREMENTS:\n  - Users follow other users\n  - Tweets appear in follower feeds (chronological or ranked)\n  - 300M users, 500M tweets/day\n\nTHE CORE TENSION: Fan-out on write vs Fan-out on read\n\nFAN-OUT ON WRITE (push model):\n  When Alice tweets, immediately write to ALL her followers' feed caches\n\n  Alice (10M followers) tweets:\n  → Write tweet to 10M feed caches simultaneously\n  Write amplification: 1 tweet × 10M followers = 10M writes\n\n  Read: just read pre-computed feed cache. Super fast.\n  Write: expensive if you're a celebrity with 10M followers\n\nFAN-OUT ON READ (pull model):\n  User opens feed, query: 'get tweets from all accounts I follow, sorted by time'\n\n  Read: JOIN tweets × follows. Slow for users following 1000 accounts.\n  Write: just write the one tweet. Simple.\n\nTWITTER'S HYBRID SOLUTION:\n  Normal users (< 1M followers): fan-out on write pre-compute\n  Celebrities (10M+ followers): fan-out on read at serving time\n  Merge at read: your feed = precomputed cache + real-time celebrity tweets\n\nSTORAGE:\n  Tweets: NoSQL (Cassandra) for high write throughput, chronological access\n  User graph (follows): Graph DB or adjacency list in Redis\n  Feed cache: Redis sorted set per user (score = tweet timestamp)\n              ZADD user:123:feed <timestamp> <tweet_id>\n              ZREVRANGE user:123:feed 0 99  ← get 100 latest\n```\n\n---\n\n## Case Study 3: Design a Chat System\n\n```\nREQUIREMENTS:\n  - 1:1 and group messaging\n  - Real-time delivery\n  - Message history\n  - Online status\n\nKEY TECHNICAL DECISION: How does the server PUSH messages to clients?\n\n  Option 1: Short polling — client asks 'new messages?' every 3 seconds\n    Cons: 3 second delay, wasted requests when no messages\n\n  Option 2: Long polling — client holds request open until message arrives\n    Not truly bidirectional\n\n  Option 3: WebSocket — persistent bidirectional connection\n    Perfect for chat — server pushes instantly, client sends instantly\n    WhatsApp, Slack, Discord — all use WebSockets\n\nARCHITECTURE:\n  Client <── WebSocket ──> Chat Server <──> Message Queue (Kafka)\n                                ↓\n                          DB (Cassandra)\n                                ↓\n                          Push notifications (APNS/FCM) for offline users\n\nGROUP CHAT FAN-OUT:\n  Alice sends to group of 1000 members:\n  → Kafka message read by fan-out service\n  → Deliver to each member's WebSocket server\n  → 999 members who are offline: push notification\n\nPRESENCE SYSTEM (online/offline status):\n  Heartbeat: client sends ping every 5 seconds\n  Server stores userId → lastSeen in Redis with 60s TTL\n  If TTL expires → user offline\n\nMESSAGE STORAGE (Cassandra):\n  PRIMARY KEY: (channel_id, message_id) — messages grouped by channel\n  Read: LIMIT 20 WHERE channel_id = ? ORDER BY message_id DESC\n  Cassandra designed for time-series append workloads — perfect match\n```\n\n---\n\n## Data Store Decision Matrix\n\n```\n+------------------------+----------------------------------+\n| Need                   | Use                              |\n+------------------------+----------------------------------+\n| Simple structured data | PostgreSQL / MySQL               |\n| High write throughput  | Cassandra / DynamoDB             |\n| Caching / sessions     | Redis                            |\n| Full-text search       | Elasticsearch                    |\n| Graph relationships    | Neo4j / Amazon Neptune           |\n| Object storage         | S3                               |\n| Time-series metrics    | InfluxDB / Prometheus            |\n| Queue / streaming      | Kafka / SQS / RabbitMQ          |\n+------------------------+----------------------------------+\n```\n\n---\n\n## Mind Map\n\n```\nSYSTEM DESIGN\n|\n+-- PROCESS\n|   +-- RESHADED framework\n|   +-- Clarify requirements first\n|   +-- Estimate scale (QPS, storage)\n|   +-- API design before DB\n|\n+-- SCALE\n|   +-- Read vs write ratio\n|   +-- Read-heavy -> cache\n|   +-- Write-heavy -> queue + async\n|   +-- Single server limits\n|\n+-- CASE STUDIES\n|   +-- URL Shortener: base62, Redis cache, 301 vs 302\n|   +-- Twitter Feed: fan-out on write vs read\n|   +-- Chat: WebSocket, Kafka, Cassandra\n|\n+-- DATA STORES\n    +-- SQL: structured, ACID\n    +-- Cassandra: high-write time-series\n    +-- Redis: cache + pub/sub\n    +-- Kafka: event streaming\n    +-- S3: object storage\n```\n\n---\n\n## References\n\n### Videos\n- **System Design Interview Course** by Alex Xu (author of System Design Interview book):\n  https://www.youtube.com/playlist?list=PLjTveVh7FakLdTmm42TMxbN8PvVn5g4KJ\n- **Designing Twitter/TikTok** by Gaurav Sen:\n  https://www.youtube.com/watch?v=wYk0xPP_P_8\n\n### Books & Articles\n- **System Design Interview (Vol 1)** by Alex Xu — best book on the topic\n- **Designing Data-Intensive Applications** by Martin Kleppmann — deep technical reference\n- **High Scalability blog**: http://highscalability.com/ — real architecture case studies\n\n### Practice\n- **ByteByteGo**: https://bytebytego.com — visual system design newsletter\n- **Excalidraw**: https://excalidraw.com — draw your architecture",
+  "questions": [
+    {
+      "id": "sd-q1",
+      "type": "mcq",
+      "prompt": "What is the first thing you should do in a system design interview?",
+      "choices": [
+        "Start drawing the architecture",
+        "Jump to choosing a database",
+        "Clarify functional and non-functional requirements — what the system must do and at what scale",
+        "Estimate storage immediately"
+      ],
+      "answerIndex": 2,
+      "explanation": "Requirements clarification prevents wasted work. You need to know: what features are required? What scale (users, QPS, storage)? What is the SLA? Only then can you design the right system.",
+      "tags": [
+        "system-design",
+        "process"
+      ]
+    },
+    {
+      "id": "sd-q2",
+      "type": "mcq",
+      "prompt": "A URL shortener has 100M creates/day and 10B redirects/day. What is the read:write ratio?",
+      "choices": [
+        "1:1",
+        "10:1",
+        "100:1",
+        "1000:1"
+      ],
+      "answerIndex": 2,
+      "explanation": "10B reads / 100M writes = 100:1 read-heavy. This immediately tells you: optimise for reads. Add caching (Redis). Use CDN. A read-heavy system should cache aggressively at every layer.",
+      "tags": [
+        "estimation",
+        "read-write-ratio"
+      ]
+    },
+    {
+      "id": "sd-q3",
+      "type": "mcq",
+      "prompt": "Why use Base62 encoding for short URL codes?",
+      "choices": [
+        "Base62 is more secure than Base64",
+        "62 characters (a-z, A-Z, 0-9) allows short but unique codes. 7 chars = 62^7 ≈ 3.5 trillion unique codes without special URL characters",
+        "Base62 compresses better",
+        "Required by HTTP"
+      ],
+      "answerIndex": 1,
+      "explanation": "Base62 avoids special characters (+, /) that can cause URL encoding issues. 7 chars gives 3.5 trillion codes — enough for any realistic URL shortener. Numeric IDs converted to Base62 are human-readable and short.",
+      "tags": [
+        "url-shortener",
+        "encoding"
+      ]
+    },
+    {
+      "id": "sd-q4",
+      "type": "mcq",
+      "prompt": "For the Twitter feed, what is 'fan-out on write'?",
+      "choices": [
+        "Writing to multiple databases simultaneously",
+        "When a tweet is posted, immediately writing it to the feed caches of all followers — pre-computing feeds at write time for fast read",
+        "Writing fan-out notifications",
+        "Fan-out is HTTP multiplexing"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fan-out on write: 1 tweet → N writes (one per follower). Reads are instant (just read pre-computed cache). Problem: celebrities with 10M followers cause 10M writes per tweet. Twitter uses this for normal users, switches to fan-out on read for celebrities.",
+      "tags": [
+        "twitter",
+        "fan-out",
+        "system-design"
+      ]
+    },
+    {
+      "id": "sd-q5",
+      "type": "mcq",
+      "prompt": "Why is WebSocket preferred over long polling for a chat application?",
+      "choices": [
+        "WebSocket uses less memory",
+        "WebSocket is encrypted",
+        "WebSocket provides true bidirectional persistent connection — server pushes messages instantly, lower latency than polling, no repeated HTTP overhead",
+        "WebSocket works without authentication"
+      ],
+      "answerIndex": 2,
+      "explanation": "Long polling: client opens request, server holds it open until message arrives, then client must immediately open a new request. WebSocket: single persistent connection, server pushes any time, no overhead per message. True real-time.",
+      "tags": [
+        "websocket",
+        "chat",
+        "real-time"
+      ]
+    },
+    {
+      "id": "sd-q6",
+      "type": "mcq",
+      "prompt": "What does the CAP theorem state?",
+      "choices": [
+        "A distributed system can achieve Consistency, Availability, and Partition tolerance simultaneously",
+        "A distributed system can guarantee at most TWO of: Consistency, Availability, Partition tolerance. During a network partition, choose between consistency or availability.",
+        "CAP applies only to SQL databases",
+        "CAP only matters for more than 3 nodes"
+      ],
+      "answerIndex": 1,
+      "explanation": "Network partitions happen. When they do: CP systems (Cassandra configured for consistency) reject writes rather than risk inconsistency. AP systems (Cassandra default) accept writes, risk stale reads. No system achieves all 3 during partition.",
+      "tags": [
+        "cap-theorem",
+        "distributed"
+      ]
+    },
+    {
+      "id": "sd-q7",
+      "type": "mcq",
+      "prompt": "What is a CDN and when should you use it?",
+      "choices": [
+        "Content Delivery Network — caches static assets at edge servers worldwide, serving users from nearest location — reduces latency and origin server load for static content",
+        "CDN is a type of database",
+        "CDN only works for video",
+        "CDN replaces the backend server"
+      ],
+      "answerIndex": 0,
+      "explanation": "CDN: edge servers distributed globally. User in Tokyo gets images from a Tokyo edge server (10ms) instead of your US origin server (200ms). Use for: static assets, images, video, even API responses that can be cached. Reduces origin load significantly.",
+      "tags": [
+        "cdn",
+        "caching",
+        "latency"
+      ]
+    },
+    {
+      "id": "sd-q8",
+      "type": "mcq",
+      "prompt": "A Cassandra table uses (channel_id, message_id) as composite primary key. What access pattern does this optimise?",
+      "choices": [
+        "Full table scan of all messages",
+        "Fetching recent messages for a specific channel in order — messages are physically stored together per channel, sorted by message_id",
+        "Random single-message lookup",
+        "Cross-channel queries"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cassandra stores rows with same partition key (channel_id) together on disk. Reading 100 latest messages for channel 42 is a sequential read on the same partition — very fast. This is why Cassandra excels at time-series and append workloads.",
+      "tags": [
+        "cassandra",
+        "data-modeling",
+        "chat"
+      ]
+    },
+    {
+      "id": "sd-q9",
+      "type": "mcq",
+      "prompt": "301 vs 302 redirect for a URL shortener — what is the key trade-off?",
+      "choices": [
+        "301 is HTTP/1.1 only",
+        "301 (Permanent): browser caches and never hits your server again — saves load but loses click analytics. 302 (Temporary): browser always hits your server — accurate analytics but more load.",
+        "302 is faster",
+        "They behave identically for users"
+      ],
+      "answerIndex": 1,
+      "explanation": "301: browser caches the redirect permanently. Subsequent visits go directly to longUrl — no analytics, massive load reduction. 302: every visit hits your redirector — accurate click tracking, more load. Choose based on requirements: analytics vs scalability.",
+      "tags": [
+        "url-shortener",
+        "http",
+        "trade-offs"
+      ]
+    },
+    {
+      "id": "sd-q10",
+      "type": "mcq",
+      "prompt": "In the Twitter hybrid approach, how are celebrity tweets (10M+ followers) handled differently?",
+      "choices": [
+        "Celebrity tweets are deleted faster",
+        "Celebrity tweets use fan-out on read — served directly from the celebrity's tweet cache at read time rather than pre-computed into 10M follower feeds",
+        "Celebrity accounts disabled fan-out",
+        "Celebrity tweets are compressed"
+      ],
+      "answerIndex": 1,
+      "explanation": "Writing to 10M feeds per tweet (Beyoncé has 25M followers) = 25M DB writes for one tweet. Twitter avoids this by keeping celebrity tweets separately and merging them into your feed at read time — hybrid approach balancing write and read cost.",
+      "tags": [
+        "twitter",
+        "fan-out",
+        "celebrity"
+      ]
+    },
+    {
+      "id": "sd-q11",
+      "type": "mcq",
+      "prompt": "You need to store 500 million user events per day with high write throughput and time-based queries. Best database choice?",
+      "choices": [
+        "MySQL with indexes",
+        "Cassandra or DynamoDB — designed for high write throughput and partition-key-based time-series queries at scale",
+        "MongoDB",
+        "PostgreSQL with partitioning"
+      ],
+      "answerIndex": 1,
+      "explanation": "500M writes/day = ~5800 writes/sec. MySQL single server handles ~1000 QPS. Cassandra is designed for this: linear horizontal scaling, optimised for append-heavy time-series, handles millions of writes/sec across nodes.",
+      "tags": [
+        "database-choice",
+        "cassandra",
+        "scale"
+      ]
+    },
+    {
+      "id": "sd-q12",
+      "type": "mcq",
+      "prompt": "What is a message queue's role in system design?",
+      "choices": [
+        "Replaces the database",
+        "Acts as a buffer between producers and consumers — decouples services, absorbs traffic spikes, enables async processing, guarantees delivery even if consumer is temporarily down",
+        "Caches API responses",
+        "Handles authentication"
+      ],
+      "answerIndex": 1,
+      "explanation": "Queue = async decoupling. User places order → order service writes to queue and returns immediately. Payment, email, inventory services consume at their own pace. If email service is down, messages wait. Queue absorbs Black Friday spikes gracefully.",
+      "tags": [
+        "message-queue",
+        "decoupling"
+      ]
+    },
+    {
+      "id": "sd-q13",
+      "type": "mcq",
+      "prompt": "In a presence system (online/offline status), a user sends heartbeat pings every 5 seconds. The Redis key has 60s TTL. What is the offline detection delay?",
+      "choices": [
+        "5 seconds",
+        "Up to 60 seconds — the key expires 60 seconds after last heartbeat, so user offline detection lag is 60s",
+        "Immediate",
+        "10 seconds"
+      ],
+      "answerIndex": 1,
+      "explanation": "Each heartbeat refreshes the Redis TTL. If user disconnects, no more heartbeats, TTL starts counting down. After 60s with no heartbeat, key expires = user marked offline. Trade-off: shorter TTL = faster detection but more Redis writes from heartbeats.",
+      "tags": [
+        "presence",
+        "redis",
+        "chat"
+      ]
+    },
+    {
+      "id": "sd-q14",
+      "type": "mcq",
+      "prompt": "When estimating a system, Twitter has 300M users, 20% post daily, average 3 tweets each. What is tweets/day?",
+      "choices": [
+        "300M",
+        "60M",
+        "18M",
+        "180M"
+      ],
+      "answerIndex": 3,
+      "explanation": "300M × 20% = 60M daily active tweeters. 60M × 3 = 180M tweets/day. This estimation approach (DAU × action rate × size) is the foundation of capacity planning. Know it cold.",
+      "tags": [
+        "estimation",
+        "back-of-envelope"
+      ]
+    },
+    {
+      "id": "sd-q15",
+      "type": "mcq",
+      "prompt": "What is the primary advantage of consistent hashing for distributed caches?",
+      "choices": [
+        "Alphabetical key distribution",
+        "When adding/removing cache nodes, only K/N keys need to be remapped (where K=keys, N=nodes) instead of all keys — minimises cache invalidation",
+        "Consistent hashing encrypts keys",
+        "Better for small clusters"
+      ],
+      "answerIndex": 1,
+      "explanation": "Regular modulo hashing: add 1 node = remap ~all keys. Consistent hashing: nodes and keys on a ring. Add node = only keys between it and its predecessor remap (~1/N of all keys). Critical for large distributed caches.",
+      "tags": [
+        "consistent-hashing",
+        "caching",
+        "distributed"
+      ]
+    },
+    {
+      "id": "sd-q16",
+      "type": "mcq",
+      "prompt": "Redis ZADD and ZREVRANGE operations: how does Twitter use them for feeds?",
+      "choices": [
+        "Redis stores tweets as strings",
+        "ZADD user:123:feed <timestamp> <tweet_id> adds tweets to a sorted set. ZREVRANGE user:123:feed 0 99 returns 100 latest tweet IDs sorted by timestamp — O(log N) insert, O(log N + M) range query",
+        "Redis stores the full tweet content",
+        "ZADD is for counters only"
+      ],
+      "answerIndex": 1,
+      "explanation": "Redis sorted set: members (tweet IDs) with scores (timestamps). ZADD inserts in O(log N). ZREVRANGE reads top 100 in order in O(log N + 100). Feed = just read the tweet IDs, then fetch tweet content from tweet service. Fast, scalable.",
+      "tags": [
+        "redis",
+        "twitter",
+        "feed"
+      ]
+    },
+    {
+      "id": "sd-q17",
+      "type": "multi",
+      "prompt": "Which factors determine whether to use SQL vs NoSQL? (Select all that apply)",
+      "choices": [
+        "Whether data has relationships and ACID requirements (SQL better)",
+        "Expected write throughput (very high write = NoSQL advantage)",
+        "Whether you need flexible schema (NoSQL)",
+        "NoSQL is always faster"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "SQL: structured data, relationships, ACID, complex queries. NoSQL: flexible schema, horizontal scale, high write throughput, simple access patterns. NoSQL is not always faster — for complex joins, SQL with indexes beats NoSQL.",
+      "tags": [
+        "database-choice",
+        "sql",
+        "nosql"
+      ]
+    },
+    {
+      "id": "sd-q18",
+      "type": "mcq",
+      "prompt": "What is database connection pooling and why is it important?",
+      "choices": [
+        "Storing query results in memory",
+        "Maintaining a pool of pre-established database connections that are reused — eliminates connection setup overhead (3-way TCP + auth) on every request, prevents connection storms",
+        "Replicating the database",
+        "Sharding connections"
+      ],
+      "answerIndex": 1,
+      "explanation": "Creating a DB connection costs 20-100ms (TCP handshake + auth). Without pooling: 1000 concurrent requests = 1000 new connections = 100 seconds of overhead. With pooling: 20 connections reused. Most ORMs (Spring Data, SQLAlchemy) pool by default.",
+      "tags": [
+        "database",
+        "connection-pool",
+        "performance"
+      ]
+    },
+    {
+      "id": "sd-q19",
+      "type": "mcq",
+      "prompt": "Why use an ID generator (like Twitter Snowflake) instead of auto-increment for a distributed URL shortener?",
+      "choices": [
+        "Auto-increment works fine in distributed systems",
+        "Auto-increment requires a coordinating DB node that becomes a bottleneck. Snowflake IDs: generated locally by each server, globally unique, time-sortable, no coordination needed",
+        "Snowflake IDs are shorter",
+        "Auto-increment is not supported in NoSQL"
+      ],
+      "answerIndex": 1,
+      "explanation": "Auto-increment in MySQL: single sequence generator = every write must go to this node. Single point of failure + bottleneck at scale. Snowflake: 64-bit ID = timestamp(41) + datacenter(5) + worker(5) + sequence(12). Each server generates unique IDs independently.",
+      "tags": [
+        "id-generation",
+        "distributed",
+        "url-shortener"
+      ]
+    },
+    {
+      "id": "sd-q20",
+      "type": "mcq",
+      "prompt": "In the RESHADED framework, what comes after requirements clarification?",
+      "choices": [
+        "High-level design",
+        "Algorithm choice",
+        "Estimation — estimate scale: QPS, storage, bandwidth, number of servers needed",
+        "Database choice"
+      ],
+      "answerIndex": 2,
+      "explanation": "Estimation immediately follows requirements. It forces you to think about scale and shapes every design decision. 100 QPS? One server. 1M QPS? Caching, sharding, CDN. Interviewer wants to see you can back-of-envelope any system.",
+      "tags": [
+        "system-design",
+        "process",
+        "estimation"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "sd-fc1",
+      "front": "RESHADED framework",
+      "back": "Requirements → Estimation → System interface (API) → High-level design → Algorithm/data → Data store → Extend (bottlenecks) → Discussion. Use this order in every system design interview to show structured thinking.",
+      "tags": [
+        "system-design",
+        "interview"
+      ]
+    },
+    {
+      "id": "sd-fc2",
+      "front": "URL Shortener — core choices",
+      "back": "ID gen: Base62(Snowflake ID) = 7-char unique code. DB: MySQL for structured data. Cache: Redis short→long for reads. 301 vs 302: 302 for analytics, 301 for scale. Cache hit rate target: 99% (20% of URLs = 80% of traffic).",
+      "tags": [
+        "url-shortener"
+      ]
+    },
+    {
+      "id": "sd-fc3",
+      "front": "Fan-out on write vs read",
+      "back": "Write: push tweet to all followers' feeds. Fast read, expensive write for celebrities. Read: compute feed at request time. Slow read, cheap write. Hybrid: write for normal users, read for celebrities. Twitter uses hybrid.",
+      "tags": [
+        "twitter",
+        "fan-out"
+      ]
+    },
+    {
+      "id": "sd-fc4",
+      "front": "Chat system — key choices",
+      "back": "Transport: WebSocket (persistent bidirectional). Storage: Cassandra (channel_id partition, message_id clustering). Scale: Kafka fan-out for group messages. Presence: Redis TTL heartbeat. Offline: push notifications (APNS/FCM).",
+      "tags": [
+        "chat",
+        "websocket",
+        "cassandra"
+      ]
+    },
+    {
+      "id": "sd-fc5",
+      "front": "Back-of-envelope estimation",
+      "back": "RAM: 100ns. SSD: 100μs. Network same-DC: 500μs. Cross-region: 50ms. MySQL: 1K QPS. Redis: 100K QPS. Calculate: users × DAU% × actions/day = QPS. Add 3x safety buffer.",
+      "tags": [
+        "estimation",
+        "latency"
+      ]
+    },
+    {
+      "id": "sd-fc6",
+      "front": "Database selection matrix",
+      "back": "Structured + ACID = PostgreSQL. High write throughput = Cassandra/DynamoDB. Cache = Redis. Search = Elasticsearch. Graph = Neo4j. Object storage = S3. Queue = Kafka/SQS. Don't default to MySQL for everything.",
+      "tags": [
+        "database-choice"
+      ]
+    },
+    {
+      "id": "sd-fc7",
+      "front": "CAP theorem in practice",
+      "back": "Can't have all 3 (Consistency, Availability, Partition-tolerance) during a network partition. CP: reject writes to stay consistent (banking). AP: accept writes, risk stale reads (social feeds). Choose based on business requirements.",
+      "tags": [
+        "cap-theorem",
+        "distributed"
+      ]
+    },
+    {
+      "id": "sd-fc8",
+      "front": "Read vs write heavy systems",
+      "back": "Read-heavy (URL shortener 100:1): add caching layers, CDN, read replicas. Write-heavy (event logging): async queues (Kafka), NoSQL DB, append-only. Determine ratio in estimation step — it drives architecture.",
+      "tags": [
+        "read-write-ratio",
+        "caching"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "Design a rate limiter for a public API (like GitHub API or Twitter API). Requirements: limit each API key to 1000 requests per hour. Works across multiple API server instances. Returns 429 Too Many Requests with Retry-After header. Supports burst (momentary spikes allowed) via token bucket algorithm. Storage? Algorithm? What happens if rate limit store is down?",
+    "checklist": [
+      {
+        "id": "sd1",
+        "text": "Algorithm: Token Bucket — bucket fills at fixed rate, each request consumes a token. Allows bursts up to bucket capacity.",
+        "weight": 20
+      },
+      {
+        "id": "sd2",
+        "text": "Storage: Redis with atomic operations (INCR + EXPIRE or Lua script). Redis sorted set for sliding window alternative.",
+        "weight": 20
+      },
+      {
+        "id": "sd3",
+        "text": "Distributed: Redis shared across all API servers — each server queries same Redis key. Alternative: consistent hashing per API key to specific server.",
+        "weight": 20
+      },
+      {
+        "id": "sd4",
+        "text": "Response: 429 with headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After.",
+        "weight": 20
+      },
+      {
+        "id": "sd5",
+        "text": "Fallback: if Redis is down, fail open (allow traffic) or fail closed (block all). Documented trade-off.",
+        "weight": 20
+      }
+    ],
+    "hints": [
+      "Redis INCR is atomic. Use: INCR key, if result == 1 then EXPIRE key 3600. Handles distributed counter atomically.",
+      "Sliding window with Redis sorted set: ZADD key timestamp requestId, ZREMRANGEBYSCORE cleanup, ZCARD = count in window.",
+      "Token bucket in Redis: store {tokens, lastRefillTime} per key. Lua script atomically refills and decrements."
+    ]
+  }
+}

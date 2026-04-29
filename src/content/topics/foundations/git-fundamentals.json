@@ -1,0 +1,508 @@
+{
+  "id": "git-fundamentals",
+  "unit": 1,
+  "order": 2,
+  "title": "Git Fundamentals",
+  "summary": "Understand Git's three-tree model, branching strategies, merge vs rebase, and how teams collaborate without stepping on each other.",
+  "prereqs": [
+    "linux-essentials"
+  ],
+  "guide": "# Git Fundamentals\n\n## What Even Is Git? (No Prior Knowledge Assumed)\n\nImagine you are writing a long essay and you save it as `essay.docx`.\nThen you make changes and save again. Now you want to go back to yesterday's version —\nbut you only have one file. You are stuck.\n\nNow imagine every time you save, you take a **snapshot** of the entire project,\nlabel it with a message like 'added introduction', and can jump back to ANY\nprevious snapshot at any time. That is exactly what Git does.\n\nGit is a **version control system** — software that tracks every change you make\nto your code files, so you can:\n- Go back to any previous version\n- See exactly what changed and who changed it\n- Work on new features without breaking the working version\n- Collaborate with a team without overwriting each other's work\n\n**Git vs GitHub — they are NOT the same thing:**\n```\nGit     = the tool on your computer that tracks changes\nGitHub  = a website that hosts your Git repositories online\n          (like Google Drive, but for code with Git superpowers)\n\nOther hosting sites: GitLab, Bitbucket — all use Git underneath\n```\n\n---\n\n## Installing Git and First-Time Setup\n\n```bash\n# Check if Git is already installed\ngit --version\n# Output: git version 2.43.0\n\n# Install on Ubuntu/Debian\nsudo apt install git\n\n# Install on macOS\nbrew install git\n\n# REQUIRED: tell Git who you are (stored in every commit)\ngit config --global user.name \"Alice Smith\"\ngit config --global user.email \"alice@example.com\"\n\n# Set VS Code as default editor (optional but nice)\ngit config --global core.editor \"code --wait\"\n\n# See all your config\ngit config --list\n```\n\nWhy set name and email? Every commit you make gets stamped with this info.\nYour teammates see 'Alice Smith committed: fixed login bug' — not just a random hash.\n\n---\n\n## The Three Areas — The Most Important Mental Model\n\nGit manages your project through three distinct areas. Understanding this\neliminates 80% of Git confusion.\n\n```\n  WORKING TREE          STAGING AREA           REPOSITORY\n  (your files)          (the index)            (.git folder)\n\n  what you see          what you are           permanent\n  and edit today        about to commit        history\n\n  essay.txt             [essay.txt v2]         commit abc123\n  style.css             [style.css v3]         commit def456\n  app.js                                       commit ghi789\n\n     |                       |                       |\n     |------ git add ------->|                       |\n     |                       |--- git commit ------->|\n     |<------ git restore ---|                       |\n     |<------ git checkout ---------------------------\n```\n\n**Analogy — the photographer:**\n- **Working Tree** = the scene in front of you (messy, in progress)\n- **Staging Area** = you are choosing which subjects to include in the photo\n- **Repository** = the photo album (permanent snapshots, never deleted)\n\nYou stage only the changes relevant to one logical unit of work,\nthen commit them. This gives you a clean, meaningful history.\n\n---\n\n## Your First Repository — Step by Step\n\n```bash\n# OPTION A: Start fresh\nmkdir my-project\ncd my-project\ngit init\n# Git creates a hidden .git/ folder — this IS the repository\n# Output: Initialized empty Git repository in /my-project/.git/\n\n# OPTION B: Download an existing project from GitHub\ngit clone https://github.com/someuser/some-repo.git\ncd some-repo\n# You now have a full copy with all history\n```\n\n---\n\n## The Core Daily Workflow\n\nThis is what you will do dozens of times per day:\n\n```bash\n# STEP 1: Check what is going on\ngit status\n# Shows:\n# - Which files changed (red = unstaged, green = staged)\n# - Which files are new (untracked)\n# - Which branch you are on\n\n# STEP 2: See the actual changes (the diff)\ngit diff             # unstaged changes (working tree vs staging area)\ngit diff --staged    # staged changes (staging area vs last commit)\n\n# STEP 3: Stage the changes you want to commit\ngit add filename.txt    # stage one specific file\ngit add src/           # stage everything inside src/ folder\ngit add .              # stage EVERYTHING changed in this directory\ngit add -p             # interactive: stage specific chunks/lines (powerful!)\n\n# STEP 4: Commit with a clear message\ngit commit -m \"feat: add user login endpoint\"\n# The message is permanent — make it descriptive!\n\n# STEP 5: Push to remote (GitHub/GitLab/etc.)\ngit push origin main\n# origin = the name of the remote (GitHub)\n# main   = the branch name\n\n# GETTING latest changes from remote\ngit pull             # fetch + merge in one step\ngit fetch            # only download, do not merge yet\ngit pull --rebase    # fetch + rebase instead of merge (cleaner)\n```\n\n**What makes a good commit message?**\n```\nBad:  'changes'  'fix'  'wip'  'asdf'\nGood: 'feat: add password reset email flow'\n      'fix: null pointer in UserService.findById()'\n      'chore: upgrade spring-boot to 3.2.1'\n      'docs: add API endpoint documentation'\n\nConvention: <type>: <short summary>\nTypes: feat, fix, chore, docs, refactor, test, style\n```\n\n---\n\n## Branches — Working in Parallel\n\nA branch is just a **lightweight pointer** to a specific commit.\nCreating one is instant and costs almost nothing.\n\n```\nmain branch:\n  A --- B --- C          <- production code, always working\n               \\\nfeature/login:  D --- E  <- your new feature, in progress\n                         <- nobody else is affected until you merge\n```\n\n```bash\ngit branch                    # list all branches (* = current)\ngit branch feature/login      # create a new branch (does NOT switch to it)\ngit checkout feature/login    # switch to a branch\ngit checkout -b feature/login # create AND switch in one command (shortcut)\ngit switch feature/login      # newer Git 2.23+ syntax for checkout\ngit switch -c feature/login   # create + switch (newer syntax)\n\n# When feature is done: merge it back\ngit checkout main\ngit merge feature/login\n\n# Clean up the branch after merging\ngit branch -d feature/login   # delete local branch\ngit push origin --delete feature/login  # delete remote branch\n```\n\n**Real-world scenario:** Three developers on one team:\n```\nAlice  creates: feature/payment-gateway\nBob    creates: feature/email-notifications\nCharlie creates: fix/login-timeout-bug\n\nAll three branch FROM main.\nEach works independently — no interference.\nEach opens a Pull Request when done.\nCode review happens. Approved? Merge to main.\nYour CI/CD pipeline runs tests on every PR automatically.\n```\n\n---\n\n## Merge vs Rebase — Explained Simply\n\nBoth combine changes from one branch into another. The difference is HOW.\n\n**Merge** — joins two branches, creates a merge commit:\n```\nBefore:\n  main:    A --- B --- C\n                \\\n  feature:  D --- E\n\nAfter: git checkout main && git merge feature\n  main:    A --- B --- C --- M   (M = merge commit)\n                \\           /\n  feature:  D --- E ---------\n\nHistory shows exactly WHEN branches met. Non-destructive.\n```\n\n**Rebase** — replays your commits on top of another branch:\n```\nBefore:\n  main:    A --- B --- C\n                \\\n  feature:  D --- E\n\nAfter: git checkout feature && git rebase main\n  main:    A --- B --- C\n                       \\\n  feature:              D' --- E'  (rewritten commits)\n\nLinear history! D and E are rewritten with new hashes.\n```\n\n**When to use each:**\n```\nMerge:  merging feature branches into main (shows the full picture)\nRebase: updating your feature branch with latest main changes (local only)\n\nGOLDEN RULE: Never rebase commits that others have already pulled.\nRebase rewrites history. If Bob has your old commits, his branch\nwill diverge and everything gets messy.\n```\n\n---\n\n## Undoing Mistakes\n\nGit's safety net — every mistake is recoverable (mostly).\n\n```bash\n# UNDO UNSTAGED CHANGES (working tree)\ngit restore filename.txt     # throw away changes to one file\ngit restore .                # throw away ALL unstaged changes (careful!)\n\n# UNDO STAGED CHANGES (move back to working tree)\ngit restore --staged filename.txt  # unstage a file\n\n# UNDO LAST COMMIT (but keep the changes)\ngit reset --soft HEAD~1\n# HEAD~1 means 'one commit before current'\n# Changes go back to staging area — you can re-commit differently\n\n# UNDO LAST COMMIT AND DISCARD CHANGES (nuclear option)\ngit reset --hard HEAD~1\n# WARNING: changes are gone from working tree too. No undo for this!\n\n# SAFE UNDO for shared branches: create an 'anti-commit'\ngit revert abc1234\n# Creates a NEW commit that reverses the changes of abc1234\n# Safe because it does NOT rewrite history\n\n# FIX YOUR LAST COMMIT (before pushing)\ngit commit --amend -m 'corrected message'\n# Or: add a forgotten file, then amend:\ngit add forgotten-file.txt\ngit commit --amend --no-edit\n```\n\n```\nDecision tree for undoing:\n\nDid I push yet?\n  NO:\n    Unstaged change  --> git restore filename\n    Staged change    --> git restore --staged filename\n    Wrong commit msg --> git commit --amend\n    Undo last commit --> git reset --soft HEAD~1\n  YES (already pushed to shared branch):\n    ALWAYS use git revert (never reset on shared branches!)\n```\n\n---\n\n## Stashing — Saving Work in Progress\n\nYou are in the middle of a feature and your boss says 'urgent bug fix needed now!'.\nYou cannot commit half-done work. Stash saves it temporarily.\n\n```bash\ngit stash             # save all uncommitted changes to a hidden stack\n                      # working tree becomes clean again\n\ngit stash list        # see all saved stashes\n# stash@{0}: WIP on feature/login: abc123 half-done auth logic\n\ngit stash pop         # restore the most recent stash and remove it\ngit stash apply       # restore without removing (keeps it in list)\n\ngit stash push -m 'half-done payment logic'  # stash with a label\ngit stash drop stash@{0}                      # delete a specific stash\n```\n\n---\n\n## Viewing History\n\n```bash\ngit log                        # full commit history\ngit log --oneline              # compact: one line per commit\ngit log --oneline --graph --all # ASCII graph of all branches\ngit log -5                     # last 5 commits only\ngit log --author 'Alice'       # commits by Alice\ngit log --since '2 weeks ago'  # commits from last 2 weeks\ngit log -- filename.txt        # commits that touched filename.txt\n\n# See what changed in a specific commit\ngit show abc1234\n\n# Who wrote each line of a file?\ngit blame src/UserService.java\n# Output: each line prefixed with: hash (author date) line-number | code\n\n# Find which commit introduced a bug (binary search!)\ngit bisect start\ngit bisect bad         # current commit is broken\ngit bisect good v1.0   # v1.0 was fine\n# Git checks out the mid-point commit, you test it\ngit bisect good/bad    # tell Git the result, repeat\n# Git narrows down to the exact breaking commit\ngit bisect reset       # exit bisect mode\n```\n\n---\n\n## .gitignore — What NOT to Track\n\nSome files should NEVER go into Git: build output, IDE configs, secrets.\n\n```\n# Create a .gitignore file in your project root:\n\n# Java build output\ntarget/\n*.class\n*.jar\n\n# Secrets — CRITICAL: never commit these!\n.env\napplication-secrets.yml\n*.pem\ncredentials.json\n\n# IDE files\n.idea/\n*.iml\n.vscode/\n\n# macOS\n.DS_Store\n\n# Node.js\nnode_modules/\n```\n\n**CRITICAL MISTAKE — Committed a Secret:**\n```\nScenario: You committed an AWS API key in application.properties\nEven if you delete it in the next commit, it is still in git history.\nAnyone who clones the repo can find it with: git log -p\n\nSolution:\n1. Immediately rotate/revoke the key (make the leaked key useless)\n2. Use BFG Repo Cleaner to remove it from history:\n   java -jar bfg.jar --delete-files application.properties\n3. Force-push the rewritten history\n4. Add the file to .gitignore\n```\n\n---\n\n## GitHub Flow — The Standard Team Workflow\n\n```\n1. Branch off main\n   git checkout -b feature/my-feature\n\n2. Commit your work\n   (many small commits with clear messages)\n\n3. Push to GitHub\n   git push origin feature/my-feature\n\n4. Open a Pull Request (PR) on GitHub\n   - Describe what you did and why\n   - Tag reviewers\n\n5. Code review\n   - Teammates comment on specific lines\n   - You push fixes as new commits\n\n6. CI/CD runs automated tests on your branch\n   - Must pass before merge\n\n7. Merge to main (squash-merge = one clean commit)\n\n8. Deploy (auto-triggered from main)\n\n9. Delete the feature branch\n```\n\n---\n\n## Remote Repositories\n\n```bash\ngit remote -v                         # see all remotes and their URLs\ngit remote add origin https://github.com/user/repo.git  # add a remote\ngit remote set-url origin <new-url>   # change remote URL\n\ngit push -u origin main               # push and set upstream (first time)\n                                       # -u = --set-upstream\ngit push                               # after -u is set, just this\ngit push --force-with-lease            # force push safely (checks nobody else pushed)\n\n# Work with forks (common in open source)\ngit remote add upstream https://github.com/original/repo.git\ngit fetch upstream\ngit merge upstream/main               # sync your fork with original\n```\n\n---\n\n## Detached HEAD — What It Means\n\n```\nNormally, HEAD points to a branch name:\n  HEAD -> main -> commit abc123\n\nDetached HEAD: HEAD points directly to a commit hash:\n  HEAD -> commit abc123   (no branch!)\n\nHow you get here:\n  git checkout abc1234   (checking out a specific old commit)\n  git checkout v1.2.3    (checking out a tag)\n\nWhat it means:\n  You can look around and experiment.\n  Any new commits you make are NOT connected to any branch.\n  If you switch away, those commits become unreachable (lost!).\n\nHow to save work done in detached HEAD:\n  git checkout -b my-experiment   <- creates a branch HERE\n  Now your commits are safe on 'my-experiment' branch.\n```\n\n---\n\n## Mind Map — Everything at a Glance\n\n```\nGIT FUNDAMENTALS\n|\n+-- THREE AREAS\n|   +-- Working Tree (your files)\n|   +-- Staging Area (git add)\n|   +-- Repository   (git commit)\n|\n+-- CORE WORKFLOW\n|   +-- git status    (what changed?)\n|   +-- git add       (stage changes)\n|   +-- git commit    (save snapshot)\n|   +-- git push      (upload to remote)\n|   +-- git pull      (download + merge)\n|\n+-- BRANCHES\n|   +-- git checkout -b (create + switch)\n|   +-- git merge       (join branches)\n|   +-- git rebase      (linearize history)\n|   +-- Pull Requests   (code review flow)\n|\n+-- UNDOING\n|   +-- git restore      (discard changes)\n|   +-- git reset --soft (undo commit, keep changes)\n|   +-- git reset --hard (undo + discard)\n|   +-- git revert       (safe undo for shared branches)\n|   +-- git commit --amend (fix last commit)\n|\n+-- UTILITIES\n|   +-- git stash         (save WIP temporarily)\n|   +-- git log --graph   (visual history)\n|   +-- git blame         (who wrote this line?)\n|   +-- git bisect        (find breaking commit)\n|   +-- .gitignore        (exclude files)\n|\n+-- REMOTES\n    +-- origin            (your GitHub fork/repo)\n    +-- upstream          (original repo)\n    +-- git push/pull/fetch\n```\n\n---\n\n## How Git Connects to Other Topics\n\n- **CI/CD Pipelines**: Every git push triggers your pipeline. Branch strategy\n  defines deployment flow. Merging to main = auto-deploy to production.\n- **Docker**: Images are often tagged with git commit hashes (`image:abc1234`).\n  Dockerfiles live in the git repo.\n- **Linux**: You run all git commands from the bash terminal.\n  Bash scripting skills help automate git workflows.\n- **Code Review / PRs**: GitHub, GitLab, Bitbucket are all built on top of Git.\n\n---\n\n## Common Beginner Mistakes\n\n1. **Committing directly to main** — always branch. main should only receive merges.\n2. **Vague commit messages** — 'fix stuff' is useless. Future-you will hate present-you.\n3. **git add .** always — review what you stage. Use `git status` first.\n4. **Committing .env or secrets** — add to .gitignore BEFORE first commit.\n5. **git reset --hard on shared branches** — destroys history others have pulled.\n   Use `git revert` instead.\n6. **Not pulling before pushing** — leads to rejected pushes. Always `git pull` first.\n7. **Rebase on shared branches** — rewrites history others depend on. Chaos ensues.\n\n---\n\n## References and Further Learning\n\n### Videos (Watch These!)\n- **Git and GitHub for Beginners - Crash Course** by freeCodeCamp:\n  https://www.youtube.com/watch?v=RGOj5yH7evk\n  - 1 hour. Covers everything from init to pull requests. Best starting point.\n- **13 Advanced Git Tips and Tricks** by Fireship:\n  https://www.youtube.com/watch?v=ecK3EnyGD8o\n  - 8 minutes. Fast-paced demos of stash, bisect, reflog, and more.\n\n### Free Books and Articles\n- **Pro Git Book** (official, free, complete): https://git-scm.com/book\n  - The definitive Git reference. Chapters 1-3 are essential for beginners.\n- **Oh Shit, Git!** (common mistakes and how to fix them): https://ohshitgit.com/\n  - Bookmark this. When you mess up (you will), this has the exact fix.\n\n### Diagrams and Cheatsheets\n- **Git Visual Cheatsheet**: https://ndpsoftware.com/git-cheatsheet.html\n  - Interactive diagram showing how commands move changes between the three areas.\n- **GitHub Git Cheatsheet** (PDF): https://education.github.com/git-cheat-sheet-education.pdf\n\n### Practice\n- **Learn Git Branching** (visual interactive): https://learngitbranching.js.org/\n  - Best interactive Git tutorial. Visualizes branches as you type commands.\n- **GitHub Skills**: https://skills.github.com/\n  - Hands-on courses directly in GitHub repos.",
+  "questions": [
+    {
+      "id": "git-q1",
+      "type": "mcq",
+      "prompt": "What is the Git index (staging area)?",
+      "choices": [
+        "A list of all remote repositories",
+        "A snapshot of what will go into the next commit",
+        "The complete history of all commits",
+        "The remote copy of the repository"
+      ],
+      "answerIndex": 1,
+      "explanation": "The index (staging area) is a snapshot of what will go into your next commit. You explicitly add changes to it with 'git add', giving you precise control over what each commit contains.",
+      "tags": [
+        "git-model",
+        "staging"
+      ]
+    },
+    {
+      "id": "git-q2",
+      "type": "mcq",
+      "prompt": "You committed a secret API key. What is the correct fix?",
+      "choices": [
+        "Delete the file and recommit",
+        "Use git reset --soft to undo and recommit without the key",
+        "Use BFG Repo Cleaner or git filter-branch to rewrite history, then rotate the key",
+        "Add the file to .gitignore"
+      ],
+      "answerIndex": 2,
+      "explanation": "Deleting in a new commit leaves it in history. Reset only works if you haven't pushed. .gitignore doesn't remove already-tracked files. The correct approach is rewrite history AND rotate the key (treat it as compromised).",
+      "tags": [
+        "security",
+        "git-history",
+        "gitignore"
+      ]
+    },
+    {
+      "id": "git-q3",
+      "type": "mcq",
+      "prompt": "What is 'detached HEAD' state?",
+      "choices": [
+        "The repository has no commits",
+        "HEAD points directly to a commit rather than a branch",
+        "The remote branch is ahead of local",
+        "A merge conflict that hasn't been resolved"
+      ],
+      "answerIndex": 1,
+      "explanation": "Detached HEAD means HEAD points to a specific commit hash, not a branch. Commits made in this state have no branch pointing to them and will be garbage-collected unless you create a branch.",
+      "tags": [
+        "git-model",
+        "head",
+        "branches"
+      ]
+    },
+    {
+      "id": "git-q4",
+      "type": "mcq",
+      "prompt": "When should you use `git revert` instead of `git reset`?",
+      "choices": [
+        "When you want to rewrite history on a local branch",
+        "When the commits have already been pushed to a shared branch",
+        "When you want to delete all changes permanently",
+        "When working alone on a private branch"
+      ],
+      "answerIndex": 1,
+      "explanation": "git revert creates a new commit that undoes changes — safe for shared branches because it doesn't rewrite history. git reset rewrites history, causing problems for others who have the original commits.",
+      "tags": [
+        "git-history",
+        "revert",
+        "reset"
+      ]
+    },
+    {
+      "id": "git-q5",
+      "type": "codeOutput",
+      "prompt": "What does this series of commands result in?",
+      "code": "git checkout main\ngit checkout -b feature/login\ngit commit -m 'add login'\ngit checkout main\ngit merge feature/login",
+      "choices": [
+        "An error — you can't merge into main",
+        "feature/login commits are merged into main, main is now ahead",
+        "main is rebased on top of feature/login",
+        "No change — merge requires a PR"
+      ],
+      "answerIndex": 1,
+      "explanation": "This is a standard feature branch workflow. After committing on feature/login and merging into main, main now includes the 'add login' commit. This is a fast-forward merge if main had no new commits.",
+      "tags": [
+        "branches",
+        "merge"
+      ]
+    },
+    {
+      "id": "git-q6",
+      "type": "fillBlank",
+      "prompt": "To temporarily save your uncommitted changes without committing them (e.g. to switch branches quickly), you use: `git ___`",
+      "accepted": [
+        "stash",
+        "git stash"
+      ],
+      "explanation": "git stash saves your working tree and index to a stack. git stash pop restores them. Useful when you need to switch context quickly.",
+      "tags": [
+        "stash",
+        "workflow"
+      ]
+    },
+    {
+      "id": "git-q7",
+      "type": "multi",
+      "prompt": "Which commands are safe to run on a shared branch that others are working on? (Select all that apply)",
+      "choices": [
+        "git revert <hash>",
+        "git reset --hard HEAD~3",
+        "git commit -m 'fix'",
+        "git rebase main"
+      ],
+      "answerIndexes": [
+        0,
+        2
+      ],
+      "explanation": "git revert is safe (adds new commit). git commit is safe (adds new commit). git reset --hard rewrites history (dangerous on shared branch). git rebase rewrites commit hashes (dangerous on shared branch).",
+      "tags": [
+        "safety",
+        "git-history",
+        "shared-branches"
+      ]
+    },
+    {
+      "id": "git-q8",
+      "type": "order",
+      "prompt": "Order these steps for the GitHub Flow branching strategy:",
+      "items": [
+        "Deploy to production",
+        "Open a Pull Request",
+        "Create a feature branch from main",
+        "Merge PR after review",
+        "Make commits on the feature branch"
+      ],
+      "correctOrder": [
+        2,
+        4,
+        1,
+        3,
+        0
+      ],
+      "explanation": "GitHub Flow: branch from main → commit → open PR → review + merge → deploy. main is always deployable.",
+      "tags": [
+        "branching-strategy",
+        "github-flow"
+      ]
+    },
+    {
+      "id": "git-q9",
+      "type": "match",
+      "prompt": "Match each command to its effect:",
+      "left": [
+        "git stash",
+        "git cherry-pick",
+        "git bisect",
+        "git blame"
+      ],
+      "right": [
+        "Temporarily saves uncommitted work",
+        "Applies a specific commit from another branch",
+        "Binary search to find bug-introducing commit",
+        "Shows who last modified each line"
+      ],
+      "pairs": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          3
+        ]
+      ],
+      "explanation": "stash=save work temporarily, cherry-pick=apply specific commit, bisect=binary search history, blame=line-by-line authorship.",
+      "tags": [
+        "advanced-commands"
+      ]
+    },
+    {
+      "id": "git-q10",
+      "type": "mcq",
+      "prompt": "What is the difference between `git fetch` and `git pull`?",
+      "choices": [
+        "fetch downloads changes but doesn't merge; pull downloads AND merges",
+        "fetch is for branches; pull is for tags",
+        "pull is fetch + rebase; fetch is pull + merge",
+        "They are identical"
+      ],
+      "answerIndex": 0,
+      "explanation": "git fetch downloads remote changes to your local tracking branches but doesn't touch your working branch. git pull = git fetch + git merge (or rebase with --rebase flag). Use fetch when you want to inspect changes before merging.",
+      "tags": [
+        "remote",
+        "fetch-pull"
+      ]
+    },
+    {
+      "id": "git-q11",
+      "type": "mcq",
+      "prompt": "What does `git log --oneline --graph --all` display?",
+      "choices": [
+        "Only commits on the current branch",
+        "A visual ASCII graph of all branches and their commit history",
+        "The diff of all commits",
+        "A list of all remote branches"
+      ],
+      "answerIndex": 1,
+      "explanation": "--graph adds ASCII art branch diagram, --all shows all branches (not just current), --oneline condenses each commit to one line. Together they give a bird's-eye view of branch topology.",
+      "tags": [
+        "git-log",
+        "visualization"
+      ]
+    },
+    {
+      "id": "git-q12",
+      "type": "fillBlank",
+      "prompt": "To unstage a file that you added with `git add` (without discarding your changes), run: `git restore ___ file.txt`",
+      "accepted": [
+        "--staged",
+        "--staged flag",
+        "-S"
+      ],
+      "explanation": "git restore --staged file.txt removes the file from the index (staging area) but keeps your working tree changes intact.",
+      "tags": [
+        "staging",
+        "restore"
+      ]
+    },
+    {
+      "id": "git-q13",
+      "type": "mcq",
+      "prompt": "What does `git commit --amend` do?",
+      "choices": [
+        "Creates a new commit on top of the last",
+        "Rewrites the last commit (message and/or content)",
+        "Reverts the last commit",
+        "Merges the last two commits"
+      ],
+      "answerIndex": 1,
+      "explanation": "git commit --amend replaces the last commit with a new one (same content + staged changes, or just a new message). Only use before pushing — amending changes the commit hash.",
+      "tags": [
+        "commit",
+        "git-history"
+      ]
+    },
+    {
+      "id": "git-q14",
+      "type": "mcq",
+      "prompt": "In Git Flow, which branch do hotfixes branch from?",
+      "choices": [
+        "develop",
+        "release",
+        "main",
+        "feature"
+      ],
+      "answerIndex": 2,
+      "explanation": "In Git Flow, hotfixes (urgent production bugs) branch from main (production) and merge back into both main AND develop. This ensures the fix is in production quickly and isn't lost from the development line.",
+      "tags": [
+        "branching-strategy",
+        "git-flow"
+      ]
+    },
+    {
+      "id": "git-q15",
+      "type": "multi",
+      "prompt": "Which files/patterns should typically be in .gitignore? (Select all that apply)",
+      "choices": [
+        "target/ (Maven build output)",
+        "src/main/java/ (source code)",
+        ".env (environment variables)",
+        ".idea/ (IntelliJ project files)",
+        "README.md"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Build artifacts (target/), secrets (.env), and IDE files (.idea/) should be gitignored. Source code (src/) and docs (README.md) should be committed.",
+      "tags": [
+        "gitignore",
+        "best-practices"
+      ]
+    },
+    {
+      "id": "git-q16",
+      "type": "mcq",
+      "prompt": "What is the golden rule of rebasing?",
+      "choices": [
+        "Always rebase instead of merge",
+        "Never rebase commits that have been pushed to a shared branch",
+        "Rebase only on main, never on feature branches",
+        "Always rebase before opening a PR"
+      ],
+      "answerIndex": 1,
+      "explanation": "Rebasing rewrites commit hashes. If others have your original commits, their branches now diverge from the rewritten history, causing conflicts and confusion.",
+      "tags": [
+        "rebase",
+        "safety"
+      ]
+    },
+    {
+      "id": "git-q17",
+      "type": "codeOutput",
+      "prompt": "What happens after running this command?",
+      "code": "git reset --hard HEAD~1",
+      "choices": [
+        "The last commit is undone but changes remain staged",
+        "The last commit and its changes are permanently discarded from working tree",
+        "A new revert commit is created",
+        "The branch is deleted"
+      ],
+      "answerIndex": 1,
+      "explanation": "--hard moves HEAD back one commit AND resets the working tree and index to match. The changes from the removed commit are lost. Use git revert instead for shared branches.",
+      "tags": [
+        "reset",
+        "safety",
+        "git-history"
+      ]
+    },
+    {
+      "id": "git-q18",
+      "type": "fillBlank",
+      "prompt": "To find which commit introduced a specific bug using binary search, you use: `git ___`",
+      "accepted": [
+        "bisect",
+        "bisect start"
+      ],
+      "explanation": "git bisect does a binary search through commit history. You mark commits as good/bad and Git narrows down to the exact commit that introduced the bug.",
+      "tags": [
+        "debugging",
+        "bisect"
+      ]
+    },
+    {
+      "id": "git-q19",
+      "type": "mcq",
+      "prompt": "What is a 'fast-forward merge'?",
+      "choices": [
+        "A merge that skips the review process",
+        "A merge where the target branch pointer simply moves to the latest commit of the source branch (no new merge commit needed)",
+        "A merge that automatically resolves conflicts",
+        "A merge from a hotfix branch directly to production"
+      ],
+      "answerIndex": 1,
+      "explanation": "A fast-forward merge happens when the target branch (e.g. main) has no new commits since the feature branch diverged. Git just moves the main pointer forward — no merge commit needed, history stays linear.",
+      "tags": [
+        "merge",
+        "fast-forward"
+      ]
+    },
+    {
+      "id": "git-q20",
+      "type": "multi",
+      "prompt": "Which of the following are differences between `git merge` and `git rebase`? (Select all that apply)",
+      "choices": [
+        "Merge preserves the original commit history; rebase rewrites it",
+        "Merge creates a merge commit; rebase (generally) does not",
+        "Rebase is always safer than merge",
+        "Rebase produces a linear history; merge may produce a non-linear one"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Merge preserves history (including branch points) and adds a merge commit. Rebase rewrites commits to create a linear history but changes commit hashes. Neither is 'always safer' — it depends on context.",
+      "tags": [
+        "merge",
+        "rebase",
+        "git-history"
+      ]
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "git-fc1",
+      "front": "What are Git's three trees?",
+      "back": "1. Working Tree (your files), 2. Index/Staging (what will be committed), 3. Repository (committed snapshots). git add moves 1→2, git commit moves 2→3.",
+      "tags": [
+        "git-model"
+      ]
+    },
+    {
+      "id": "git-fc2",
+      "front": "Merge vs Rebase — one-line difference?",
+      "back": "Merge preserves history + adds a merge commit. Rebase replays commits onto another branch for linear history (rewrites hashes).",
+      "tags": [
+        "merge",
+        "rebase"
+      ]
+    },
+    {
+      "id": "git-fc3",
+      "front": "When is `git revert` safer than `git reset`?",
+      "back": "On shared branches. revert adds a new undo-commit (safe). reset rewrites history (breaks others' branches).",
+      "tags": [
+        "safety",
+        "revert",
+        "reset"
+      ]
+    },
+    {
+      "id": "git-fc4",
+      "front": "What does detached HEAD mean?",
+      "back": "HEAD points to a commit hash, not a branch. Commits are unreachable after switching away. Fix: git checkout -b new-branch.",
+      "tags": [
+        "head",
+        "git-model"
+      ]
+    },
+    {
+      "id": "git-fc5",
+      "front": "How do you apply a single commit from another branch?",
+      "back": "git cherry-pick <commit-hash> — copies that commit's changes and creates a new commit on your branch.",
+      "tags": [
+        "cherry-pick",
+        "advanced-commands"
+      ]
+    },
+    {
+      "id": "git-fc6",
+      "front": "What files should always be in .gitignore?",
+      "back": "Build artifacts (target/, dist/), secrets (.env, *.pem), IDE files (.idea/, .vscode/), OS files (.DS_Store). Never commit secrets.",
+      "tags": [
+        "gitignore",
+        "security"
+      ]
+    },
+    {
+      "id": "git-fc7",
+      "front": "What is GitHub Flow in 4 steps?",
+      "back": "1. Branch from main, 2. Commit work, 3. Open PR, 4. Merge + deploy. Main is always production-ready.",
+      "tags": [
+        "branching-strategy",
+        "github-flow"
+      ]
+    },
+    {
+      "id": "git-fc8",
+      "front": "Difference between git fetch and git pull?",
+      "back": "fetch = download remote changes only. pull = fetch + merge. Use fetch to inspect before merging.",
+      "tags": [
+        "remote",
+        "fetch-pull"
+      ]
+    }
+  ],
+  "project": {
+    "brief": "## Project: Design a Branching Strategy for a 3-Person Startup\n\nYou're one of three engineers at a startup. Your team ships to production 2–3 times per week. You have:\n- A `main` branch (production)\n- Occasional hotfixes\n- Regular feature work\n- No dedicated QA team — you rely on PR reviews\n\n**Your task:** Design a complete branching strategy. Cover:\n1. Which branches exist and their purpose\n2. How features are developed and merged\n3. How hotfixes are handled\n4. What goes in .gitignore\n5. Your commit message convention (e.g. Conventional Commits: feat:, fix:, chore:)\n\nExplain your choices. Why is this better than Git Flow for a 3-person startup?",
+    "checklist": [
+      {
+        "id": "proj-git-1",
+        "text": "Defined a clear branch hierarchy (e.g. main, feature/*, hotfix/*) with purpose of each",
+        "weight": 20
+      },
+      {
+        "id": "proj-git-2",
+        "text": "Described the feature development lifecycle: branch → commit → PR → review → merge",
+        "weight": 20
+      },
+      {
+        "id": "proj-git-3",
+        "text": "Handled hotfixes correctly: branch from main, merge back to main AND develop/main",
+        "weight": 15
+      },
+      {
+        "id": "proj-git-4",
+        "text": "Specified what goes in .gitignore (secrets, build artifacts, IDE files)",
+        "weight": 15
+      },
+      {
+        "id": "proj-git-5",
+        "text": "Proposed a commit message convention and explained why it helps",
+        "weight": 15
+      },
+      {
+        "id": "proj-git-6",
+        "text": "Justified why simpler flow (e.g. GitHub Flow) is better than full Git Flow for a small team",
+        "weight": 15
+      }
+    ],
+    "hints": [
+      "A 3-person startup doesn't need Git Flow's complexity. GitHub Flow (branch from main, PR, merge, deploy) is usually enough. Ask yourself: what's the cost of each branch you create?",
+      "For hotfixes: the key constraint is they must go to production FAST and must also appear in the ongoing development line. How do you merge to both?",
+      "Conventional Commits (feat:, fix:, docs:, chore:) let you auto-generate changelogs and control semantic versioning. Reference: conventionalcommits.org"
+    ]
+  }
+}
