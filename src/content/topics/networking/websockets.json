@@ -1,7 +1,7 @@
 {
   "id": "websockets",
-  "unit": 3,
-  "order": 14,
+  "unit": 6,
+  "order": 50,
   "title": "WebSockets",
   "summary": "Full-duplex communication, handshake, use cases vs HTTP, and real-time app patterns.",
   "prereqs": [

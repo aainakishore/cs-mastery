@@ -1,7 +1,7 @@
 {
   "id": "agents",
-  "unit": 6,
-  "order": 33,
+  "unit": 11,
+  "order": 94,
   "title": "AI Agents",
   "summary": "Master AI Agents: trade-offs, failure modes, and production patterns.",
   "prereqs": [

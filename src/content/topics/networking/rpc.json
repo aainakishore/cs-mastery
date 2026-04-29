@@ -1,7 +1,7 @@
 {
   "id": "rpc",
-  "unit": 3,
-  "order": 13,
+  "unit": 6,
+  "order": 49,
   "title": "RPC - Remote Procedure Calls",
   "summary": "Master RPC - Remote Procedure Calls: trade-offs, failure modes, and production patterns.",
   "prereqs": [

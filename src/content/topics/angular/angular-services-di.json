@@ -1,10 +1,12 @@
 {
   "id": "angular-services-di",
-  "unit": 10,
-  "order": 100,
+  "unit": 5,
+  "order": 40,
   "title": "Angular Services and Dependency Injection",
   "summary": "Creating services with @Injectable, understanding hierarchical injectors, providedIn scopes, and injecting dependencies throughout an Angular app.",
-  "prereqs": ["angular-directives"],
+  "prereqs": [
+    "angular-directives"
+  ],
   "guide": "# Angular Services and Dependency Injection\n\nA **service** is a class that holds shared logic or data — API calls, state, utilities — separated from components. **Dependency Injection (DI)** is Angular's mechanism for automatically creating and providing those services wherever they're needed.\n\nThink of DI as a **vending machine in a building**. Instead of every employee making their own coffee machine (constructors that `new` dependencies), they walk to the vending machine (the injector) and get an instance. The building (Angular) manages the inventory.\n\n```\nWithout DI (tightly coupled, hard to test):\n  class DataComponent {\n    private service = new UserService();  // tightly coupled\n  }\n\nWith DI (loosely coupled, testable):\n  class DataComponent {\n    constructor(private userService: UserService) {}  // injected\n  }\n  // Angular creates UserService and provides it — you don't manage instances\n```\n\n## Creating a Service\n\n```typescript\nimport { Injectable } from '@angular/core';\nimport { HttpClient } from '@angular/common/http';\nimport { Observable } from 'rxjs';\n\n@Injectable({\n  providedIn: 'root'  // singleton across the whole app\n})\nexport class UserService {\n  private readonly API = '/api/users';\n\n  constructor(private http: HttpClient) {}  // injected into the service!\n\n  getUsers(): Observable<User[]> {\n    return this.http.get<User[]>(this.API);\n  }\n\n  getUserById(id: string): Observable<User> {\n    return this.http.get<User>(`${this.API}/${id}`);\n  }\n}\n```\n\n## providedIn — Where Is the Service Singleton Created?\n\n```\nprovidedIn: 'root'\n  ├── ONE instance for the entire application\n  ├── Tree-shakeable (if never injected, not bundled)\n  └── Most common choice — use this by default\n\nprovidedIn: 'platform'\n  └── Shared across multiple Angular apps on the same page (rare)\n\nprovidedIn: 'any'\n  └── Unique instance per lazy-loaded module (deprecated)\n\nNo providedIn — in providers: [] array:\n  ├── Module-level: providers: [UserService] in NgModule\n  │     └── ONE instance per module and its children\n  └── Component-level: providers: [UserService] in @Component\n        └── NEW instance per component instance (and its children)\n```\n\n## The Injector Hierarchy\n\nAngular has a **tree of injectors** matching the component tree:\n\n```\nRoot Injector (providedIn: 'root')\n  │\n  ├── Module Injector (providers: [] in NgModule)\n  │     │\n  │     └── Component Injector (providers: [] in @Component)\n  │           │\n  │           └── Child Component Injector\n  │\n  └── Environment Injectors (lazy-loaded routes)\n\nResolution order: Angular walks UP the tree from the requesting\ncomponent until it finds the service.\n\n     ComponentC needs UserService\n          │\n          ↑ not in ComponentC providers\n     ComponentB (parent)\n          │\n          ↑ not in ComponentB providers\n     Root Injector\n          │\n          ✓ found! Returns the root singleton\n```\n\n## Component-Level Providers — Scoped Instances\n\n```typescript\n@Component({\n  selector: 'app-cart',\n  providers: [CartService]  // NEW CartService instance per cart component\n})\nexport class CartComponent {\n  constructor(private cart: CartService) {}\n}\n```\n\n```\nTwo CartComponents on the same page get SEPARATE CartService instances:\n\n<app-cart>  ← CartService instance A\n<app-cart>  ← CartService instance B (different!)\n\nThis is useful for:\n  - Wizard steps (each step owns its own state service)\n  - Popup/dialog with isolated state\n  - Re-usable forms with separate form state\n```\n\n## Injecting Services\n\n```typescript\n// Method 1: Constructor injection (classic)\n@Component({ ... })\nexport class ProfileComponent {\n  constructor(\n    private userService: UserService,\n    private authService: AuthService\n  ) {}\n}\n\n// Method 2: inject() function (Angular 14+ — works anywhere, even outside constructor)\nimport { inject } from '@angular/core';\n\n@Component({ ... })\nexport class ProfileComponent {\n  private userService = inject(UserService);\n  private authService = inject(AuthService);\n}\n```\n\n`inject()` is more powerful — it works in standalone functions, factory providers, and signals setup.\n\n## Injection Tokens — When There's No Class to Inject\n\n```typescript\nimport { InjectionToken } from '@angular/core';\n\n// Define a token for a config object\nexport const APP_CONFIG = new InjectionToken<AppConfig>('app.config');\n\n// Provide it in root or component:\n@NgModule({\n  providers: [\n    { provide: APP_CONFIG, useValue: { apiUrl: 'https://api.example.com', debug: false } }\n  ]\n})\n\n// Inject it:\nexport class ApiService {\n  private config = inject(APP_CONFIG);\n  // config.apiUrl is available\n}\n```\n\n## Provider Recipes\n\n```typescript\nproviders: [\n  // useClass — provide a different implementation:\n  { provide: UserService, useClass: MockUserService },  // useful for testing\n\n  // useValue — provide a constant:\n  { provide: API_URL, useValue: 'https://prod.api.com' },\n\n  // useFactory — compute the value:\n  {\n    provide: LogLevel,\n    useFactory: () => environment.production ? 'error' : 'debug'\n  },\n\n  // useExisting — alias one token to another:\n  { provide: LegacyService, useExisting: NewService }\n]\n```\n\n## @Optional, @Self, @SkipSelf, @Host\n\n```typescript\nclass MyComponent {\n  constructor(\n    @Optional() private cache?: CacheService,  // don't error if not provided\n    @Self() private myService: MyService,       // only look in this component's injector\n    @SkipSelf() private parent: ParentService,  // skip this, look in parent injector\n    @Host() private host: HostService           // only look up to host element\n  ) {}\n}\n```\n\n## Common Pitfalls\n- **Multiple instances when expecting a singleton** — if you add a service to both `providers: []` in a module AND in a component, the component gets its own instance, not the root singleton.\n- **`new MyService()` in tests** — don't. Use Angular's TestBed to inject so DI works correctly.\n- **Circular dependencies** — ServiceA injecting ServiceB that injects ServiceA. Extract shared logic into a third service.\n- **providedIn: 'root' but the test can't override it** — in tests, override with `{ provide: UserService, useClass: MockUserService }` in TestBed providers.\n- **forget to import HttpClientModule** — if a service uses HttpClient, the consuming module needs `HttpClientModule` (or `provideHttpClient()` in standalone apps).\n\n## Connections\n- **angular-rxjs** — services typically return Observables; components subscribe to them\n- **angular-forms** — FormBuilder is an injectable service\n- **angular-routing** — Router and ActivatedRoute are injectable services",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`providedIn: 'root'` registers the service with the root injector. Angular creates exactly one instance, shared everywhere. The service is also tree-shaken out of the bundle if no component ever uses it — unlike adding to module providers[] which always includes it.",
-      "tags": ["services", "di", "providedIn"]
+      "tags": [
+        "services",
+        "di",
+        "providedIn"
+      ]
     },
     {
       "id": "asdi-q2",
@@ -33,7 +39,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular's hierarchical injector: each entry in a component's `providers` creates a NEW instance for that component subtree.  The root singleton still exists for other components. This scoping is powerful but needs careful management — you may get subtle bugs if you expect shared state (singleton) but accidentally create a new instance.",
-      "tags": ["services", "di", "hierarchical-injector"]
+      "tags": [
+        "services",
+        "di",
+        "hierarchical-injector"
+      ]
     },
     {
       "id": "asdi-q3",
@@ -48,7 +58,11 @@
       ],
       "answerIndex": 1,
       "explanation": "When a service is in a component's `providers`, Angular creates a new instance for EACH component instance. Two `<app-cart>` elements → two separate CartService instances with independent state. This is intentional for isolated per-instance services like shopping carts, forms, wizard steps.",
-      "tags": ["services", "di", "component-providers"]
+      "tags": [
+        "services",
+        "di",
+        "component-providers"
+      ]
     },
     {
       "id": "asdi-q4",
@@ -62,7 +76,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`inject()` can be called in field initializers (`private service = inject(MyService)`), in factory providers, in `rxjs` operators setup, and in functional interceptors/guards. Constructor injection requires listing all dependencies in the constructor signature. `inject()` removes boilerplate and enables injection in contexts where constructors aren't available.",
-      "tags": ["services", "di", "inject-function"]
+      "tags": [
+        "services",
+        "di",
+        "inject-function"
+      ]
     },
     {
       "id": "asdi-q5",
@@ -76,7 +94,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular's DI normally uses class types as keys. For non-class values (config objects, strings, interfaces), you create an `InjectionToken`. This gives the DI system a unique, type-safe key. Example: `new InjectionToken<AppConfig>('config')` then provide with `useValue`.",
-      "tags": ["services", "di", "InjectionToken"]
+      "tags": [
+        "services",
+        "di",
+        "InjectionToken"
+      ]
     },
     {
       "id": "asdi-q6",
@@ -90,7 +112,12 @@
       ],
       "answerIndex": 1,
       "explanation": "`useClass` substitutes one class for another. When any component injects `UserService`, Angular creates `MockUserService` instead. The injected type is still `UserService` (TypeScript type) but the runtime instance is `MockUserService`. Critical for unit testing without live HTTP calls.",
-      "tags": ["services", "di", "useClass", "testing"]
+      "tags": [
+        "services",
+        "di",
+        "useClass",
+        "testing"
+      ]
     },
     {
       "id": "asdi-q7",
@@ -104,7 +131,11 @@
       ],
       "answerIndex": 2,
       "explanation": "If Angular reaches the root injector without finding a provider, it throws `NullInjectorError: No provider for XService!`. Prevent this by: ensuring the service has `providedIn: 'root'`, or adding it to the right `providers` array, or using `@Optional()` if the service is truly optional.",
-      "tags": ["services", "di", "error-handling"]
+      "tags": [
+        "services",
+        "di",
+        "error-handling"
+      ]
     },
     {
       "id": "asdi-q8",
@@ -118,7 +149,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`@Optional()` changes the missing-provider behavior from error to `null`. Used for truly optional features: `constructor(@Optional() private analytics?: AnalyticsService)`. You then null-check before use: `this.analytics?.track(event)`. Without @Optional, the NullInjectorError crashes the app.",
-      "tags": ["services", "di", "Optional"]
+      "tags": [
+        "services",
+        "di",
+        "Optional"
+      ]
     },
     {
       "id": "asdi-q9",
@@ -130,9 +165,17 @@
         "{ provide: Service, useAsync: asyncFactory }",
         "{ provide: IService, useFactory: () => new IService() }"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "`useValue`, `useExisting`, `useClass`, and `useFactory` are the four valid provider recipes. `useAsync` does not exist in Angular's DI — use `useFactory` with an async setup pattern instead.",
-      "tags": ["services", "di", "providers"]
+      "tags": [
+        "services",
+        "di",
+        "providers"
+      ]
     },
     {
       "id": "asdi-q10",
@@ -146,7 +189,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Creating services with `new` bypasses DI completely: (1) You can't inject other services into it (constructor would need explicit arguments). (2) Tests can't override it with mocks. (3) Multiple instances break any shared state. DI's entire purpose is to manage object lifecycle and enable substitutability.",
-      "tags": ["services", "di", "best-practices"]
+      "tags": [
+        "services",
+        "di",
+        "best-practices"
+      ]
     },
     {
       "id": "asdi-q11",
@@ -160,7 +207,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Best practice: create a service layer (UserService, ProductService) that wraps HttpClient calls. Components inject the service, not HttpClient directly. Benefits: (1) Components don't know about HTTP internals. (2) Easy to mock in tests. (3) Centralizes error handling and caching logic.",
-      "tags": ["services", "HttpClient", "architecture"]
+      "tags": [
+        "services",
+        "HttpClient",
+        "architecture"
+      ]
     },
     {
       "id": "asdi-q12",
@@ -174,7 +225,12 @@
       ],
       "answerIndex": 1,
       "explanation": "`@Self()` restricts injection lookup to only the current component's injector (not parents). Throws NullInjectorError if not found there. `@SkipSelf()` skips the current component's providers and looks only at ancestor injectors. Used for parent-child component communication patterns.",
-      "tags": ["services", "di", "Self", "SkipSelf"]
+      "tags": [
+        "services",
+        "di",
+        "Self",
+        "SkipSelf"
+      ]
     },
     {
       "id": "asdi-q13",
@@ -189,7 +245,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`providedIn: 'root'` services are tree-shakeable — if nothing ever injects `UnusedService`, the bundler (webpack/esbuild) omits it. This is a key advantage over `providers: [UnusedService]` in NgModule (always included regardless of usage). Always prefer `providedIn: 'root'` for this reason.",
-      "tags": ["services", "di", "tree-shaking"]
+      "tags": [
+        "services",
+        "di",
+        "tree-shaking"
+      ]
     },
     {
       "id": "asdi-q14",
@@ -203,7 +263,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Circular DI: Angular tries to create ServiceA → needs ServiceB → needs ServiceA → infinite loop. Angular detects this and throws a circular dependency error. Solution: find the shared functionality both need and extract it into a third service that neither depends on each other.",
-      "tags": ["services", "di", "circular-dependency"]
+      "tags": [
+        "services",
+        "di",
+        "circular-dependency"
+      ]
     },
     {
       "id": "asdi-q15",
@@ -215,9 +279,17 @@
         "A global auth service shared by all components",
         "A dialog/modal that needs its own state service"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Component-level providers create isolated instances — good for per-component state. Auth services should be singletons at root level (shared state). Wizard steps, isolated carts, and dialogs with their own state are perfect use cases for component-level scoping.",
-      "tags": ["services", "di", "component-providers"]
+      "tags": [
+        "services",
+        "di",
+        "component-providers"
+      ]
     },
     {
       "id": "asdi-q16",
@@ -231,7 +303,12 @@
       ],
       "answerIndex": 1,
       "explanation": "In standalone apps (`bootstrapApplication(AppComponent, { providers: [...] })`), add `provideHttpClient()` (from `@angular/common/http`) to the providers array. This replaces `HttpClientModule`. The functional provider approach (`provideRouter`, `provideHttpClient`) is the modern Angular pattern.",
-      "tags": ["services", "di", "standalone", "HttpClient"]
+      "tags": [
+        "services",
+        "di",
+        "standalone",
+        "HttpClient"
+      ]
     },
     {
       "id": "asdi-q17",
@@ -245,7 +322,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`useExisting` creates an alias — both tokens point to the SAME instance. `{ provide: OldTokenA, useExisting: NewTokenB }`: injecting OldTokenA gives you the exact same object as injecting NewTokenB. Contrast with `useClass`: that creates a NEW instance of the specified class.",
-      "tags": ["services", "di", "useExisting"]
+      "tags": [
+        "services",
+        "di",
+        "useExisting"
+      ]
     },
     {
       "id": "asdi-q18",
@@ -259,7 +340,11 @@
       ],
       "answerIndex": 1,
       "explanation": "In TestBed, you override providers: `{ provide: HttpClient, useClass: MockHttpClient }`. The service under test still uses its constructor (`private http: HttpClient`) but gets your mock. Without DI, you'd have to modify the service source code to swap implementations — violating separation of concerns.",
-      "tags": ["services", "di", "testing"]
+      "tags": [
+        "services",
+        "di",
+        "testing"
+      ]
     },
     {
       "id": "asdi-q19",
@@ -273,7 +358,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`@Self()` enforces locality — prevents accidentally inheriting parent services. Useful when a component must have its OWN provider of that service and not share a parent's. Combine with `@Optional() @Self()` to check if the component is configured correctly without crashing.",
-      "tags": ["services", "di", "Self"]
+      "tags": [
+        "services",
+        "di",
+        "Self"
+      ]
     },
     {
       "id": "asdi-q20",
@@ -287,7 +376,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Lazy-loaded modules get their own child injector. Services provided in a lazy module are separate instances from root. This can cause 'two instances' bugs if a service is in BOTH the root and lazy module's providers. Prefer `providedIn: 'root'` for shared services to avoid this.",
-      "tags": ["services", "di", "lazy-loading"]
+      "tags": [
+        "services",
+        "di",
+        "lazy-loading"
+      ]
     }
   ],
   "flashcards": [
@@ -295,59 +388,104 @@
       "id": "asdi-fc1",
       "front": "providedIn: 'root' vs component providers",
       "back": "root: one singleton app-wide, tree-shakeable. Component providers[]: fresh instance per component instance (isolated state). Use root for shared services, component providers for isolated per-component state.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc2",
       "front": "inject() vs constructor injection",
       "back": "`private svc = inject(MyService)` — works in field initializers, factory functions, standalone. Constructor injection: `constructor(private svc: MyService)`. inject() is more flexible and preferred in modern Angular.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc3",
       "front": "InjectionToken",
       "back": "DI token for non-class values (configs, strings, interfaces). `new InjectionToken<AppConfig>('app.config')`. Provide with useValue/useFactory, inject with `inject(APP_CONFIG)`.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc4",
       "front": "Provider recipes",
       "back": "useClass: different implementation. useValue: constant. useFactory: computed value. useExisting: alias (same instance). Only useClass creates a new instance; useExisting reuses.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc5",
       "front": "@Optional()",
       "back": "Injects null instead of throwing NullInjectorError if service not found. Combine with ?. operator: `this.analytics?.track()`. Use for optional features like analytics, A/B testing.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc6",
       "front": "@Self() vs @SkipSelf()",
       "back": "@Self: only search current component injector. @SkipSelf: skip current, start from parent. Use @Self to enforce a service is locally provided; @SkipSelf to access a parent version of a service.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc7",
       "front": "Hierarchical injector resolution",
       "back": "Walks UP the injector tree from the requesting component. Current component → parent → grandparent → Module → Root. First found wins. @Self stops at current. @SkipSelf skips current.",
-      "tags": ["services", "di"]
+      "tags": [
+        "services",
+        "di"
+      ]
     },
     {
       "id": "asdi-fc8",
       "front": "Tree-shakeable services",
       "back": "`providedIn: 'root'` is tree-shakeable — excluded from bundle if never injected. `providers: [MyService]` in NgModule always included. Always prefer providedIn for services not needed in every build configuration.",
-      "tags": ["services", "di", "tree-shaking"]
+      "tags": [
+        "services",
+        "di",
+        "tree-shaking"
+      ]
     }
   ],
   "project": {
     "brief": "Design the dependency injection architecture for a feature-rich e-commerce app with these services: (1) AuthService — singleton, shares current-user state; (2) CartService — scoped to CartComponent, each cart instance has its own state; (3) ProductCacheService — singleton with in-memory cache; (4) AppConfig — an object with apiUrl and featureFlags, not a class. Decide: what `providedIn` or `providers` setting each gets, which provider recipe (useValue, useClass, useFactory) you'd use, and how you'd mock AuthService in a unit test. Bonus: explain what breaks if CartService accidentally ends up in the root providers.",
     "checklist": [
-      { "id": "c1", "text": "AuthService: providedIn: 'root' — singleton, tree-shakeable", "weight": 1 },
-      { "id": "c2", "text": "CartService: providers: [CartService] in CartComponent — new instance per cart", "weight": 1 },
-      { "id": "c3", "text": "ProductCacheService: providedIn: 'root' — shared cache singleton", "weight": 1 },
-      { "id": "c4", "text": "AppConfig: InjectionToken with useValue or useFactory in root providers", "weight": 1 },
-      { "id": "c5", "text": "Testing: TestBed.configureTestingModule({ providers: [{ provide: AuthService, useClass: MockAuthService }] })", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "AuthService: providedIn: 'root' — singleton, tree-shakeable",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "CartService: providers: [CartService] in CartComponent — new instance per cart",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "ProductCacheService: providedIn: 'root' — shared cache singleton",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "AppConfig: InjectionToken with useValue or useFactory in root providers",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Testing: TestBed.configureTestingModule({ providers: [{ provide: AuthService, useClass: MockAuthService }] })",
+        "weight": 1
+      }
     ],
     "hints": [
       "CartService in root providers: all CartComponents share ONE cart with one state — checkout from one cart empties another.",
@@ -357,4 +495,3 @@
     ]
   }
 }
-

@@ -1,7 +1,7 @@
 {
   "id": "firewalls",
-  "unit": 3,
-  "order": 10,
+  "unit": 6,
+  "order": 46,
   "title": "Firewalls",
   "summary": "Stateful vs stateless firewalls, rules, DMZ, and network security fundamentals.",
   "prereqs": [

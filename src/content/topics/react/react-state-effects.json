@@ -1,10 +1,12 @@
 {
   "id": "react-state-effects",
-  "unit": 10,
-  "order": 89,
+  "unit": 4,
+  "order": 29,
   "title": "React State and Effects",
   "summary": "useState, useEffect, dependency arrays, and the mental model for managing side effects in React components.",
-  "prereqs": ["react-fundamentals"],
+  "prereqs": [
+    "react-fundamentals"
+  ],
   "guide": "# React State and Effects\n\n## The Core Mental Model\n\nThink of a React component as a **pure function that runs every time its inputs change**. State is not a variable — it's a *snapshot* that React stores outside the component. When you call `setState`, React schedules the next snapshot and re-runs your function.\n\n```\nUser interaction\n       │\n       ▼\n  setState(newValue)\n       │\n       ▼\n  React schedules re-render\n       │\n       ▼\n  component() called again\n  — state variable holds NEW snapshot\n  — React diffs new JSX vs old JSX\n       │\n       ▼\n  DOM updated — user sees change\n```\n\n## useState — snapshots, not variables\n\n```tsx\nconst [count, setCount] = useState(0);\n\n// WRONG mental model: count is a live variable\n// RIGHT mental model: count is frozen for THIS render\n\nfunction handleClick() {\n  setCount(count + 1); // schedules next render with count+1\n  setCount(count + 1); // STILL uses the same frozen snapshot!\n  // Result: count goes up by 1, not 2!\n}\n\n// To queue multiple updates on the same state:\nfunction handleClickCorrect() {\n  setCount(prev => prev + 1); // functional update — always up-to-date\n  setCount(prev => prev + 1); // correctly increments twice\n}\n```\n\n### State initialisation — lazy initial state\n\n```tsx\n// BAD: expensiveCalc() runs on EVERY render\nconst [data, setData] = useState(expensiveCalc());\n\n// GOOD: function called once on mount only\nconst [data, setData] = useState(() => expensiveCalc());\n```\n\n### Object state — always spread\n\n```tsx\nconst [form, setForm] = useState({ name: '', email: '' });\n\n// WRONG: mutating state directly\nform.name = 'Alice'; // React doesn't see this change!\n\n// CORRECT: create new object\nsetForm(prev => ({ ...prev, name: 'Alice' }));\n//             ^^^^^^^^^ spread previous state, then override\n```\n\n## useEffect — synchronising with the outside world\n\nEffects let you step outside the React rendering model to talk to things that live outside it: the DOM, browser APIs, WebSockets, timers, data fetching.\n\n```\nRendering world (pure):         Outside world (side effects):\n─────────────────────           ──────────────────────────────\njsx = component(state)    ─────►  DOM manipulation\n                          ─────►  fetch() / API calls\n                          ─────►  setTimeout / setInterval\n                          ─────►  WebSocket.connect()\n                          ─────►  localStorage\n\n          useEffect is the bridge ──────────────────────────\n```\n\n### The dependency array — three behaviours\n\n```tsx\n// 1. No array — runs after EVERY render (rarely what you want)\nuseEffect(() => {\n  console.log('Rendered');\n});\n\n// 2. Empty array — runs ONCE after mount\nuseEffect(() => {\n  const ws = new WebSocket(url);\n  return () => ws.close(); // cleanup runs on unmount\n}, []);\n\n// 3. Deps array — runs when any dep changes\nuseEffect(() => {\n  document.title = `${count} notifications`;\n}, [count]); // re-runs when count changes\n```\n\n### The cleanup function\n\n```\nComponent mounts     → effect runs  → cleanup stored\nDeps change          → OLD cleanup runs → NEW effect runs\nComponent unmounts   → cleanup runs\n\nExample timeline for a subscription:\n  mount:      subscribe(userId)    // effect runs\n  userId=2:   unsubscribe(1)       // cleanup\n              subscribe(2)         // new effect\n  unmount:    unsubscribe(2)       // cleanup\n```\n\n```tsx\nuseEffect(() => {\n  const controller = new AbortController();\n\n  fetch(`/api/user/${userId}`, { signal: controller.signal })\n    .then(r => r.json())\n    .then(setUser);\n\n  return () => controller.abort(); // cancel in-flight request\n}, [userId]);\n```\n\n### Common pattern: data fetching\n\n```tsx\nconst [user, setUser] = useState<User | null>(null);\nconst [loading, setLoading] = useState(true);\n\nuseEffect(() => {\n  let active = true; // guard against stale closure updates\n\n  setLoading(true);\n  fetch(`/api/user/${id}`)\n    .then(r => r.json())\n    .then(data => {\n      if (active) setUser(data); // ignore if component unmounted\n    })\n    .finally(() => {\n      if (active) setLoading(false);\n    });\n\n  return () => { active = false; };\n}, [id]);\n```\n\n## The Stale Closure Problem\n\nThis is the #1 useEffect bug. The closure captures variables at the time the effect is created.\n\n```tsx\n// BUG: count is stale inside the interval\nconst [count, setCount] = useState(0);\nuseEffect(() => {\n  const id = setInterval(() => {\n    console.log(count); // always logs 0 — stale closure!\n    setCount(count + 1); // always sets to 1!\n  }, 1000);\n  return () => clearInterval(id);\n}, []); // empty array = count never refreshes in the closure\n\n// FIX: use functional update\nuseEffect(() => {\n  const id = setInterval(() => {\n    setCount(prev => prev + 1); // reads current state, no closure issue\n  }, 1000);\n  return () => clearInterval(id);\n}, []);\n```\n\n## React StrictMode double-invocation\n\nIn development with `<StrictMode>`, React intentionally mounts → unmounts → remounts every component. This means your effects run twice. If your effect breaks on double-mount, your cleanup function is incomplete.\n\n```\nDevelopment StrictMode:\n  mount   → effect runs\n  unmount → cleanup runs\n  mount   → effect runs again   ← exposed if you have no cleanup!\n\nProduction:\n  mount   → effect runs (once)\n```\n\n## Complexity Reference\n\n| Pattern | Re-renders | Notes |\n|---|---|---|\n| setState with same value | 0 | React bails out (Object.is comparison) |\n| setState object — same ref | 0 | Must create new object to trigger |\n| setState in useEffect | +1 | Fine if deps are correct |\n| Missing dep in array | Bug | Stale closure — lint rule catches this |\n| Effect with no array | ∞ risk | Only safe if effect is idempotent |\n\n## Common Pitfalls\n- Multiple `setState` calls in same event: batched in React 18 (single re-render). In React 17 and earlier: only batched inside event handlers.\n- Forgetting cleanup on subscriptions, intervals, or fetch — causes memory leaks and state updates on unmounted components\n- Missing dependencies in the dep array — always follow the `react-hooks/exhaustive-deps` ESLint rule\n- Using `async` directly in useEffect: `useEffect(async () => {...})` — the async function returns a Promise, which React interprets as invalid cleanup\n\n## Connections\n- **react-hooks** — useMemo, useCallback to control what triggers effects\n- **react-rendering** — understand why effects run AFTER paint\n- **react-context** — useEffect reads context values that become stale if not in deps",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "State is a snapshot — it is frozen for the duration of one render. The setter queues a new render with the new value. This is why multiple `setCount(count + 1)` calls in one event handler only increment once — they all read the same frozen snapshot.",
-      "tags": ["useState", "state", "rendering"]
+      "tags": [
+        "useState",
+        "state",
+        "rendering"
+      ]
     },
     {
       "id": "rse-q2",
@@ -34,7 +40,11 @@
       ],
       "answerIndex": 1,
       "explanation": "All three setCount calls read the same frozen snapshot (count = 0). So all three schedule `setCount(0 + 1)`. Result: 1. To increment three times, use the functional form: `setCount(prev => prev + 1)` which chains on the queued value.",
-      "tags": ["useState", "batching", "snapshot"]
+      "tags": [
+        "useState",
+        "batching",
+        "snapshot"
+      ]
     },
     {
       "id": "rse-q3",
@@ -48,7 +58,10 @@
       ],
       "answerIndex": 1,
       "explanation": "These are the three forms: `useEffect(fn)` = after every render; `useEffect(fn, [])` = once on mount; `useEffect(fn, [a, b])` = when a or b changes. The dependency array is how you tell React which external values your effect cares about.",
-      "tags": ["useEffect", "dependency-array"]
+      "tags": [
+        "useEffect",
+        "dependency-array"
+      ]
     },
     {
       "id": "rse-q4",
@@ -62,7 +75,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Cleanup runs in two cases: 1) when the component unmounts, 2) before the effect re-runs due to a dependency change. This ensures old subscriptions, timers, and connections are torn down before new ones are established.",
-      "tags": ["useEffect", "cleanup"]
+      "tags": [
+        "useEffect",
+        "cleanup"
+      ]
     },
     {
       "id": "rse-q5",
@@ -77,7 +93,11 @@
       ],
       "answerIndex": 1,
       "explanation": "The empty dep array means the effect runs once. The closure captures `count = 0` at mount time and never refreshes. Every tick sets count to 0+1=1. Fix: `setCount(prev => prev + 1)` — functional update reads the latest value without needing count in the closure.",
-      "tags": ["useEffect", "stale-closure", "closure"]
+      "tags": [
+        "useEffect",
+        "stale-closure",
+        "closure"
+      ]
     },
     {
       "id": "rse-q6",
@@ -91,7 +111,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useEffect expects the callback to return either nothing or a cleanup function (a synchronous function). An async callback returns a Promise. React will warn and ignore it as cleanup — meaning no cleanup runs at all. Pattern: define an async function inside the effect body and call it.",
-      "tags": ["useEffect", "async", "cleanup"]
+      "tags": [
+        "useEffect",
+        "async",
+        "cleanup"
+      ]
     },
     {
       "id": "rse-q7",
@@ -105,7 +129,11 @@
       ],
       "answerIndex": 0,
       "explanation": "`useState(() => expensiveCalc())` — the function is called once. `useState(expensiveCalc())` — the function is called on EVERY render (even though the result is thrown away after mount). Use lazy init whenever the initial value is expensive to compute.",
-      "tags": ["useState", "lazy-init", "performance"]
+      "tags": [
+        "useState",
+        "lazy-init",
+        "performance"
+      ]
     },
     {
       "id": "rse-q8",
@@ -117,9 +145,16 @@
         "setState({ ...state, name: 'Alice' })",
         "Object.assign(state, { name: 'Alice' })"
       ],
-      "answerIndexes": [1, 2],
+      "answerIndexes": [
+        1,
+        2
+      ],
       "explanation": "React requires a new object reference to detect state changes. Options B and C both create new objects. B uses functional update (safer — reads latest state). C directly uses the captured `state` variable (snapshot — fine in most cases but can be stale in async code). A and D mutate the existing object — React will NOT detect the change.",
-      "tags": ["useState", "immutability", "object-state"]
+      "tags": [
+        "useState",
+        "immutability",
+        "object-state"
+      ]
     },
     {
       "id": "rse-q9",
@@ -133,7 +168,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React 18 introduced automatic batching — all setState calls within any event handler, setTimeout, fetch callback, or native event are batched into a single re-render. In React 17 and earlier, batching only applied to React event handlers.",
-      "tags": ["useState", "batching", "react18"]
+      "tags": [
+        "useState",
+        "batching",
+        "react18"
+      ]
     },
     {
       "id": "rse-q10",
@@ -147,7 +186,10 @@
       ],
       "answerIndex": 1,
       "explanation": "With `[id]` as the dep array, React runs the effect after the initial mount AND after any render where `id` has changed (compared using Object.is). If id stays the same between renders, the effect is skipped.",
-      "tags": ["useEffect", "dependency-array"]
+      "tags": [
+        "useEffect",
+        "dependency-array"
+      ]
     },
     {
       "id": "rse-q11",
@@ -161,7 +203,11 @@
       ],
       "answerIndex": 1,
       "explanation": "If `id` changes while the first fetch is in-flight, the cleanup sets `active = false`. When the stale response arrives, `if (active) setUser(data)` is skipped — preventing setting state with old data for a different user. It also prevents the 'setState on unmounted component' warning.",
-      "tags": ["useEffect", "data-fetching", "cleanup"]
+      "tags": [
+        "useEffect",
+        "data-fetching",
+        "cleanup"
+      ]
     },
     {
       "id": "rse-q12",
@@ -175,7 +221,11 @@
       ],
       "answerIndex": 1,
       "explanation": "StrictMode mounts → unmounts → remounts to simulate what happens when React suspends and resumes components (a pattern used in concurrent features). If your effect has no cleanup, the second mount may set up duplicate subscriptions, WebSockets, or intervals.",
-      "tags": ["useEffect", "StrictMode", "cleanup"]
+      "tags": [
+        "useEffect",
+        "StrictMode",
+        "cleanup"
+      ]
     },
     {
       "id": "rse-q13",
@@ -189,7 +239,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React 18 automatic batching extends to setTimeout, fetch callbacks, and native event handlers — not just React event handlers. Both setState calls are grouped into one re-render. Use `flushSync` if you need immediate separate renders.",
-      "tags": ["useState", "batching", "react18"]
+      "tags": [
+        "useState",
+        "batching",
+        "react18"
+      ]
     },
     {
       "id": "rse-q14",
@@ -203,7 +257,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React uses Object.is to compare the new state value with the old. If they're the same (same primitive value or same object reference), React bails out and skips re-rendering the component and its children. This is an important optimisation.",
-      "tags": ["useState", "optimisation", "bailout"]
+      "tags": [
+        "useState",
+        "optimisation",
+        "bailout"
+      ]
     },
     {
       "id": "rse-q15",
@@ -218,7 +276,11 @@
       ],
       "answerIndex": 1,
       "explanation": "No dep array means 'run after every render'. The fetch sets user state → triggers re-render → effect runs again → another fetch → infinite loop. Fix: add `[]` to run once, or `[userId]` to run when the relevant id changes.",
-      "tags": ["useEffect", "infinite-loop", "dependency-array"]
+      "tags": [
+        "useEffect",
+        "infinite-loop",
+        "dependency-array"
+      ]
     },
     {
       "id": "rse-q16",
@@ -232,7 +294,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Derived state creates synchronisation problems. If `fullName = firstName + ' ' + lastName`, don't store fullName in state — compute it during render: `const fullName = firstName + ' ' + lastName`. Storing redundant state leads to bugs where the derived state gets out of sync.",
-      "tags": ["useState", "derived-state", "design"]
+      "tags": [
+        "useState",
+        "derived-state",
+        "design"
+      ]
     },
     {
       "id": "rse-q17",
@@ -246,7 +312,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React compares each individual dependency with Object.is. `user.id` is read at render time and compared to its previous value. If `user.id` (a primitive string/number) is the same, the effect does NOT re-run — even if the `user` object reference changed.",
-      "tags": ["useEffect", "dependency-array", "object-comparison"]
+      "tags": [
+        "useEffect",
+        "dependency-array",
+        "object-comparison"
+      ]
     },
     {
       "id": "rse-q18",
@@ -258,9 +328,17 @@
         "() => controller.abort()",
         "async () => await fetch('/cleanup')"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "Cleanup must be a synchronous function (or nothing). Options A, B, and C are all valid synchronous cleanup operations. D is an async function — invalid as cleanup (the returned Promise is not handled). If you need async cleanup, fire-and-forget inside the cleanup function.",
-      "tags": ["useEffect", "cleanup", "async"]
+      "tags": [
+        "useEffect",
+        "cleanup",
+        "async"
+      ]
     },
     {
       "id": "rse-q19",
@@ -274,7 +352,11 @@
       ],
       "answerIndex": 1,
       "explanation": "exhaustive-deps ensures every value from the component scope used inside useEffect is listed in deps. Missing deps = stale closures. The rule sometimes suggests adding functions to deps — the solution is usually to move the function inside the effect or wrap it in useCallback.",
-      "tags": ["useEffect", "eslint", "stale-closure"]
+      "tags": [
+        "useEffect",
+        "eslint",
+        "stale-closure"
+      ]
     },
     {
       "id": "rse-q20",
@@ -288,7 +370,11 @@
       ],
       "answerIndex": 1,
       "explanation": "AbortController is the standard Web API for cancelling fetch requests. Pass `controller.signal` to the fetch options. When cleanup runs (dep change or unmount), `controller.abort()` causes the fetch to reject with an AbortError — which you can ignore in the catch handler.",
-      "tags": ["useEffect", "data-fetching", "AbortController"]
+      "tags": [
+        "useEffect",
+        "data-fetching",
+        "AbortController"
+      ]
     }
   ],
   "flashcards": [
@@ -296,59 +382,104 @@
       "id": "rse-fc1",
       "front": "State is a snapshot, not a variable",
       "back": "Each render gets its own frozen snapshot of state. Multiple setState calls in one event all read the same snapshot. Use functional updates `setState(prev => ...)` to chain on queued values.",
-      "tags": ["useState", "snapshot"]
+      "tags": [
+        "useState",
+        "snapshot"
+      ]
     },
     {
       "id": "rse-fc2",
       "front": "useEffect dependency array — 3 forms",
       "back": "No array = run every render. [] = run once on mount. [a,b] = run when a or b changes. Always include every variable used inside the effect (exhaustive-deps rule).",
-      "tags": ["useEffect", "dependency-array"]
+      "tags": [
+        "useEffect",
+        "dependency-array"
+      ]
     },
     {
       "id": "rse-fc3",
       "front": "Stale closure in useEffect",
       "back": "Effect captures variables at creation time. If deps are missing, the effect sees stale values. Fix with functional setState `prev => ...` or by adding the variable to deps.",
-      "tags": ["useEffect", "stale-closure"]
+      "tags": [
+        "useEffect",
+        "stale-closure"
+      ]
     },
     {
       "id": "rse-fc4",
       "front": "useEffect cleanup runs when",
       "back": "1) Before next effect run (dep changed). 2) On component unmount. Always return a cleanup for subscriptions, timers, WebSockets, and in-flight fetches.",
-      "tags": ["useEffect", "cleanup"]
+      "tags": [
+        "useEffect",
+        "cleanup"
+      ]
     },
     {
       "id": "rse-fc5",
       "front": "Lazy initial state",
       "back": "`useState(() => expensive())` — function called once. `useState(expensive())` — called on every render. Use function form for expensive computations.",
-      "tags": ["useState", "lazy-init"]
+      "tags": [
+        "useState",
+        "lazy-init"
+      ]
     },
     {
       "id": "rse-fc6",
       "front": "Object state mutation pitfall",
       "back": "Never mutate state directly. React compares by reference. Always create a new object: `setState(prev => ({ ...prev, key: value }))`.",
-      "tags": ["useState", "immutability"]
+      "tags": [
+        "useState",
+        "immutability"
+      ]
     },
     {
       "id": "rse-fc7",
       "front": "async useEffect pattern",
       "back": "Don't `useEffect(async () => ...)`. Define async fn inside and call it: `useEffect(() => { const run = async () => {...}; run(); }, [dep])`.",
-      "tags": ["useEffect", "async"]
+      "tags": [
+        "useEffect",
+        "async"
+      ]
     },
     {
       "id": "rse-fc8",
       "front": "React 18 automatic batching",
       "back": "All setState calls in event handlers, setTimeout, fetch callbacks, and native events are batched into one re-render. Use `flushSync` to opt out.",
-      "tags": ["useState", "batching", "react18"]
+      "tags": [
+        "useState",
+        "batching",
+        "react18"
+      ]
     }
   ],
   "project": {
     "brief": "Design a `useUserData(userId)` custom hook that: 1) fetches user data from `/api/users/:id`, 2) shows a loading state while the request is in flight, 3) handles errors gracefully with a `error` field, 4) cancels the in-flight request if userId changes before the response arrives, 5) avoids updating state after the component unmounts. Write out the full hook with useState and useEffect only (no libraries). Then explain: what happens in StrictMode during development? What does your cleanup do to prevent the double-mount issue?",
     "checklist": [
-      { "id": "c1", "text": "Hook returns { user, loading, error } — all three states covered", "weight": 1 },
-      { "id": "c2", "text": "Uses AbortController and passes signal to fetch — cleanup calls controller.abort()", "weight": 1 },
-      { "id": "c3", "text": "Dep array is [userId] — re-fetches when userId changes, not on every render", "weight": 1 },
-      { "id": "c4", "text": "Sets loading=true before fetch and loading=false in finally block", "weight": 1 },
-      { "id": "c5", "text": "Explains StrictMode: abort fires on first unmount; second mount starts fresh fetch — abort gracefully handles the AbortError in catch", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Hook returns { user, loading, error } — all three states covered",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Uses AbortController and passes signal to fetch — cleanup calls controller.abort()",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Dep array is [userId] — re-fetches when userId changes, not on every render",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Sets loading=true before fetch and loading=false in finally block",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Explains StrictMode: abort fires on first unmount; second mount starts fresh fetch — abort gracefully handles the AbortError in catch",
+        "weight": 1
+      }
     ],
     "hints": [
       "Start with three state variables: user, loading (true), error (null).",
@@ -358,4 +489,3 @@
     ]
   }
 }
-

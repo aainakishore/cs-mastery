@@ -1,7 +1,7 @@
 {
   "id": "long-polling",
-  "unit": 3,
-  "order": 15,
+  "unit": 6,
+  "order": 51,
   "title": "Long Polling vs Short Polling",
   "summary": "Master Long Polling vs Short Polling: trade-offs, failure modes, and production patterns.",
   "prereqs": [

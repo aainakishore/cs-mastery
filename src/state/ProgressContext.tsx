@@ -65,13 +65,42 @@ function computeStatuses(progress: TopicProgress[]): TopicProgress[] {
     progress.filter((p) => p.status === 'learned').map((p) => p.topicId),
   )
 
-  return topics.map((topic) => {
+  // Sort all topics globally by order
+  const sorted = [...topics].sort((a, b) => a.order - b.order)
+
+  // Build per-unit sorted arrays
+  const unitGroups: Record<number, typeof topics> = {}
+  sorted.forEach((t) => {
+    if (!unitGroups[t.unit]) unitGroups[t.unit] = []
+    unitGroups[t.unit].push(t)
+  })
+  const units = Object.keys(unitGroups).map(Number).sort((a, b) => a - b)
+
+  // Last topic id per unit (must be learned to unlock next unit's first topic)
+  const lastOfUnit: Record<number, string> = {}
+  units.forEach((u) => {
+    const grp = unitGroups[u]
+    lastOfUnit[u] = grp[grp.length - 1].id
+  })
+
+  return sorted.map((topic) => {
     const existing = progress.find((p) => p.topicId === topic.id) ?? defaultProgress(topic.id)
     if (existing.status === 'learned') return existing
 
-    const prereqsMet = topic.prereqs.every((prereq) => learnedSet.has(prereq))
-    // First topic (no prereqs) → always available
-    const available = prereqsMet
+    const unitTopics = unitGroups[topic.unit] ?? []
+    const posInUnit = unitTopics.findIndex((t) => t.id === topic.id)
+    units.indexOf(topic.unit);
+    let available = false
+
+    if (posInUnit === 0) {
+      // First topic of EVERY unit is always available immediately
+      available = true
+    } else {
+      // Strictly sequential: previous topic in unit must be learned
+      const prevTopic = unitTopics[posInUnit - 1]
+      available = learnedSet.has(prevTopic.id)
+    }
+
     return { ...existing, status: available ? 'available' : ('locked' as TopicStatus) }
   })
 }

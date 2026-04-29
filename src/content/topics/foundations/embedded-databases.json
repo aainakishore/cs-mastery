@@ -1,7 +1,7 @@
 {
   "id": "embedded-databases",
   "unit": 1,
-  "order": 6,
+  "order": 4,
   "title": "Embedded Databases",
   "summary": "SQLite, RocksDB, H2, DuckDB — when to use in-process databases vs client-server, with internals (B-tree vs LSM).",
   "prereqs": [

@@ -1,7 +1,7 @@
 {
   "id": "ai-image-generation",
-  "unit": 6,
-  "order": 119,
+  "unit": 11,
+  "order": 98,
   "title": "AI Image Generation",
   "summary": "Stable Diffusion architecture, LoRA fine-tuning, ControlNet, SDXL, and FLUX — from theory to practical workflows.",
   "prereqs": [

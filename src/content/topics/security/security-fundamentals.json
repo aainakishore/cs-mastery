@@ -1,7 +1,7 @@
 {
   "id": "security-fundamentals",
-  "unit": 11,
-  "order": 110,
+  "unit": 12,
+  "order": 101,
   "title": "Security Fundamentals",
   "summary": "OWASP Top 10, SQL injection, XSS, CSRF, JWT, OAuth 2.0, and secure coding practices every developer must know.",
   "prereqs": [

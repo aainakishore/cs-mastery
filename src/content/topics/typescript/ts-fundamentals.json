@@ -1,7 +1,7 @@
 {
   "id": "ts-fundamentals",
-  "unit": 10,
-  "order": 80,
+  "unit": 3,
+  "order": 20,
   "title": "TypeScript Fundamentals",
   "summary": "Types, type inference, union/intersection types, and the narrowing mental model that makes TypeScript safe.",
   "prereqs": [],
@@ -19,7 +19,10 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript is structurally erased. Interfaces, type aliases, unions — none exist at runtime. Only JavaScript constructs (class, typeof, in) work at runtime.",
-      "tags": ["type-erasure", "fundamentals"]
+      "tags": [
+        "type-erasure",
+        "fundamentals"
+      ]
     },
     {
       "id": "tsf-q2",
@@ -34,7 +37,10 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript infers an array of the union of all literal types present in the literal. A tuple type [number, string, boolean] would only be inferred with `as const`.",
-      "tags": ["inference", "arrays"]
+      "tags": [
+        "inference",
+        "arrays"
+      ]
     },
     {
       "id": "tsf-q3",
@@ -48,7 +54,10 @@
       ],
       "answerIndex": 2,
       "explanation": "`const` causes TypeScript to infer the literal type `3.14` rather than the widened type `number`. `let PI = 3.14` would infer `number`.",
-      "tags": ["inference", "literal-types"]
+      "tags": [
+        "inference",
+        "literal-types"
+      ]
     },
     {
       "id": "tsf-q4",
@@ -63,7 +72,10 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript inferred `name: string` from the string literal. Assigning `42` (a number) violates the inferred contract — error on line 2, not line 3.",
-      "tags": ["inference", "type-errors"]
+      "tags": [
+        "inference",
+        "type-errors"
+      ]
     },
     {
       "id": "tsf-q5",
@@ -77,7 +89,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Both accept any value. The difference is `any` turns off checking; `unknown` keeps it on — you must prove the type (via typeof, instanceof, type guard) before calling methods.",
-      "tags": ["unknown", "any", "safety"]
+      "tags": [
+        "unknown",
+        "any",
+        "safety"
+      ]
     },
     {
       "id": "tsf-q6",
@@ -92,7 +108,10 @@
       ],
       "answerIndex": 2,
       "explanation": "`unknown` blocks all method access until narrowed. You must first do `if (typeof x === 'string')` before calling string methods.",
-      "tags": ["unknown", "narrowing"]
+      "tags": [
+        "unknown",
+        "narrowing"
+      ]
     },
     {
       "id": "tsf-q7",
@@ -106,7 +125,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Intersection `&` means ALL properties from both sides are required. It is more restrictive than union `|`, which means AT LEAST ONE side.",
-      "tags": ["intersection", "union"]
+      "tags": [
+        "intersection",
+        "union"
+      ]
     },
     {
       "id": "tsf-q8",
@@ -120,7 +142,10 @@
       ],
       "answerIndex": 3,
       "explanation": "`never` means the function never successfully returns. It is different from `void` (returns but with no value). `never` signals unreachable / always-throws.",
-      "tags": ["never", "fundamentals"]
+      "tags": [
+        "never",
+        "fundamentals"
+      ]
     },
     {
       "id": "tsf-q9",
@@ -132,9 +157,16 @@
         "x is string (in regular code, not a type guard function)",
         "'prop' in x"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "`x is string` is only valid as the return type annotation of a type predicate function, not as a standalone expression. The other three are standard JavaScript runtime checks TypeScript recognises.",
-      "tags": ["narrowing", "type-guards"]
+      "tags": [
+        "narrowing",
+        "type-guards"
+      ]
     },
     {
       "id": "tsf-q10",
@@ -149,7 +181,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`as const` freezes all values to their literal types. `config.port` becomes the literal type `3000`, not the wide type `number`. The object is also readonly.",
-      "tags": ["const-assertion", "literal-types"]
+      "tags": [
+        "const-assertion",
+        "literal-types"
+      ]
     },
     {
       "id": "tsf-q11",
@@ -163,7 +198,11 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript widens `let` to the base type because you could later write `x = 'south'` — keeping the literal type would immediately break. `const` guarantees the value never changes so the literal type is safe.",
-      "tags": ["inference", "widening", "literal-types"]
+      "tags": [
+        "inference",
+        "widening",
+        "literal-types"
+      ]
     },
     {
       "id": "tsf-q12",
@@ -177,7 +216,11 @@
       ],
       "answerIndex": 1,
       "explanation": "This is a famous JavaScript bug that TypeScript inherits. `typeof null === 'object'`, so you must ALSO check `x !== null` when narrowing objects. `null` is NOT an object in TS's type system but is at runtime.",
-      "tags": ["narrowing", "null", "gotcha"]
+      "tags": [
+        "narrowing",
+        "null",
+        "gotcha"
+      ]
     },
     {
       "id": "tsf-q13",
@@ -192,7 +235,10 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript infers the return type from the body. `number + number` is `number`, so the return type is inferred as `number` — no annotation needed.",
-      "tags": ["inference", "functions"]
+      "tags": [
+        "inference",
+        "functions"
+      ]
     },
     {
       "id": "tsf-q14",
@@ -206,7 +252,11 @@
       ],
       "answerIndex": 1,
       "explanation": "After all union members are handled, what remains is `never`. Assigning it to a `never`-typed variable is harmless if exhaustive — but if you add a new union member later without a case, TS will error with 'not assignable to never'.",
-      "tags": ["never", "exhaustiveness", "narrowing"]
+      "tags": [
+        "never",
+        "exhaustiveness",
+        "narrowing"
+      ]
     },
     {
       "id": "tsf-q15",
@@ -220,7 +270,10 @@
       ],
       "answerIndex": 1,
       "explanation": "A type predicate `x is string` tells TypeScript: 'wherever you see this function return true, narrow the argument to string'. It is a compile-time contract, not a runtime check.",
-      "tags": ["type-guards", "narrowing"]
+      "tags": [
+        "type-guards",
+        "narrowing"
+      ]
     },
     {
       "id": "tsf-q16",
@@ -232,9 +285,16 @@
         "class declarations",
         "union type annotations"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Interfaces and type aliases exist only at compile time. Class declarations ARE emitted as JavaScript (they are runtime values). Union annotations are purely compile-time.",
-      "tags": ["type-erasure", "runtime"]
+      "tags": [
+        "type-erasure",
+        "runtime"
+      ]
     },
     {
       "id": "tsf-q17",
@@ -249,7 +309,11 @@
       ],
       "answerIndex": 2,
       "explanation": "The `as string[]` assertion overrides the default inference of `never[]` for an empty array literal. Without the assertion, TS infers `never[]` because it has no evidence of element type.",
-      "tags": ["inference", "arrays", "assertions"]
+      "tags": [
+        "inference",
+        "arrays",
+        "assertions"
+      ]
     },
     {
       "id": "tsf-q18",
@@ -263,7 +327,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`strict: true` is a shorthand that enables: strictNullChecks, noImplicitAny, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis, and alwaysStrict. It is the recommended default.",
-      "tags": ["tsconfig", "strict"]
+      "tags": [
+        "tsconfig",
+        "strict"
+      ]
     },
     {
       "id": "tsf-q19",
@@ -277,7 +344,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`any` is an escape hatch that tells TypeScript 'I know what I'm doing'. It disables every check. The blame at runtime is yours, not TypeScript's — this is why `any` should be avoided.",
-      "tags": ["any", "safety", "runtime"]
+      "tags": [
+        "any",
+        "safety",
+        "runtime"
+      ]
     },
     {
       "id": "tsf-q20",
@@ -292,7 +363,11 @@
       ],
       "answerIndex": 1,
       "explanation": "After ruling out string and number, only boolean remains. TypeScript's narrowing tracks what has been eliminated — the else branch gets boolean, not the full union.",
-      "tags": ["narrowing", "union", "control-flow"]
+      "tags": [
+        "narrowing",
+        "union",
+        "control-flow"
+      ]
     }
   ],
   "flashcards": [
@@ -300,59 +375,102 @@
       "id": "tsf-fc1",
       "front": "let vs const inference",
       "back": "`let x = 'a'` infers `string` (widened). `const x = 'a'` infers `'a'` (literal). Use const for config values you never reassign.",
-      "tags": ["inference"]
+      "tags": [
+        "inference"
+      ]
     },
     {
       "id": "tsf-fc2",
       "front": "unknown vs any",
       "back": "Both accept any value. `unknown` requires narrowing before use. `any` skips all checks. Default to `unknown` for external data; never use `any` in new code.",
-      "tags": ["unknown", "any"]
+      "tags": [
+        "unknown",
+        "any"
+      ]
     },
     {
       "id": "tsf-fc3",
       "front": "never type — when does it appear?",
       "back": "Functions that always throw, exhaustive switch defaults, and intersection of incompatible types. Use it as the sentinel in exhaustiveness checks.",
-      "tags": ["never"]
+      "tags": [
+        "never"
+      ]
     },
     {
       "id": "tsf-fc4",
       "front": "Type narrowing guards (5)",
       "back": "`typeof`, `instanceof`, `in`, `Array.isArray`, custom type predicate (`x is T`). TypeScript tracks each guard's effect on the type in each branch.",
-      "tags": ["narrowing", "type-guards"]
+      "tags": [
+        "narrowing",
+        "type-guards"
+      ]
     },
     {
       "id": "tsf-fc5",
       "front": "as const",
       "back": "Freezes all values to their literal types and makes the object deeply readonly. Use for config objects, lookup tables, and discriminated union tag arrays.",
-      "tags": ["const-assertion", "literal-types"]
+      "tags": [
+        "const-assertion",
+        "literal-types"
+      ]
     },
     {
       "id": "tsf-fc6",
       "front": "typeof null at runtime",
       "back": "`typeof null === 'object'` — JavaScript legacy bug. Always pair an object check with `x !== null` when narrowing nullable references.",
-      "tags": ["null", "narrowing", "gotcha"]
+      "tags": [
+        "null",
+        "narrowing",
+        "gotcha"
+      ]
     },
     {
       "id": "tsf-fc7",
       "front": "strict: true enables",
       "back": "strictNullChecks, noImplicitAny, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis. Enable from day one — retrofitting strict is painful.",
-      "tags": ["tsconfig", "strict"]
+      "tags": [
+        "tsconfig",
+        "strict"
+      ]
     },
     {
       "id": "tsf-fc8",
       "front": "Union vs Intersection",
       "back": "`A | B` = either A or B (OR). `A & B` = both A and B (AND). Unions widen; intersections constrain. Narrow unions before calling type-specific methods.",
-      "tags": ["union", "intersection"]
+      "tags": [
+        "union",
+        "intersection"
+      ]
     }
   ],
   "project": {
     "brief": "Design the type system for a small API client library in TypeScript. The library fetches user data from a REST endpoint that can return: a User object, an Error object, or null (not found). Define: 1) the union type for all three response shapes, 2) a type guard function for each case, 3) a processResponse function that uses narrowing to handle each case without any `any`. Write out the types, guards, and function signature — no implementation needed. Then explain: why is `unknown` the right type for the raw JSON before parsing? What would break if you used `any` instead?",
     "checklist": [
-      { "id": "c1", "text": "Defines a discriminated union or tagged union for the three response shapes", "weight": 1 },
-      { "id": "c2", "text": "Writes a type guard (x is User, x is ApiError) for each shape", "weight": 1 },
-      { "id": "c3", "text": "processResponse is fully typed with no any or non-null assertions", "weight": 1 },
-      { "id": "c4", "text": "Explains why unknown is safer than any for raw JSON input", "weight": 1 },
-      { "id": "c5", "text": "Identifies what breaks if any is used (missed null case, wrong method calls)", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Defines a discriminated union or tagged union for the three response shapes",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Writes a type guard (x is User, x is ApiError) for each shape",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "processResponse is fully typed with no any or non-null assertions",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Explains why unknown is safer than any for raw JSON input",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Identifies what breaks if any is used (missed null case, wrong method calls)",
+        "weight": 1
+      }
     ],
     "hints": [
       "A discriminated union uses a shared literal field (like `type: 'user' | 'error' | 'not-found'`) so narrowing is predictable.",
@@ -362,4 +480,3 @@
     ]
   }
 }
-

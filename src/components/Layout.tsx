@@ -5,6 +5,7 @@ import { XPBar } from './XPBar'
 import { StreakFlame } from './StreakFlame'
 import { HeartsBar } from './HeartsBar'
 import { NudgeBanner } from './NudgeBanner'
+import * as React from "react";
 
 const ACTIVE_KEY = 'csm:activeMs'
 const BREAK_INTERVAL_MS = 20 * 60 * 1000
@@ -41,27 +42,28 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
 
   const navItems = [
     { path: '/',         label: 'Home',    icon: '🏠' },
-    { path: '/review',   label: 'Review',  icon: '🔁' },
+    { path: '/review',   label: 'Review',  icon: '🎴' },
     { path: '/mindmap',  label: 'Map',     icon: '🗺️' },
-    { path: '/stats',    label: 'Stats',   icon: '📊' },
+    { path: '/stats',    label: 'Stats',   icon: '📈' },
     { path: '/settings', label: 'Settings',icon: '⚙️' },
   ]
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-app)', color: 'var(--text-primary)' }}>
       {/* ── Top bar ── */}
-      <div className="sticky top-0 z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800">
-        <div className="px-4 py-3 flex items-center justify-between gap-3">
+      <div className="sticky top-0 z-20 backdrop-blur" style={{ background: 'var(--bg-nav)', borderBottom: '1px solid var(--border)' }}>
+        <div className="w-full px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             {back && (
               <button
                 onClick={() => navigate(back)}
-                className="text-slate-400 hover:text-white text-sm shrink-0"
+                className="text-sm shrink-0 font-medium hover:opacity-70"
+                style={{ color: 'var(--text-muted)' }}
               >
                 ←
               </button>
             )}
-            <span className="font-black text-indigo-400 text-base tracking-tight truncate">
+            <span className="font-black text-indigo-500 text-base tracking-tight truncate">
               {title ?? 'CS Mastery'}
             </span>
           </div>
@@ -71,7 +73,8 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
             <HeartsBar />
             <button
               onClick={() => navigate('/settings')}
-              className="text-slate-400 hover:text-white p-1"
+              className="p-1 hover:opacity-70"
+              style={{ color: 'var(--text-muted)' }}
               aria-label="Settings"
             >
               <Settings size={18} />
@@ -81,13 +84,13 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
 
         {/* Active-time progress bar */}
         <div className="px-4 pb-2">
-          <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+          <div className="flex items-center justify-between text-xs mb-1" style={{ color: 'var(--text-subtle)' }}>
             <span>👁 Active time</span>
             <span className={pct > 80 ? 'text-orange-400 font-semibold' : ''}>
               {minutes}m / 20m
             </span>
           </div>
-          <div className="w-full bg-slate-800 rounded-full h-1">
+          <div className="w-full rounded-full h-1" style={{ background: 'var(--border)' }}>
             <div
               className="h-1 rounded-full transition-all duration-1000"
               style={{ width: `${pct}%`, background: pct > 80 ? '#f97316' : '#6366f1' }}
@@ -98,22 +101,26 @@ export function Layout({ children, title, back, hideNav }: LayoutProps) {
 
       {/* ── Page content ── */}
       <NudgeBanner />
-      <div className="flex-1 pb-20">
+      <div className="flex-1 pb-20 w-full">
         {children}
       </div>
 
       {/* ── Bottom nav ── */}
       {!hideNav && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 bg-slate-900/95 backdrop-blur border-t border-slate-800 flex justify-around items-center py-2">
+        <div className="fixed bottom-0 left-0 right-0 z-20 backdrop-blur flex justify-around items-center py-2"
+          style={{ background: 'var(--bg-nav)', borderTop: '1px solid var(--border)' }}>
           {navItems.map(({ path, label, icon }) => {
             const active = location.pathname === path
             return (
               <button
                 key={path}
                 onClick={() => navigate(path)}
-                className={`flex flex-col items-center gap-0.5 text-xs px-4 py-1 transition-colors ${
-                  active ? 'text-indigo-400 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
+                className="flex flex-col items-center gap-0.5 text-xs px-3 py-1 transition-all rounded-xl"
+                style={{
+                  color: active ? '#6366f1' : 'var(--text-muted)',
+                  fontWeight: active ? 700 : 400,
+                  background: active ? '#6366f120' : 'transparent',
+                }}
               >
                 <span className="text-xl">{icon}</span>
                 {label}

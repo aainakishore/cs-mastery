@@ -1,7 +1,7 @@
 {
   "id": "kubernetes",
-  "unit": 5,
-  "order": 27,
+  "unit": 10,
+  "order": 88,
   "title": "Kubernetes",
   "summary": "Master Kubernetes: trade-offs, failure modes, and production patterns.",
   "prereqs": [

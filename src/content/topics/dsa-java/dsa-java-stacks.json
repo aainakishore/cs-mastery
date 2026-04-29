@@ -1,6 +1,6 @@
 {
   "id": "dsa-java-stacks",
-  "unit": 9,
+  "unit": 8,
   "order": 63,
   "title": "Stacks in Java",
   "summary": "Stack using arrays/LinkedList/ArrayDeque, monotonic stack, and expression parsing.",
@@ -8,7 +8,7 @@
     "dsa-java-arrays",
     "dsa-java-linked-lists"
   ],
-  "guide": "# Stacks in Java\n\nA stack is a **LIFO** (Last In, First Out) container. Imagine a stack of plates: you can only add or remove from the **top**. The plate you placed last is always the first one you pick up.\n\n```\n     push(C)        pop()\n       \u2193              \u2191\n   \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n   \u2502   C   \u2502  \u2192   \u2502       \u2502\n   \u2502   B   \u2502      \u2502   B   \u2502\n   \u2502   A   \u2502      \u2502   A   \u2502\n   \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n     top=C          top=B\n```\n\n## Java Implementation \u2014 prefer ArrayDeque over Stack\n\n```java\n// \u2717 java.util.Stack \u2014 synchronized (legacy), avoids\n// \u2713 ArrayDeque used as a stack\nDeque<Integer> stack = new ArrayDeque<>();\nstack.push(10);        // add to TOP \u2014 O(1)\nint top = stack.peek();  // view TOP without removing \u2014 O(1)\nint out = stack.pop();   // remove TOP \u2014 O(1)\nboolean empty = stack.isEmpty();\n```\n\n## Balanced Parentheses \u2014 matching open/close pairs\n\nThe stack remembers the most recent unmatched opener \u2014 perfect for LIFO matching.\n\n```\nInput: ( [ { } ] )\n\nPush (  \u2192 stack: [(]\nPush [  \u2192 stack: [(, []\nPush {  \u2192 stack: [(, [, {]\nSee }   \u2192 pop {, matches \u2192 stack: [(, []\nSee ]   \u2192 pop [, matches \u2192 stack: [(]\nSee )   \u2192 pop (, matches \u2192 stack: []\nStack empty \u2192 BALANCED \u2713\n\nInput: ( ]\nPush (  \u2192 stack: [(]\nSee ]   \u2192 pop (, mismatch! \u2192 NOT BALANCED \u2717\n```\n\n```java\nboolean isBalanced(String s) {\n    Deque<Character> stack = new ArrayDeque<>();\n    for (char c : s.toCharArray()) {\n        if (c == '(' || c == '[' || c == '{') stack.push(c);\n        else {\n            if (stack.isEmpty()) return false;\n            char top = stack.pop();\n            if ((c==')' && top!='(') || (c==']' && top!='[') || (c=='}' && top!='{'))\n                return false;\n        }\n    }\n    return stack.isEmpty();\n}\n```\n\n## Monotonic Stack \u2014 Next Greater Element\n\nMaintain a stack of **decreasing** candidates. The moment you see an element larger than the top, the top has found its 'next greater'.\n\n```\nnums:  [2, 1, 5, 3, 6, 4]\n                          answer for each index:\n\nIndex 0 (2): push 2    \u2192 stack: [2]\nIndex 1 (1): push 1    \u2192 stack: [2, 1]\nIndex 2 (5): 5 > 1 \u2192 pop 1, ans[1]=5; 5 > 2 \u2192 pop 2, ans[0]=5; push 5 \u2192 stack: [5]\nIndex 3 (3): push 3    \u2192 stack: [5, 3]\nIndex 4 (6): 6 > 3 \u2192 pop 3, ans[3]=6; 6 > 5 \u2192 pop 5, ans[2]=6; push 6 \u2192 stack: [6]\nIndex 5 (4): push 4    \u2192 stack: [6, 4]\nRemaining: ans[4]=-1, ans[5]=-1 (no next greater)\n\nFinal: [5, 5, 6, 6, -1, -1]\n```\n\n```java\nint[] nextGreater(int[] nums) {\n    int n = nums.length;\n    int[] ans = new int[n];\n    Arrays.fill(ans, -1);\n    Deque<Integer> stack = new ArrayDeque<>();  // stores indices\n    for (int i = 0; i < n; i++) {\n        while (!stack.isEmpty() && nums[stack.peek()] < nums[i])\n            ans[stack.pop()] = nums[i];\n        stack.push(i);\n    }\n    return ans;\n}\n```\n\n## Min Stack \u2014 O(1) getMin\n\nKeep a **parallel stack** that records the minimum at each depth level.\n\n```\nPush 5: main=[5],   minStack=[5]\nPush 3: main=[5,3], minStack=[5,3]\nPush 7: main=[5,3,7], minStack=[5,3,3]  \u2190 min stays 3\nPop:    main=[5,3], minStack=[5,3]       \u2190 getMin()=3 still correct\nPop:    main=[5],   minStack=[5]         \u2190 getMin()=5\n```\n\n## Largest Rectangle in Histogram\n\nUse indices (not values) in the stack \u2014 you need widths, not just heights.\n\n```\nheights: [2, 1, 5, 6, 2, 3]\n          0  1  2  3  4  5\n\nWhen you pop height h at index i because a shorter bar arrived:\n  width = current_index - stack.peek() - 1   (the left boundary)\n  area  = h \u00d7 width\n```\n\n## Call Stack \u2014 recursion visualised\n\nEvery function call pushes a **frame** containing local variables and return address:\n\n```\nfactorial(4)\n\u251c\u2500\u2500 frame: n=4, awaiting factorial(3)\n\u2502   \u251c\u2500\u2500 frame: n=3, awaiting factorial(2)\n\u2502   \u2502   \u251c\u2500\u2500 frame: n=2, awaiting factorial(1)\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 frame: n=1, returns 1         \u2190 BASE CASE\n\u2502   \u2502   \u2514\u2500\u2500 returns 2\n\u2502   \u2514\u2500\u2500 returns 6\n\u2514\u2500\u2500 returns 24\n```\nToo many frames \u2192 **StackOverflowError**. Fix: convert to iterative + explicit stack.\n\n## Complexity Cheatsheet\n\n| Operation | ArrayDeque Time |\n|---|---|\n| push | O(1) amortised |\n| pop | O(1) |\n| peek | O(1) |\n| isEmpty | O(1) |\n| Monotonic stack (n elements) | O(n) total \u2014 each element pushed and popped once |\n\n## Common Pitfalls\n- Calling `pop()` on empty stack \u2192 `NoSuchElementException` \u2014 always check `isEmpty()` first\n- Using `java.util.Stack` in interviews \u2014 slower (synchronized) and has legacy quirks\n- Monotonic stack: storing **values** when you need **indices** for distance/width calculations\n- Undo/redo needs **two** stacks \u2014 one for undo history, one for redo\n\n## Connections\n- **Recursion** \u2014 the call stack IS a stack; convert any recursion to iteration with an explicit stack\n- **Graphs** \u2014 iterative DFS uses an explicit stack\n- **Queues** \u2014 LIFO vs FIFO; two stacks can simulate a queue\n- **Monotonic Stack** \u2014 powers: next greater/smaller, histogram, stock span problems\n",
+  "guide": "# Stacks in Java\n\nA stack is a **LIFO** (Last In, First Out) container. Imagine a stack of plates: you can only add or remove from the **top**. The plate you placed last is always the first one you pick up.\n\n```\n     push(C)        pop()\n       ↓              ↑\n   ┌───────┐      ┌───────┐\n   │   C   │  →   │       │\n   │   B   │      │   B   │\n   │   A   │      │   A   │\n   └───────┘      └───────┘\n     top=C          top=B\n```\n\n## Java Implementation — prefer ArrayDeque over Stack\n\n```java\n// ✗ java.util.Stack — synchronized (legacy), avoids\n// ✓ ArrayDeque used as a stack\nDeque<Integer> stack = new ArrayDeque<>();\nstack.push(10);        // add to TOP — O(1)\nint top = stack.peek();  // view TOP without removing — O(1)\nint out = stack.pop();   // remove TOP — O(1)\nboolean empty = stack.isEmpty();\n```\n\n## Balanced Parentheses — matching open/close pairs\n\nThe stack remembers the most recent unmatched opener — perfect for LIFO matching.\n\n```\nInput: ( [ { } ] )\n\nPush (  → stack: [(]\nPush [  → stack: [(, []\nPush {  → stack: [(, [, {]\nSee }   → pop {, matches → stack: [(, []\nSee ]   → pop [, matches → stack: [(]\nSee )   → pop (, matches → stack: []\nStack empty → BALANCED ✓\n\nInput: ( ]\nPush (  → stack: [(]\nSee ]   → pop (, mismatch! → NOT BALANCED ✗\n```\n\n```java\nboolean isBalanced(String s) {\n    Deque<Character> stack = new ArrayDeque<>();\n    for (char c : s.toCharArray()) {\n        if (c == '(' || c == '[' || c == '{') stack.push(c);\n        else {\n            if (stack.isEmpty()) return false;\n            char top = stack.pop();\n            if ((c==')' && top!='(') || (c==']' && top!='[') || (c=='}' && top!='{'))\n                return false;\n        }\n    }\n    return stack.isEmpty();\n}\n```\n\n## Monotonic Stack — Next Greater Element\n\nMaintain a stack of **decreasing** candidates. The moment you see an element larger than the top, the top has found its 'next greater'.\n\n```\nnums:  [2, 1, 5, 3, 6, 4]\n                          answer for each index:\n\nIndex 0 (2): push 2    → stack: [2]\nIndex 1 (1): push 1    → stack: [2, 1]\nIndex 2 (5): 5 > 1 → pop 1, ans[1]=5; 5 > 2 → pop 2, ans[0]=5; push 5 → stack: [5]\nIndex 3 (3): push 3    → stack: [5, 3]\nIndex 4 (6): 6 > 3 → pop 3, ans[3]=6; 6 > 5 → pop 5, ans[2]=6; push 6 → stack: [6]\nIndex 5 (4): push 4    → stack: [6, 4]\nRemaining: ans[4]=-1, ans[5]=-1 (no next greater)\n\nFinal: [5, 5, 6, 6, -1, -1]\n```\n\n```java\nint[] nextGreater(int[] nums) {\n    int n = nums.length;\n    int[] ans = new int[n];\n    Arrays.fill(ans, -1);\n    Deque<Integer> stack = new ArrayDeque<>();  // stores indices\n    for (int i = 0; i < n; i++) {\n        while (!stack.isEmpty() && nums[stack.peek()] < nums[i])\n            ans[stack.pop()] = nums[i];\n        stack.push(i);\n    }\n    return ans;\n}\n```\n\n## Min Stack — O(1) getMin\n\nKeep a **parallel stack** that records the minimum at each depth level.\n\n```\nPush 5: main=[5],   minStack=[5]\nPush 3: main=[5,3], minStack=[5,3]\nPush 7: main=[5,3,7], minStack=[5,3,3]  ← min stays 3\nPop:    main=[5,3], minStack=[5,3]       ← getMin()=3 still correct\nPop:    main=[5],   minStack=[5]         ← getMin()=5\n```\n\n## Largest Rectangle in Histogram\n\nUse indices (not values) in the stack — you need widths, not just heights.\n\n```\nheights: [2, 1, 5, 6, 2, 3]\n          0  1  2  3  4  5\n\nWhen you pop height h at index i because a shorter bar arrived:\n  width = current_index - stack.peek() - 1   (the left boundary)\n  area  = h × width\n```\n\n## Call Stack — recursion visualised\n\nEvery function call pushes a **frame** containing local variables and return address:\n\n```\nfactorial(4)\n├── frame: n=4, awaiting factorial(3)\n│   ├── frame: n=3, awaiting factorial(2)\n│   │   ├── frame: n=2, awaiting factorial(1)\n│   │   │   └── frame: n=1, returns 1         ← BASE CASE\n│   │   └── returns 2\n│   └── returns 6\n└── returns 24\n```\nToo many frames → **StackOverflowError**. Fix: convert to iterative + explicit stack.\n\n## Complexity Cheatsheet\n\n| Operation | ArrayDeque Time |\n|---|---|\n| push | O(1) amortised |\n| pop | O(1) |\n| peek | O(1) |\n| isEmpty | O(1) |\n| Monotonic stack (n elements) | O(n) total — each element pushed and popped once |\n\n## Common Pitfalls\n- Calling `pop()` on empty stack → `NoSuchElementException` — always check `isEmpty()` first\n- Using `java.util.Stack` in interviews — slower (synchronized) and has legacy quirks\n- Monotonic stack: storing **values** when you need **indices** for distance/width calculations\n- Undo/redo needs **two** stacks — one for undo history, one for redo\n\n## Connections\n- **Recursion** — the call stack IS a stack; convert any recursion to iteration with an explicit stack\n- **Graphs** — iterative DFS uses an explicit stack\n- **Queues** — LIFO vs FIFO; two stacks can simulate a queue\n- **Monotonic Stack** — powers: next greater/smaller, histogram, stock span problems\n",
   "questions": [
     {
       "id": "djst-q1",
@@ -117,7 +117,7 @@
       "prompt": "java.util.Stack vs ArrayDeque:",
       "choices": [
         "Stack is faster",
-        "ArrayDeque is faster \u2014 Stack is synchronized (legacy)",
+        "ArrayDeque is faster — Stack is synchronized (legacy)",
         "Both identical",
         "Stack for production"
       ],
@@ -194,7 +194,7 @@
     {
       "id": "djst-q12",
       "type": "mcq",
-      "prompt": "Min stack \u2014 O(1) getMin strategy:",
+      "prompt": "Min stack — O(1) getMin strategy:",
       "choices": [
         "Scan on every call",
         "Keep a parallel stack of running minimums",
@@ -229,7 +229,7 @@
       "prompt": "Iterative DFS with explicit stack vs recursive DFS:",
       "choices": [
         "Different traversal order",
-        "Explicit stack mirrors the call stack \u2014 same logic",
+        "Explicit stack mirrors the call stack — same logic",
         "Explicit stack uses more memory",
         "Recursive is always better"
       ],
@@ -278,12 +278,12 @@
       "prompt": "Stack overflow from recursion happens because:",
       "choices": [
         "Array is too small",
-        "Each call frame is pushed \u2014 deep recursion exhausts call stack memory",
+        "Each call frame is pushed — deep recursion exhausts call stack memory",
         "Stack is unsorted",
         "pop() is missing"
       ],
       "answerIndex": 1,
-      "explanation": "JVM default stack is usually ~512 KB\u20131 MB.",
+      "explanation": "JVM default stack is usually ~512 KB–1 MB.",
       "tags": [
         "overflow"
       ]
@@ -295,7 +295,7 @@
       "choices": [
         "One queue",
         "One stack",
-        "Two stacks \u2014 undo stack and redo stack",
+        "Two stacks — undo stack and redo stack",
         "Doubly linked list"
       ],
       "answerIndex": 2,

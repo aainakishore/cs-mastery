@@ -1,14 +1,14 @@
 {
   "id": "dsa-java-graphs-advanced",
-  "unit": 9,
-  "order": 72,
+  "unit": 8,
+  "order": 73,
   "title": "Advanced Graph Algorithms in Java",
   "summary": "Dijkstra's shortest path, topological sort (Kahn's BFS + DFS), Bellman-Ford, and Minimum Spanning Tree (Prim/Kruskal).",
   "prereqs": [
     "dsa-java-graphs-basics",
     "dsa-java-heaps"
   ],
-  "guide": "# Advanced Graph Algorithms in Java\n\nOnce you can navigate a graph (BFS/DFS), the next leap is answering *weighted* questions: 'What is the cheapest route?' and *ordering* questions: 'What tasks must come before others?' These algorithms each solve a specific shape of problem \u2014 understanding WHEN to use each is as important as HOW to implement it.\n\n## Dijkstra \u2014 cheapest path from one source\n```java\n// Mental model: you're expanding a 'settled frontier' outward.\n// At each step, pick the UNSETTLED node with the cheapest known distance\n// (greedy). A min-heap makes this O((V+E) log V).\n//\n// Key invariant: once a node is polled from the heap, its distance is FINAL.\n// This is why Dijkstra fails with NEGATIVE weights \u2014 a future negative edge\n// could improve an already-settled distance.\n//\nint[] dijkstra(List<List<int[]>> adj, int src, int n) {\n    int[] dist = new int[n];\n    Arrays.fill(dist, Integer.MAX_VALUE);\n    dist[src] = 0;\n    // heap entry: [distance, node]\n    PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> a[0]));\n    pq.offer(new int[]{0, src});\n    while (!pq.isEmpty()) {\n        int[] cur = pq.poll();\n        int d = cur[0], u = cur[1];\n        if (d > dist[u]) continue;  // stale entry \u2014 skip\n        for (int[] edge : adj.get(u)) {\n            int v = edge[0], w = edge[1];\n            if (dist[u] + w < dist[v]) {\n                dist[v] = dist[u] + w;\n                pq.offer(new int[]{dist[v], v});\n            }\n        }\n    }\n    return dist;\n}\n```\n\n## Topological Sort \u2014 ordering tasks with dependencies\n```java\n// A topological order lists nodes so that every directed edge u\u2192v\n// has u BEFORE v in the list.  Only possible on DAGs (no cycles).\n//\n// KAHN'S ALGORITHM (BFS-based \u2014 intuitive)\n// Think of it like peeling an onion: remove all nodes with no incoming\n// dependencies first, which exposes the next 'layer' of ready tasks.\nList<Integer> topoSortKahn(List<List<Integer>> adj, int n) {\n    int[] inDegree = new int[n];\n    for (int u = 0; u < n; u++)\n        for (int v : adj.get(u)) inDegree[v]++;\n    Queue<Integer> q = new ArrayDeque<>();\n    for (int i = 0; i < n; i++) if (inDegree[i] == 0) q.offer(i);\n    List<Integer> order = new ArrayList<>();\n    while (!q.isEmpty()) {\n        int u = q.poll();\n        order.add(u);\n        for (int v : adj.get(u)) if (--inDegree[v] == 0) q.offer(v);\n    }\n    return order.size() == n ? order : Collections.emptyList(); // empty = cycle detected\n}\n```\n\n## Topological Sort \u2014 DFS post-order reversal\n```java\n// DFS topo: visit all dependencies FIRST, then push current node to stack.\n// Reverse the stack at the end \u2192 topological order.\n// Why? Post-order means 'I'm done with everything that depends on me first.'\nvoid dfsTopoSort(List<List<Integer>> adj, int u, boolean[] vis, Deque<Integer> stack) {\n    vis[u] = true;\n    for (int v : adj.get(u)) if (!vis[v]) dfsTopoSort(adj, v, vis, stack);\n    stack.push(u);  // push AFTER all descendants are done\n}\n```\n\n## Bellman-Ford \u2014 handles negative weights\n```java\n// Relax ALL edges V-1 times. Each pass can extend shortest paths by one more hop.\n// Run one more pass: if any distance still improves \u2192 negative cycle exists.\n//\n// Mental model: imagine water slowly finding its lowest level \u2014\n// it takes at most V-1 steps to propagate cheapest costs across V nodes.\nint[] bellmanFord(int n, int[][] edges, int src) {  // edges: [u, v, weight]\n    int[] dist = new int[n];\n    Arrays.fill(dist, Integer.MAX_VALUE);\n    dist[src] = 0;\n    for (int i = 0; i < n - 1; i++)           // V-1 relaxation passes\n        for (int[] e : edges)\n            if (dist[e[0]] != Integer.MAX_VALUE && dist[e[0]] + e[2] < dist[e[1]])\n                dist[e[1]] = dist[e[0]] + e[2];\n    // V-th pass: detect negative cycle\n    for (int[] e : edges)\n        if (dist[e[0]] != Integer.MAX_VALUE && dist[e[0]] + e[2] < dist[e[1]])\n            return null;  // negative cycle\n    return dist;\n}\n```\n\n## Minimum Spanning Tree \u2014 cheapest connected backbone\n```java\n// MST = subset of edges connecting ALL vertices with minimum total weight, no cycles.\n//\n// KRUSKAL'S (sort edges, use Union-Find to avoid cycles):\n// Picture: sort all roads by cost, greedily add cheapest that don't form a loop.\n//\n// PRIM'S (grow one tree using a min-heap \u2014 similar to Dijkstra):\n// Picture: start at any node, always add the cheapest edge that connects\n// a NEW node to the already-grown tree.\n//\n// Kruskal outline:\nArrays.sort(edges, Comparator.comparingInt(e -> e[2]));\nUnionFind uf = new UnionFind(n);\nint mstWeight = 0;\nfor (int[] e : edges) {\n    if (uf.union(e[0], e[1])) {   // only add if it doesn't form a cycle\n        mstWeight += e[2];\n    }\n}\n```\n\n## Common Pitfalls\n- Using Dijkstra on a graph with negative edge weights \u2014 it gives wrong answers; use Bellman-Ford instead\n- Not skipping stale heap entries in Dijkstra (d > dist[u] check) \u2014 causes redundant processing\n- Topological sort on a graph with a cycle \u2014 Kahn's detects this (output size < n); plain DFS topo does not detect it automatically\n- Bellman-Ford: running only V-2 relaxation passes (need exactly V-1)\n- MST vs shortest path: MST minimises total edge weight tree-wide; Dijkstra minimises distance from one source \u2014 they are different problems\n\n## Connections\n- **Heaps**: Dijkstra needs a min-heap; Prim's MST also uses one\n- **Graphs BFS/DFS**: Kahn's topo sort is BFS on a DAG; DFS topo uses post-order\n- **Union-Find**: Kruskal's MST uses Union-Find for O(\u03b1(n)) cycle detection\n- **DP**: Bellman-Ford and Floyd-Warshall are essentially DP on graphs",
+  "guide": "# Advanced Graph Algorithms in Java\n\nOnce you can navigate a graph (BFS/DFS), the next leap is answering *weighted* questions: 'What is the cheapest route?' and *ordering* questions: 'What tasks must come before others?' These algorithms each solve a specific shape of problem — understanding WHEN to use each is as important as HOW to implement it.\n\n## Dijkstra — cheapest path from one source\n```java\n// Mental model: you're expanding a 'settled frontier' outward.\n// At each step, pick the UNSETTLED node with the cheapest known distance\n// (greedy). A min-heap makes this O((V+E) log V).\n//\n// Key invariant: once a node is polled from the heap, its distance is FINAL.\n// This is why Dijkstra fails with NEGATIVE weights — a future negative edge\n// could improve an already-settled distance.\n//\nint[] dijkstra(List<List<int[]>> adj, int src, int n) {\n    int[] dist = new int[n];\n    Arrays.fill(dist, Integer.MAX_VALUE);\n    dist[src] = 0;\n    // heap entry: [distance, node]\n    PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> a[0]));\n    pq.offer(new int[]{0, src});\n    while (!pq.isEmpty()) {\n        int[] cur = pq.poll();\n        int d = cur[0], u = cur[1];\n        if (d > dist[u]) continue;  // stale entry — skip\n        for (int[] edge : adj.get(u)) {\n            int v = edge[0], w = edge[1];\n            if (dist[u] + w < dist[v]) {\n                dist[v] = dist[u] + w;\n                pq.offer(new int[]{dist[v], v});\n            }\n        }\n    }\n    return dist;\n}\n```\n\n## Topological Sort — ordering tasks with dependencies\n```java\n// A topological order lists nodes so that every directed edge u→v\n// has u BEFORE v in the list.  Only possible on DAGs (no cycles).\n//\n// KAHN'S ALGORITHM (BFS-based — intuitive)\n// Think of it like peeling an onion: remove all nodes with no incoming\n// dependencies first, which exposes the next 'layer' of ready tasks.\nList<Integer> topoSortKahn(List<List<Integer>> adj, int n) {\n    int[] inDegree = new int[n];\n    for (int u = 0; u < n; u++)\n        for (int v : adj.get(u)) inDegree[v]++;\n    Queue<Integer> q = new ArrayDeque<>();\n    for (int i = 0; i < n; i++) if (inDegree[i] == 0) q.offer(i);\n    List<Integer> order = new ArrayList<>();\n    while (!q.isEmpty()) {\n        int u = q.poll();\n        order.add(u);\n        for (int v : adj.get(u)) if (--inDegree[v] == 0) q.offer(v);\n    }\n    return order.size() == n ? order : Collections.emptyList(); // empty = cycle detected\n}\n```\n\n## Topological Sort — DFS post-order reversal\n```java\n// DFS topo: visit all dependencies FIRST, then push current node to stack.\n// Reverse the stack at the end → topological order.\n// Why? Post-order means 'I'm done with everything that depends on me first.'\nvoid dfsTopoSort(List<List<Integer>> adj, int u, boolean[] vis, Deque<Integer> stack) {\n    vis[u] = true;\n    for (int v : adj.get(u)) if (!vis[v]) dfsTopoSort(adj, v, vis, stack);\n    stack.push(u);  // push AFTER all descendants are done\n}\n```\n\n## Bellman-Ford — handles negative weights\n```java\n// Relax ALL edges V-1 times. Each pass can extend shortest paths by one more hop.\n// Run one more pass: if any distance still improves → negative cycle exists.\n//\n// Mental model: imagine water slowly finding its lowest level —\n// it takes at most V-1 steps to propagate cheapest costs across V nodes.\nint[] bellmanFord(int n, int[][] edges, int src) {  // edges: [u, v, weight]\n    int[] dist = new int[n];\n    Arrays.fill(dist, Integer.MAX_VALUE);\n    dist[src] = 0;\n    for (int i = 0; i < n - 1; i++)           // V-1 relaxation passes\n        for (int[] e : edges)\n            if (dist[e[0]] != Integer.MAX_VALUE && dist[e[0]] + e[2] < dist[e[1]])\n                dist[e[1]] = dist[e[0]] + e[2];\n    // V-th pass: detect negative cycle\n    for (int[] e : edges)\n        if (dist[e[0]] != Integer.MAX_VALUE && dist[e[0]] + e[2] < dist[e[1]])\n            return null;  // negative cycle\n    return dist;\n}\n```\n\n## Minimum Spanning Tree — cheapest connected backbone\n```java\n// MST = subset of edges connecting ALL vertices with minimum total weight, no cycles.\n//\n// KRUSKAL'S (sort edges, use Union-Find to avoid cycles):\n// Picture: sort all roads by cost, greedily add cheapest that don't form a loop.\n//\n// PRIM'S (grow one tree using a min-heap — similar to Dijkstra):\n// Picture: start at any node, always add the cheapest edge that connects\n// a NEW node to the already-grown tree.\n//\n// Kruskal outline:\nArrays.sort(edges, Comparator.comparingInt(e -> e[2]));\nUnionFind uf = new UnionFind(n);\nint mstWeight = 0;\nfor (int[] e : edges) {\n    if (uf.union(e[0], e[1])) {   // only add if it doesn't form a cycle\n        mstWeight += e[2];\n    }\n}\n```\n\n## Common Pitfalls\n- Using Dijkstra on a graph with negative edge weights — it gives wrong answers; use Bellman-Ford instead\n- Not skipping stale heap entries in Dijkstra (d > dist[u] check) — causes redundant processing\n- Topological sort on a graph with a cycle — Kahn's detects this (output size < n); plain DFS topo does not detect it automatically\n- Bellman-Ford: running only V-2 relaxation passes (need exactly V-1)\n- MST vs shortest path: MST minimises total edge weight tree-wide; Dijkstra minimises distance from one source — they are different problems\n\n## Connections\n- **Heaps**: Dijkstra needs a min-heap; Prim's MST also uses one\n- **Graphs BFS/DFS**: Kahn's topo sort is BFS on a DAG; DFS topo uses post-order\n- **Union-Find**: Kruskal's MST uses Union-Find for O(α(n)) cycle detection\n- **DP**: Bellman-Ford and Floyd-Warshall are essentially DP on graphs",
   "questions": [
     {
       "id": "djga-q1",
@@ -32,7 +32,7 @@
       "prompt": "Dijkstra fails with negative edge weights because:",
       "choices": [
         "The heap can't store negative numbers",
-        "Once a node is settled its distance is considered final \u2014 a later negative edge could improve it",
+        "Once a node is settled its distance is considered final — a later negative edge could improve it",
         "It doesn't visit all nodes",
         "Negative weights cause infinite loops"
       ],
@@ -47,7 +47,7 @@
       "type": "mcq",
       "prompt": "Dijkstra time complexity with a binary min-heap:",
       "choices": [
-        "O(V\u00b2)",
+        "O(V²)",
         "O(E log V)",
         "O((V + E) log V)",
         "O(VE)"
@@ -61,7 +61,7 @@
     {
       "id": "djga-q4",
       "type": "codeOutput",
-      "prompt": "Dijkstra from node 0: edges 0\u21921(4), 0\u21922(1), 2\u21921(2). Shortest dist to node 1:",
+      "prompt": "Dijkstra from node 0: edges 0→1(4), 0→2(1), 2→1(2). Shortest dist to node 1:",
       "code": "// 0 --4--> 1\n// 0 --1--> 2 --2--> 1\n// Direct: 4   Via 2: 1+2=3",
       "choices": [
         "4",
@@ -70,7 +70,7 @@
         "1"
       ],
       "answerIndex": 1,
-      "explanation": "Path 0\u21922\u21921 costs 1+2=3 < direct edge 4. Dijkstra finds 3.",
+      "explanation": "Path 0→2→1 costs 1+2=3 < direct edge 4. Dijkstra finds 3.",
       "tags": [
         "dijkstra",
         "tracing"
@@ -87,7 +87,7 @@
         "Negative weights require it"
       ],
       "answerIndex": 1,
-      "explanation": "When a shorter path is found, the old heap entry is not removed \u2014 it's simply ignored when polled.",
+      "explanation": "When a shorter path is found, the old heap entry is not removed — it's simply ignored when polled.",
       "tags": [
         "dijkstra"
       ]
@@ -99,7 +99,7 @@
       "choices": [
         "Any directed graph",
         "Undirected graphs",
-        "DAGs \u2014 Directed Acyclic Graphs",
+        "DAGs — Directed Acyclic Graphs",
         "Complete graphs"
       ],
       "answerIndex": 2,
@@ -114,12 +114,12 @@
       "prompt": "Kahn's algorithm starts by enqueuing nodes with:",
       "choices": [
         "The most outgoing edges",
-        "In-degree zero \u2014 no prerequisites",
+        "In-degree zero — no prerequisites",
         "The smallest values",
         "All leaf nodes"
       ],
       "answerIndex": 1,
-      "explanation": "Nodes with no incoming edges have no dependencies \u2014 they can be processed first.",
+      "explanation": "Nodes with no incoming edges have no dependencies — they can be processed first.",
       "tags": [
         "topo-sort"
       ]
@@ -135,7 +135,7 @@
         "In-degree calculation was wrong"
       ],
       "answerIndex": 1,
-      "explanation": "Cyclic nodes can never reach in-degree 0 \u2014 they are never enqueued.",
+      "explanation": "Cyclic nodes can never reach in-degree 0 — they are never enqueued.",
       "tags": [
         "topo-sort",
         "cycle"
@@ -144,7 +144,7 @@
     {
       "id": "djga-q9",
       "type": "codeOutput",
-      "prompt": "Topological sort of: A\u2192C, B\u2192C, C\u2192D. One valid order:",
+      "prompt": "Topological sort of: A→C, B→C, C→D. One valid order:",
       "code": "// A and B have no prerequisites\n// C needs both A and B\n// D needs C",
       "choices": [
         "C A B D",
@@ -197,7 +197,7 @@
       "prompt": "Bellman-Ford detects negative cycles by:",
       "choices": [
         "Counting visited nodes",
-        "Running a V-th relaxation pass \u2014 if any distance still improves, a negative cycle exists",
+        "Running a V-th relaxation pass — if any distance still improves, a negative cycle exists",
         "Checking for negative edge weights",
         "Using DFS"
       ],
@@ -210,12 +210,12 @@
     {
       "id": "djga-q13",
       "type": "mcq",
-      "prompt": "Dijkstra vs Bellman-Ford \u2014 when to use which:",
+      "prompt": "Dijkstra vs Bellman-Ford — when to use which:",
       "choices": [
         "Always Dijkstra (faster)",
         "Dijkstra for non-negative weights (faster); Bellman-Ford when negative weights exist",
         "Bellman-Ford always (safer)",
-        "Same \u2014 always interchangeable"
+        "Same — always interchangeable"
       ],
       "answerIndex": 1,
       "explanation": "Dijkstra O((V+E)log V) beats Bellman-Ford O(VE) but requires non-negative weights.",
@@ -234,7 +234,7 @@
         "V + 1 edges"
       ],
       "answerIndex": 1,
-      "explanation": "A spanning tree on V nodes always has exactly V-1 edges \u2014 minimum to stay connected without a cycle.",
+      "explanation": "A spanning tree on V nodes always has exactly V-1 edges — minimum to stay connected without a cycle.",
       "tags": [
         "mst"
       ]
@@ -246,7 +246,7 @@
       "choices": [
         "Random order",
         "Decreasing weight",
-        "Increasing weight \u2014 greedily pick cheapest that don't form a cycle",
+        "Increasing weight — greedily pick cheapest that don't form a cycle",
         "Alphabetical node order"
       ],
       "answerIndex": 2,
@@ -263,7 +263,7 @@
       "choices": [
         "Bellman-Ford",
         "Kahn's topological sort",
-        "Dijkstra \u2014 both grow a 'settled' set using a min-heap on edge costs",
+        "Dijkstra — both grow a 'settled' set using a min-heap on edge costs",
         "DFS"
       ],
       "answerIndex": 2,
@@ -279,7 +279,7 @@
       "prompt": "Union-Find is used in Kruskal's because:",
       "choices": [
         "It sorts edges",
-        "It detects whether adding an edge creates a cycle in O(\u03b1(n)) time",
+        "It detects whether adding an edge creates a cycle in O(α(n)) time",
         "It computes MST weight",
         "It replaces the heap"
       ],
@@ -304,7 +304,7 @@
         0,
         1
       ],
-      "explanation": "Kahn's uses a plain queue (BFS on in-degrees). Bellman-Ford iterates all edges \u2014 no heap needed.",
+      "explanation": "Kahn's uses a plain queue (BFS on in-degrees). Bellman-Ford iterates all edges — no heap needed.",
       "tags": [
         "applications"
       ]
@@ -316,7 +316,7 @@
       "choices": [
         "BFS shortest path",
         "Dijkstra with weighted courses",
-        "Topological sort \u2014 cycle detection on a DAG",
+        "Topological sort — cycle detection on a DAG",
         "MST of course graph"
       ],
       "answerIndex": 2,
@@ -332,11 +332,11 @@
       "choices": [
         "Single-source shortest paths",
         "Minimum spanning tree",
-        "All-pairs shortest paths in O(V\u00b3)",
+        "All-pairs shortest paths in O(V³)",
         "Topological order"
       ],
       "answerIndex": 2,
-      "explanation": "DP on all (source, destination) pairs. Works with negative weights (not negative cycles). O(V\u00b3) time O(V\u00b2) space.",
+      "explanation": "DP on all (source, destination) pairs. Works with negative weights (not negative cycles). O(V³) time O(V²) space.",
       "tags": [
         "floyd-warshall"
       ]
@@ -354,7 +354,7 @@
     {
       "id": "djga-fc2",
       "front": "Dijkstra stale skip",
-      "back": "if (d > dist[u]) continue \u2014 ignore outdated heap entries.",
+      "back": "if (d > dist[u]) continue — ignore outdated heap entries.",
       "tags": [
         "graphs-advanced"
       ]
@@ -362,7 +362,7 @@
     {
       "id": "djga-fc3",
       "front": "Topological sort",
-      "back": "Order nodes so every edge u\u2192v has u before v. Only on DAGs.",
+      "back": "Order nodes so every edge u→v has u before v. Only on DAGs.",
       "tags": [
         "graphs-advanced"
       ]
@@ -370,7 +370,7 @@
     {
       "id": "djga-fc4",
       "front": "Kahn's algorithm",
-      "back": "BFS on in-degrees. Enqueue in-degree-0 nodes. Output size < n \u2192 cycle.",
+      "back": "BFS on in-degrees. Enqueue in-degree-0 nodes. Output size < n → cycle.",
       "tags": [
         "graphs-advanced"
       ]
@@ -409,7 +409,7 @@
     }
   ],
   "project": {
-    "brief": "Write AdvancedGraphsLab.java:\n1. dijkstra(List<List<int[]>> adj, int src, int n) \u2192 int[]\n2. topoSortKahn(List<List<Integer>> adj, int n) \u2192 List<Integer>  (empty list if cycle)\n3. canFinish(int numCourses, int[][] prerequisites) \u2192 boolean  (course schedule)\n4. bellmanFord(int n, int[][] edges, int src) \u2192 int[]  (null if negative cycle)\nInclude main() tests: graph with shorter indirect path, DAG, cyclic graph, graph with negative edge.",
+    "brief": "Write AdvancedGraphsLab.java:\n1. dijkstra(List<List<int[]>> adj, int src, int n) → int[]\n2. topoSortKahn(List<List<Integer>> adj, int n) → List<Integer>  (empty list if cycle)\n3. canFinish(int numCourses, int[][] prerequisites) → boolean  (course schedule)\n4. bellmanFord(int n, int[][] edges, int src) → int[]  (null if negative cycle)\nInclude main() tests: graph with shorter indirect path, DAG, cyclic graph, graph with negative edge.",
     "checklist": [
       {
         "id": "c1",

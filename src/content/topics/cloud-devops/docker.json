@@ -1,7 +1,7 @@
 {
   "id": "docker",
-  "unit": 5,
-  "order": 26,
+  "unit": 10,
+  "order": 87,
   "title": "Docker",
   "summary": "Containers, images, Dockerfile, layers, networking, volumes, and docker-compose.",
   "prereqs": [

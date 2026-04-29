@@ -1,7 +1,7 @@
 {
   "id": "prompt-engineering-advanced",
-  "unit": 6,
-  "order": 120,
+  "unit": 11,
+  "order": 99,
   "title": "Advanced Prompt Engineering",
   "summary": "Structured outputs, function calling, chain-of-thought, DSPy programmatic optimisation, and production prompt patterns.",
   "prereqs": [

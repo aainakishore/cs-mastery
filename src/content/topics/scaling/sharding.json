@@ -1,7 +1,7 @@
 {
   "id": "sharding",
-  "unit": 4,
-  "order": 20,
+  "unit": 9,
+  "order": 81,
   "title": "Sharding",
   "summary": "Master Sharding: trade-offs, failure modes, and production patterns.",
   "prereqs": [

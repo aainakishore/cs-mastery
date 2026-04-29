@@ -1,7 +1,7 @@
 {
   "id": "pycharm",
-  "unit": 7,
-  "order": 37,
+  "unit": 17,
+  "order": 120,
   "title": "PyCharm Power-Use",
   "summary": "Master PyCharm Power-Use: trade-offs, failure modes, and production patterns.",
   "prereqs": [],

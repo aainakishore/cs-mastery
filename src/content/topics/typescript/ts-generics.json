@@ -1,10 +1,12 @@
 {
   "id": "ts-generics",
-  "unit": 10,
-  "order": 82,
+  "unit": 3,
+  "order": 22,
   "title": "TypeScript Generics",
   "summary": "Generic functions, interfaces, and classes — writing type-safe code that works across many types without losing specificity.",
-  "prereqs": ["ts-interfaces-types"],
+  "prereqs": [
+    "ts-interfaces-types"
+  ],
   "guide": "# TypeScript Generics\n\nGenerics are **type parameters** — placeholders that get filled in when you use a function or class. The mental model: a generic is like a variable, but for types instead of values. When you call `identity<string>('hello')`, TypeScript replaces every `T` with `string` and checks accordingly.\n\n```\nGeneric function call flow:\n\nfunction identity<T>(x: T): T  ← T is a type variable\n                   ▲\n                   │  filled in at the call site\nidentity<string>('hello')      ← T = string\nidentity<number>(42)           ← T = number\nidentity('hello')              ← T inferred = string (no annotation needed)\n\n  Result type = T = whatever was passed in\n  No any, no loss of type info\n```\n\n## Why generics beat `any`\n\n```ts\n// With any — loses type information\nfunction first_any(arr: any[]): any {\n  return arr[0];\n}\nconst x = first_any([1, 2, 3]);  // x is 'any' — TS knows nothing\nx.toUpperCase();                 // ✓ compiles but crashes at runtime\n\n// With generic — preserves type\nfunction first<T>(arr: T[]): T {\n  return arr[0];\n}\nconst y = first([1, 2, 3]);      // y is 'number'\ny.toUpperCase();                 // ✗ Error — number has no toUpperCase\n```\n\n## Generic Functions\n\n```ts\n// Basic — one type param\nfunction wrap<T>(value: T): { value: T } {\n  return { value };\n}\n\n// Multiple type params\nfunction pair<A, B>(a: A, b: B): [A, B] {\n  return [a, b];\n}\nconst p = pair('hello', 42);  // [string, number]\n\n// Arrow function syntax\nconst identity = <T>(x: T): T => x;\n\n// In .tsx files, disambiguate from JSX:\nconst identity = <T,>(x: T): T => x;  // trailing comma avoids JSX confusion\n```\n\n## Generic Interfaces and Types\n\n```ts\n// Generic interface\ninterface Box<T> {\n  value: T;\n  transform: (x: T) => T;\n}\n\nconst numBox: Box<number> = {\n  value: 42,\n  transform: x => x * 2,\n};\n\n// Generic type alias — common for data structures\ntype Result<T, E = Error> = \n  | { ok: true;  value: T }\n  | { ok: false; error: E };\n\nfunction divide(a: number, b: number): Result<number> {\n  if (b === 0) return { ok: false, error: new Error('divide by zero') };\n  return { ok: true, value: a / b };\n}\n```\n\n## Generic Classes\n\n```ts\nclass Stack<T> {\n  private items: T[] = [];\n\n  push(item: T): void {\n    this.items.push(item);\n  }\n\n  pop(): T | undefined {\n    return this.items.pop();\n  }\n\n  peek(): T | undefined {\n    return this.items[this.items.length - 1];\n  }\n\n  get size(): number {\n    return this.items.length;\n  }\n}\n\nconst numStack = new Stack<number>();\nnumStack.push(1);\nnumStack.push(2);\nconst top = numStack.peek();  // type: number | undefined\n```\n\n## Constraints — `extends` on type parameters\n\nConstraints tell TypeScript: 'T can be any type, but it must have at least these fields.'\n\n```\nConstraint mental model:\n\nfunction getLength<T extends { length: number }>(x: T): number\n                      ▲\n                      │ T must have a .length property\n\ngetLength([1, 2, 3]);     // T = number[]    ✓ arrays have .length\ngetLength('hello');        // T = string      ✓ strings have .length\ngetLength({ length: 5 }); // T = {length:5}  ✓ has .length\ngetLength(42);             // ✗ Error — number has no .length\n```\n\n```ts\n// Constraint: T must be an object\nfunction clone<T extends object>(obj: T): T {\n  return { ...obj } as T;\n}\n\n// Constraint: K must be a key of T\nfunction getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {\n  return obj[key];\n}\n\nconst user = { name: 'Alice', age: 30 };\nconst name = getProperty(user, 'name');  // type: string\nconst age  = getProperty(user, 'age');   // type: number\ngetProperty(user, 'email');              // ✗ Error — 'email' not in typeof user\n```\n\n## `keyof` and Indexed Access Types\n\n```ts\ninterface User { name: string; age: number; email: string; }\n\ntype UserKey = keyof User;        // 'name' | 'age' | 'email'\ntype NameType = User['name'];     // string  (indexed access)\ntype AgeType  = User['age'];      // number\n\n// Dynamic indexed access with generic\ntype ValueOf<T, K extends keyof T> = T[K];\ntype EmailType = ValueOf<User, 'email'>;  // string\n```\n\n```\nkeyof mental model:\n\ninterface User\n  │\n  ├── name: string    → 'name'\n  ├── age: number     → 'age'\n  └── email: string   → 'email'\n\nkeyof User = 'name' | 'age' | 'email'   ← union of all property name literals\n\nUser['name'] = string                    ← type of User.name property\n```\n\n## Default Type Parameters\n\n```ts\n// Default: if no type arg given, use Error\ntype Result<T, E = Error> = \n  | { ok: true; value: T }\n  | { ok: false; error: E };\n\ntype StringResult = Result<string>;        // E defaults to Error\ntype CustomResult = Result<string, string>; // E is string\n```\n\n## Generic Complexity Cheatsheet\n\n| Pattern | Syntax | When to use |\n|---|---|---|\n| Basic | `<T>` | Single input/output type |\n| Multi | `<A, B>` | Pair or transform functions |\n| Constrained | `<T extends X>` | Require a minimum shape |\n| Key constraint | `K extends keyof T` | Type-safe property access |\n| Default | `<T, E = Error>` | Optional second type with fallback |\n| Indexed access | `T[K]` | Look up property type dynamically |\n\n## Common Pitfalls\n- Overusing generics when `any` would be clearer — not every function needs a type parameter\n- Forgetting the trailing comma in `.tsx` files: `<T,>` to avoid JSX parsing ambiguity\n- Constraining too loosely (`<T extends object>`) vs. too tightly (`<T extends User>`)\n- Assuming `T extends string` means T IS string — T could be a string literal type`'hello'`\n- Using `as T` to force-cast instead of properly constraining — defeats the purpose\n\n## Connections\n- **ts-utility-types** — Partial, Pick, Omit are all generic types\n- **ts-advanced-types** — conditional types and mapped types are parameterised with generics\n- **ts-interfaces-types** — generic interfaces and the `keyof` / indexed access operators\n- **react-hooks** — useState<T>, useRef<T> and custom hooks use generics extensively",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "With `any`, TypeScript discards type information — `first([1,2,3])` returns `any` and you can call `.toUpperCase()` on it without error. With `first<T>(arr: T[]): T`, the return is `number` — providing full type checking downstream.",
-      "tags": ["generics", "any", "type-safety"]
+      "tags": [
+        "generics",
+        "any",
+        "type-safety"
+      ]
     },
     {
       "id": "tsg-q2",
@@ -34,7 +40,11 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript infers type arguments from the call: `A = string` from `'hello'`, `B = number` from `42`. The return type is `[string, number]` — a tuple, not a union array.",
-      "tags": ["generics", "inference", "tuples"]
+      "tags": [
+        "generics",
+        "inference",
+        "tuples"
+      ]
     },
     {
       "id": "tsg-q3",
@@ -48,7 +58,11 @@
       ],
       "answerIndex": 2,
       "explanation": "The constraint requires a structural minimum — any type with a `length: number` property satisfies it. That includes strings, arrays, and any object with that field. This is structural typing applied to generic constraints.",
-      "tags": ["generics", "constraints", "structural-typing"]
+      "tags": [
+        "generics",
+        "constraints",
+        "structural-typing"
+      ]
     },
     {
       "id": "tsg-q4",
@@ -63,7 +77,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`K extends keyof T` constrains the key argument to only the actual keys of the object. `'email'` is not a key of `{ name: string; age: number }`, so TypeScript rejects it at compile time — protection the `any` approach cannot provide.",
-      "tags": ["generics", "keyof", "constraints"]
+      "tags": [
+        "generics",
+        "keyof",
+        "constraints"
+      ]
     },
     {
       "id": "tsg-q5",
@@ -77,7 +95,10 @@
       ],
       "answerIndex": 2,
       "explanation": "`keyof T` produces a union of the literal types of all property names in T. For `User`, that's `'name' | 'age' | 'email'`. This is the foundation of type-safe property lookup.",
-      "tags": ["keyof", "generics"]
+      "tags": [
+        "keyof",
+        "generics"
+      ]
     },
     {
       "id": "tsg-q6",
@@ -92,7 +113,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Indexed access type `T[K]` looks up the type of property K in type T. `User['name']` = `string`. This is the type-level equivalent of `user.name` at runtime.",
-      "tags": ["indexed-access", "generics"]
+      "tags": [
+        "indexed-access",
+        "generics"
+      ]
     },
     {
       "id": "tsg-q7",
@@ -106,7 +130,11 @@
       ],
       "answerIndex": 1,
       "explanation": "In `.tsx` files, `<T>` is ambiguous — is it JSX or a generic? TypeScript/Babel parsers treat it as JSX. The fix: add a trailing comma `<T,>` or use `function` syntax — the comma signals it's a type parameter list.",
-      "tags": ["generics", "tsx", "jsx-ambiguity"]
+      "tags": [
+        "generics",
+        "tsx",
+        "jsx-ambiguity"
+      ]
     },
     {
       "id": "tsg-q8",
@@ -118,9 +146,17 @@
         "<K extends keyof T> — K must be one of T's property names",
         "<T extends any>     — identical to unconstrained T"
       ],
-      "answerIndexes": [0, 1, 2, 3],
+      "answerIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
       "explanation": "All four are syntactically valid. However `<T extends any>` is redundant — it doesn't add any constraint. `<T extends string>` means T can be `string`, `'hello'`, or any string literal. All four compile and are used in real TypeScript code.",
-      "tags": ["generics", "constraints"]
+      "tags": [
+        "generics",
+        "constraints"
+      ]
     },
     {
       "id": "tsg-q9",
@@ -134,7 +170,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Once `T` is bound to `number` at instantiation, all uses of `T` in the class become `number`. Calling `push('hello')` violates the `push(item: T): void` signature — TypeScript rejects it at compile time.",
-      "tags": ["generics", "classes", "type-safety"]
+      "tags": [
+        "generics",
+        "classes",
+        "type-safety"
+      ]
     },
     {
       "id": "tsg-q10",
@@ -149,7 +189,11 @@
       ],
       "answerIndex": 2,
       "explanation": "`box.value` is `string[]` (T = string[]). `box.value[0]` indexes into a string array, giving `string`. TypeScript tracks through the generic parameterisation all the way to the element type.",
-      "tags": ["generics", "inference", "arrays"]
+      "tags": [
+        "generics",
+        "inference",
+        "arrays"
+      ]
     },
     {
       "id": "tsg-q11",
@@ -163,7 +207,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Default type params work like function default arguments. `Result<string>` uses `E = Error`. `Result<string, string>` uses `E = string`. Reduces boilerplate when the second param is rarely changed.",
-      "tags": ["generics", "default-type-params"]
+      "tags": [
+        "generics",
+        "default-type-params"
+      ]
     },
     {
       "id": "tsg-q12",
@@ -177,7 +224,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`<T extends object>` constrains to non-primitives and preserves the exact type. The caller gets the same type back, not the widened `object`. Option A loses type. Option C returns widened `object`. Option D loses the return type.",
-      "tags": ["generics", "constraints", "type-safety"]
+      "tags": [
+        "generics",
+        "constraints",
+        "type-safety"
+      ]
     },
     {
       "id": "tsg-q13",
@@ -189,9 +240,17 @@
         "TypeScript can enforce T constraints at runtime automatically",
         "A `Map<string, User>` at runtime is identical to a `Map<string, Product>`"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Generic types are compile-time only. At runtime, all generics are erased — `Map<string, User>` is just `Map`. `instanceof T` is impossible. No runtime cost. TypeScript cannot auto-enforce generic constraints at runtime — you must write guards yourself.",
-      "tags": ["generics", "type-erasure", "runtime"]
+      "tags": [
+        "generics",
+        "type-erasure",
+        "runtime"
+      ]
     },
     {
       "id": "tsg-q14",
@@ -206,7 +265,10 @@
       ],
       "answerIndex": 0,
       "explanation": "TypeScript infers T from the argument — T becomes `{ name: string; age: number }`. The return type is T, so `out` is fully typed with the exact shape. No information is lost.",
-      "tags": ["generics", "inference"]
+      "tags": [
+        "generics",
+        "inference"
+      ]
     },
     {
       "id": "tsg-q15",
@@ -220,7 +282,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`T[K]` is an indexed access type — it looks up the type of property named by the key type `K` in the type `T`. This is the type-level equivalent of `obj[key]` at runtime.",
-      "tags": ["indexed-access", "generics"]
+      "tags": [
+        "indexed-access",
+        "generics"
+      ]
     },
     {
       "id": "tsg-q16",
@@ -234,7 +299,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Explicit type args: `identity<string[]>([])` — an empty array `[]` would otherwise be inferred as `never[]`. When there's no argument to infer from, an explicit argument is needed. Also useful to be explicit for documentation clarity.",
-      "tags": ["generics", "inference", "explicit-args"]
+      "tags": [
+        "generics",
+        "inference",
+        "explicit-args"
+      ]
     },
     {
       "id": "tsg-q17",
@@ -249,7 +318,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Both args satisfy `extends object`. TypeScript infers T = `{ x: number }`, U = `{ y: string }`. The return is `T & U` = `{ x: number; y: string }`. `result.x` is `number` and `result.y` is `string` — both accessible with full type safety.",
-      "tags": ["generics", "intersection", "constraints"]
+      "tags": [
+        "generics",
+        "intersection",
+        "constraints"
+      ]
     },
     {
       "id": "tsg-q18",
@@ -263,7 +336,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`extends` in constraints means 'is assignable to'. Since `'hello'` is assignable to `string`, T could be `'hello'`. Since `'north' | 'south'` is assignable to string, that's valid too. It sets a lower bound, not an exact type.",
-      "tags": ["constraints", "generics", "extends"]
+      "tags": [
+        "constraints",
+        "generics",
+        "extends"
+      ]
     },
     {
       "id": "tsg-q19",
@@ -277,7 +354,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`getProperty<T, K extends keyof T>(obj: T, key: K): T[K]` is the canonical example. The return type `T[K]` changes based on which key you pass — if you pass `'name'` you get `string`, if `'age'` you get `number`. Static safety for dynamic key access.",
-      "tags": ["keyof", "indexed-access", "generics"]
+      "tags": [
+        "keyof",
+        "indexed-access",
+        "generics"
+      ]
     },
     {
       "id": "tsg-q20",
@@ -289,9 +370,17 @@
         "Array<T>",
         "typeof"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "`typeof` is a type operator, not a generic type. `Partial<T>`, `Promise<T>`, and `Array<T>` are all generic types — they accept a type parameter that determines their behaviour and the types of their values.",
-      "tags": ["generics", "built-ins", "utility-types"]
+      "tags": [
+        "generics",
+        "built-ins",
+        "utility-types"
+      ]
     }
   ],
   "flashcards": [
@@ -299,59 +388,103 @@
       "id": "tsg-fc1",
       "front": "Generics vs any — key difference",
       "back": "Generics preserve type information through transformations. `any` discards it. `first<T>(arr: T[]): T` returns the same type as input. `first(arr: any[]): any` loses it.",
-      "tags": ["generics", "type-safety"]
+      "tags": [
+        "generics",
+        "type-safety"
+      ]
     },
     {
       "id": "tsg-fc2",
       "front": "Type parameter constraint syntax",
       "back": "`<T extends X>` — T must be assignable to X. Use for: `extends object`, `extends string`, `extends { length: number }`, `K extends keyof T`.",
-      "tags": ["generics", "constraints"]
+      "tags": [
+        "generics",
+        "constraints"
+      ]
     },
     {
       "id": "tsg-fc3",
       "front": "keyof T",
       "back": "Produces a union of T's property name literals. `keyof { name: string; age: number }` = `'name' | 'age'`. Foundation of type-safe dynamic property access.",
-      "tags": ["keyof", "generics"]
+      "tags": [
+        "keyof",
+        "generics"
+      ]
     },
     {
       "id": "tsg-fc4",
       "front": "T[K] — indexed access type",
       "back": "Looks up the type of property K in type T. `User['name']` = `string`. With generic K: the return type changes per key passed — no casting needed.",
-      "tags": ["indexed-access", "generics"]
+      "tags": [
+        "indexed-access",
+        "generics"
+      ]
     },
     {
       "id": "tsg-fc5",
       "front": "Generic inference — when to be explicit",
       "back": "TypeScript infers from arguments. Be explicit `<string[]>` when args are empty (`[]` → `never[]`) or when you want to constrain the inferred type to a wider type.",
-      "tags": ["generics", "inference"]
+      "tags": [
+        "generics",
+        "inference"
+      ]
     },
     {
       "id": "tsg-fc6",
       "front": "TSX generic arrow ambiguity",
       "back": "`<T>` in `.tsx` is parsed as JSX. Fix: trailing comma `<T,>` or use `function` syntax. Only affects `.tsx` files.",
-      "tags": ["generics", "tsx"]
+      "tags": [
+        "generics",
+        "tsx"
+      ]
     },
     {
       "id": "tsg-fc7",
       "front": "Generics at runtime",
       "back": "Generics are fully erased. `Stack<number>` at runtime is just `Stack`. You cannot `instanceof T`, check T's name, or enforce T at runtime. Guards must be written manually.",
-      "tags": ["generics", "type-erasure"]
+      "tags": [
+        "generics",
+        "type-erasure"
+      ]
     },
     {
       "id": "tsg-fc8",
       "front": "Default type parameters",
       "back": "`<T, E = Error>` — E is optional; defaults to Error. Allows `Result<string>` while still supporting `Result<string, string>`. Like function default args, at the type level.",
-      "tags": ["generics", "default-type-params"]
+      "tags": [
+        "generics",
+        "default-type-params"
+      ]
     }
   ],
   "project": {
     "brief": "Design a type-safe `Repository<T>` generic class for a data layer. It manages a collection of entities where each entity has an `id: string`. Requirements: 1) The class parameter T must be constrained to have `id: string`. 2) Methods: `add(entity: T): void`, `getById(id: string): T | undefined`, `getAll(): T[]`, `update(id: string, changes: Partial<T>): T | undefined`. 3) Write out the generic class signature and all method signatures. 4) Explain why `Partial<T>` is the right type for `changes` in `update`. 5) A colleague suggests using `getById(id: string): any` — explain what type safety is lost and how the generic return type fixes it.",
     "checklist": [
-      { "id": "c1", "text": "Repository<T extends { id: string }> constraint declared correctly", "weight": 1 },
-      { "id": "c2", "text": "All four method signatures typed without any casts or any", "weight": 1 },
-      { "id": "c3", "text": "Partial<T> for update.changes explained — makes all fields optional so partial updates work", "weight": 1 },
-      { "id": "c4", "text": "Explains loss from any return: callers get any, .name/.email access not type-checked", "weight": 1 },
-      { "id": "c5", "text": "Explains generic benefit: callers of getById<User>() get User | undefined with full type checking", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Repository<T extends { id: string }> constraint declared correctly",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "All four method signatures typed without any casts or any",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Partial<T> for update.changes explained — makes all fields optional so partial updates work",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Explains loss from any return: callers get any, .name/.email access not type-checked",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Explains generic benefit: callers of getById<User>() get User | undefined with full type checking",
+        "weight": 1
+      }
     ],
     "hints": [
       "Constraint: `class Repository<T extends { id: string }>` — T must have the id field.",
@@ -361,4 +494,3 @@
     ]
   }
 }
-

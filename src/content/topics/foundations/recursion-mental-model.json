@@ -1,7 +1,7 @@
 {
   "id": "recursion-mental-model",
   "unit": 1,
-  "order": 2,
+  "order": 6,
   "title": "Recursion Mental Model",
   "summary": "Trust-the-recursion thinking, base/recursive cases, common patterns, and converting recursion to iteration.",
   "prereqs": [

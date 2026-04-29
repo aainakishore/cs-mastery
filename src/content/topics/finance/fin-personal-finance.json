@@ -1,210 +1,449 @@
 {
   "id": "fin-personal-finance",
-  "unit": 8,
-  "order": 55,
+  "unit": 15,
+  "order": 116,
   "title": "Personal Finance Fundamentals",
   "summary": "Budgeting, emergency funds, insurance, debt management, and building wealth step by step.",
-  "prereqs": ["fin-mutual-funds"],
+  "prereqs": [
+    "fin-mutual-funds"
+  ],
   "guide": "# Personal Finance Fundamentals\n\nPersonal finance is the practice of managing your money to secure present and future wellbeing. Most people learn this through expensive mistakes. Let's skip that.\n\n## The Foundation: Income − Expenses = Savings → Invested = Wealth\n\nThe fundamental equation:\n- Earn → Save → Invest → Compound → Freedom\n\n## Step 1: Budget (50/30/20 Rule)\n\nAllocate income as:\n- **50% Needs**: Rent, food, utilities, EMIs\n- **30% Wants**: Entertainment, dining, shopping\n- **20% Savings/Investment**: Non-negotiable. Pay yourself first.\n\n**Analogy:** Budget = allocating RAM before running programs. If entertainment (wants) hogs all RAM, savings (wealth process) can't run.\n\n**Practical tip:** Set up auto-transfers on salary day. Move 20% to savings before you see it. What you don't see, you don't spend.\n\n## Step 2: Emergency Fund\n**3–6 months of expenses** in a liquid, safe account (liquid mutual fund or high-yield savings).\n\n**Why it's non-negotiable:**\n- Job loss → no panic selling investments at a loss\n- Medical emergency → no credit card debt at 36% interest\n- Car repair → no disruption to investment plan\n\nWithout an emergency fund, every unexpected expense destroys your financial plan.\n\n## Step 3: Insurance — Protect Before You Invest\n\n### Term Life Insurance\n- Pure protection, no investment component\n- 1 crore coverage for ~₹10,000/year (age 25, healthy)\n- Buy if you have dependents who rely on your income\n- Avoid ULIPs / endowment plans — terrible returns + insurance combo\n\n### Health Insurance\n- Minimum ₹5–10 lakh family floater\n- Cover increases medical costs significantly over time\n- Cashless hospitalization available at network hospitals\n- Buy early when you're healthy (premiums lower)\n\n**Rule:** Insurance is NOT investment. Buy pure term + pure equity separately. Mixing them gives poor returns AND poor coverage.\n\n## Step 4: Eliminate High-Interest Debt\nOrder of priority (pay off highest-interest first — 'avalanche method'):\n1. Credit card debt (~36% interest) **← Financial emergency**\n2. Personal loans (~15-24%)\n3. Car loans (~8-12%)\n4. Home loan (~8-9%) ← Acceptable leverage\n\n**Analogy:** Carrying credit card debt while investing in mutual funds (12% returns) is like bailing water with a bucket while the tap is running. Net = -24% per year.\n\n## Step 5: Invest for Goals\n\n| Goal | Time Horizon | Instrument |\n|---|---|---|\n| Emergency fund | Immediate | Liquid fund |\n| Down payment | 5-7 years | Hybrid / Debt |\n| Child education | 10-15 years | Equity + Debt mix |\n| Retirement | 25-35 years | Equity mutual funds |\n\n## Taxes to Understand\n- **Section 80C**: ₹1.5L deduction (ELSS, PPF, EPF, LIC)\n- **Section 80D**: Health insurance premium deduction\n- **HRA exemption**: If you pay rent\n- **LTCG on equity**: 10% on gains > ₹1L held > 1 year\n\n## Common Pitfalls\n1. **No term insurance / health insurance** — huge risk exposure\n2. **Buying ULIPs/endowment plans** — insurance advisor's incentive > your returns\n3. **Investing before emergency fund** — selling investments at loss during crisis\n4. **Lifestyle inflation** — income rises, expenses rise proportionally, savings don't\n5. **Not tracking spending** — if you don't measure it, you can't control it\n\n## Mind Map\n- Personal Finance\n  - Income management: Budgeting (50/30/20), Auto-invest\n  - Protection: Emergency fund, Term insurance, Health insurance\n  - Debt: Eliminate high interest → leverage low interest\n  - Investment: Goals-based, timeline-appropriate instruments\n  - Tax: 80C, 80D, LTCG optimization\n\n## Connections\n- **Mutual Funds** — primary vehicle for long-term goals\n- **Stock Market Basics** — understanding investments\n- **Macroeconomics** — inflation erodes savings, investing is mandatory",
   "questions": [
     {
       "id": "fpf-q1",
       "type": "mcq",
       "prompt": "In the 50/30/20 budget rule, what does the 20% represent?",
-      "choices": ["Entertainment", "Rent", "Savings and investments", "Food"],
+      "choices": [
+        "Entertainment",
+        "Rent",
+        "Savings and investments",
+        "Food"
+      ],
       "answerIndex": 2,
       "explanation": "20% goes to savings/investment — this is non-negotiable and should be automated ('pay yourself first').",
-      "tags": ["budgeting"]
+      "tags": [
+        "budgeting"
+      ]
     },
     {
       "id": "fpf-q2",
       "type": "mcq",
       "prompt": "An emergency fund should ideally contain:",
-      "choices": ["1 week's salary", "1 month's salary", "3-6 months of essential expenses", "1 year's salary"],
+      "choices": [
+        "1 week's salary",
+        "1 month's salary",
+        "3-6 months of essential expenses",
+        "1 year's salary"
+      ],
       "answerIndex": 2,
       "explanation": "3-6 months of expenses covers job loss, medical emergency, or major unexpected expense without disrupting investments.",
-      "tags": ["emergency-fund"]
+      "tags": [
+        "emergency-fund"
+      ]
     },
     {
       "id": "fpf-q3",
       "type": "mcq",
       "prompt": "Why is term insurance preferred over ULIP for life coverage?",
-      "choices": ["ULIPs are banned in India", "Term gives pure coverage at low cost; ULIPs mix insurance+investment with poor returns", "Term insurance covers more diseases", "ULIPs have a 10-year lock-in only"],
+      "choices": [
+        "ULIPs are banned in India",
+        "Term gives pure coverage at low cost; ULIPs mix insurance+investment with poor returns",
+        "Term insurance covers more diseases",
+        "ULIPs have a 10-year lock-in only"
+      ],
       "answerIndex": 1,
       "explanation": "ULIPs charge high fees and deliver mediocre investment returns. Buy pure term + invest separately in mutual funds.",
-      "tags": ["insurance", "term-life"]
+      "tags": [
+        "insurance",
+        "term-life"
+      ]
     },
     {
       "id": "fpf-q4",
       "type": "mcq",
       "prompt": "The 'debt avalanche' method means:",
-      "choices": ["Taking on more debt to invest", "Paying minimum on all debts, then extra to the highest-interest debt first", "Paying off smallest debt first regardless of interest", "Ignoring debt until retirement"],
+      "choices": [
+        "Taking on more debt to invest",
+        "Paying minimum on all debts, then extra to the highest-interest debt first",
+        "Paying off smallest debt first regardless of interest",
+        "Ignoring debt until retirement"
+      ],
       "answerIndex": 1,
       "explanation": "Avalanche = target highest interest rate debt first. Saves most money on interest. Snowball = smallest balance first (psychological wins).",
-      "tags": ["debt-management"]
+      "tags": [
+        "debt-management"
+      ]
     },
     {
       "id": "fpf-q5",
       "type": "mcq",
       "prompt": "Under Section 80C, maximum tax deduction possible annually is:",
-      "choices": ["₹50,000", "₹1,00,000", "₹1,50,000", "₹2,00,000"],
+      "choices": [
+        "₹50,000",
+        "₹1,00,000",
+        "₹1,50,000",
+        "₹2,00,000"
+      ],
       "answerIndex": 2,
       "explanation": "Section 80C allows up to ₹1.5 lakh annual deduction from taxable income via ELSS, PPF, EPF, LIC premiums, home loan principal etc.",
-      "tags": ["tax", "80c"]
+      "tags": [
+        "tax",
+        "80c"
+      ]
     },
     {
       "id": "fpf-q6",
       "type": "mcq",
       "prompt": "Carrying credit card debt at 36% while investing in mutual funds at 12% results in:",
-      "choices": ["Net benefit of 12%", "Net loss of 24% on the debt amount", "Net benefit of 48%", "It breaks even"],
+      "choices": [
+        "Net benefit of 12%",
+        "Net loss of 24% on the debt amount",
+        "Net benefit of 48%",
+        "It breaks even"
+      ],
       "answerIndex": 1,
       "explanation": "36% debt cost − 12% investment return = net -24% drag. Always eliminate high-interest debt before investing (beyond emergency fund).",
-      "tags": ["debt-management", "credit-card"]
+      "tags": [
+        "debt-management",
+        "credit-card"
+      ]
     },
     {
       "id": "fpf-q7",
       "type": "mcq",
       "prompt": "Lifestyle inflation refers to:",
-      "choices": ["Rising consumer prices", "Expenses rising proportionally with income, preventing savings from growing", "Inflation specific to luxury goods", "Investment returns not keeping up with inflation"],
+      "choices": [
+        "Rising consumer prices",
+        "Expenses rising proportionally with income, preventing savings from growing",
+        "Inflation specific to luxury goods",
+        "Investment returns not keeping up with inflation"
+      ],
       "answerIndex": 1,
       "explanation": "As income rises, lifestyle tends to upgrade equally — leaving savings unchanged. Combat with 'automate the raise': save extra before you get used to spending it.",
-      "tags": ["behavioral-finance", "budgeting"]
+      "tags": [
+        "behavioral-finance",
+        "budgeting"
+      ]
     },
     {
       "id": "fpf-q8",
       "type": "order",
       "prompt": "Arrange these financial steps in the CORRECT priority order (do first to last):",
-      "items": ["Invest in equity", "Build emergency fund", "Get term + health insurance", "Eliminate credit card debt"],
-      "correctOrder": [2, 3, 1, 0],
+      "items": [
+        "Invest in equity",
+        "Build emergency fund",
+        "Get term + health insurance",
+        "Eliminate credit card debt"
+      ],
+      "correctOrder": [
+        2,
+        3,
+        1,
+        0
+      ],
       "explanation": "Priority: Insurance first (protect downside) → Emergency fund → Eliminate high-interest debt → Then invest.",
-      "tags": ["financial-planning"]
+      "tags": [
+        "financial-planning"
+      ]
     },
     {
       "id": "fpf-q9",
       "type": "mcq",
       "prompt": "Health insurance 'family floater' means:",
-      "choices": ["Only covers floating hospital expenses", "One policy covering entire family with a shared sum insured", "Children's-only policy", "Policy that changes insurer every year"],
+      "choices": [
+        "Only covers floating hospital expenses",
+        "One policy covering entire family with a shared sum insured",
+        "Children's-only policy",
+        "Policy that changes insurer every year"
+      ],
       "answerIndex": 1,
       "explanation": "Family floater = one policy, shared sum insured for all members. Cost-effective vs individual policies for each member.",
-      "tags": ["health-insurance"]
+      "tags": [
+        "health-insurance"
+      ]
     },
     {
       "id": "fpf-q10",
       "type": "mcq",
       "prompt": "'Pay yourself first' means:",
-      "choices": ["Spend on treats before paying bills", "Automatically invest/save before spending on anything else", "Pay your employer first", "Invest only after all expenses are paid"],
+      "choices": [
+        "Spend on treats before paying bills",
+        "Automatically invest/save before spending on anything else",
+        "Pay your employer first",
+        "Invest only after all expenses are paid"
+      ],
       "answerIndex": 1,
       "explanation": "Set up auto-transfer to savings/investment on salary day. You invest the full planned amount before discretionary spending tempts you.",
-      "tags": ["budgeting", "automation"]
+      "tags": [
+        "budgeting",
+        "automation"
+      ]
     },
     {
       "id": "fpf-q11",
       "type": "mcq",
       "prompt": "PPF (Public Provident Fund) is best described as:",
-      "choices": ["A mutual fund managed by public sector", "A tax-saving long-term savings scheme with 15-year lock-in, backed by government", "Insurance policy", "Short-term fixed deposit"],
+      "choices": [
+        "A mutual fund managed by public sector",
+        "A tax-saving long-term savings scheme with 15-year lock-in, backed by government",
+        "Insurance policy",
+        "Short-term fixed deposit"
+      ],
       "answerIndex": 1,
       "explanation": "PPF: 15-year lock-in (partial withdrawal allowed after yr 7), ~7% return, tax-free, covered under 80C. Risk-free but illiquid.",
-      "tags": ["ppf", "80c"]
+      "tags": [
+        "ppf",
+        "80c"
+      ]
     },
     {
       "id": "fpf-q12",
       "type": "mcq",
       "prompt": "LTCG (Long Term Capital Gain) tax on equity mutual funds is:",
-      "choices": ["5% on all gains", "10% on gains exceeding ₹1 lakh per year (holding > 1 year)", "30% flat rate", "Zero for all equity funds"],
+      "choices": [
+        "5% on all gains",
+        "10% on gains exceeding ₹1 lakh per year (holding > 1 year)",
+        "30% flat rate",
+        "Zero for all equity funds"
+      ],
       "answerIndex": 1,
       "explanation": "Equity LTCG: 10% on gains above ₹1 lakh, applicable when units held > 1 year. STCG (< 1 year) = 15%.",
-      "tags": ["tax", "ltcg"]
+      "tags": [
+        "tax",
+        "ltcg"
+      ]
     },
     {
       "id": "fpf-q13",
       "type": "multi",
       "prompt": "Which are eligible for Section 80C deduction? (Select all that apply)",
-      "choices": ["ELSS mutual funds", "Term life insurance premium", "PPF contributions", "Health insurance premium", "Restaurant meals"],
-      "answerIndexes": [0, 1, 2],
+      "choices": [
+        "ELSS mutual funds",
+        "Term life insurance premium",
+        "PPF contributions",
+        "Health insurance premium",
+        "Restaurant meals"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "80C covers ELSS, life insurance premiums, PPF, EPF, home loan principal, tuition fees. Health insurance is under 80D. Meals = no deduction.",
-      "tags": ["tax", "80c"]
+      "tags": [
+        "tax",
+        "80c"
+      ]
     },
     {
       "id": "fpf-q14",
       "type": "mcq",
       "prompt": "Which debt is considered 'acceptable leverage' unlike consumer debt?",
-      "choices": ["Credit card debt", "Personal loan for vacation", "Home loan", "Buy Now Pay Later for phone"],
+      "choices": [
+        "Credit card debt",
+        "Personal loan for vacation",
+        "Home loan",
+        "Buy Now Pay Later for phone"
+      ],
       "answerIndex": 2,
       "explanation": "Home loan at 8-9% on an appreciating asset = productive leverage. Consumer debt for depreciating goods/experiences = destructive.",
-      "tags": ["debt-management"]
+      "tags": [
+        "debt-management"
+      ]
     },
     {
       "id": "fpf-q15",
       "type": "mcq",
       "prompt": "For a 25-year retirement goal, the best primary vehicle is:",
-      "choices": ["Fixed deposits", "Gold", "Equity mutual funds via SIP", "Liquid funds"],
+      "choices": [
+        "Fixed deposits",
+        "Gold",
+        "Equity mutual funds via SIP",
+        "Liquid funds"
+      ],
       "answerIndex": 2,
       "explanation": "Over 25 years, equity significantly outperforms all other assets. Historically NIFTY 50 CAGR ~12-15%. FDs lose to inflation after tax.",
-      "tags": ["retirement-planning", "long-term-investing"]
+      "tags": [
+        "retirement-planning",
+        "long-term-investing"
+      ]
     },
     {
       "id": "fpf-q16",
       "type": "mcq",
       "prompt": "An adequate term life insurance coverage amount is typically:",
-      "choices": ["1–2x annual income", "5–10x annual income", "Exactly equal to existing savings", "Same as home loan outstanding"],
+      "choices": [
+        "1–2x annual income",
+        "5–10x annual income",
+        "Exactly equal to existing savings",
+        "Same as home loan outstanding"
+      ],
       "answerIndex": 1,
       "explanation": "Rule of thumb: 10–15x annual income. Purpose is income replacement — family should sustain without your salary for years.",
-      "tags": ["insurance", "term-life"]
+      "tags": [
+        "insurance",
+        "term-life"
+      ]
     },
     {
       "id": "fpf-q17",
       "type": "mcq",
       "prompt": "The best place to keep an emergency fund is:",
-      "choices": ["Equity mutual funds", "Liquid funds or high-yield savings account", "Real estate", "Gold jewelry"],
+      "choices": [
+        "Equity mutual funds",
+        "Liquid funds or high-yield savings account",
+        "Real estate",
+        "Gold jewelry"
+      ],
       "answerIndex": 1,
       "explanation": "Emergency fund needs: (1) Safety — no market risk, (2) Liquidity — accessible within 1-2 days. Liquid funds or bank savings work.",
-      "tags": ["emergency-fund"]
+      "tags": [
+        "emergency-fund"
+      ]
     },
     {
       "id": "fpf-q18",
       "type": "fillBlank",
       "prompt": "The real rate of return = nominal return minus the ___ rate.",
-      "accepted": ["inflation", "tax"],
+      "accepted": [
+        "inflation",
+        "tax"
+      ],
       "explanation": "Real return = Nominal return − Inflation. If FD gives 6% and inflation is 6%, real return = 0%. You're standing still.",
-      "tags": ["inflation", "real-returns"]
+      "tags": [
+        "inflation",
+        "real-returns"
+      ]
     },
     {
       "id": "fpf-q19",
       "type": "mcq",
       "prompt": "Section 80D provides deduction for:",
-      "choices": ["ELSS contributions", "Health insurance premiums", "Home loan interest", "Rent paid"],
+      "choices": [
+        "ELSS contributions",
+        "Health insurance premiums",
+        "Home loan interest",
+        "Rent paid"
+      ],
       "answerIndex": 1,
       "explanation": "80D: Up to ₹25,000 for self/family health insurance premiums, ₹50,000 for senior citizen parents.",
-      "tags": ["tax", "health-insurance"]
+      "tags": [
+        "tax",
+        "health-insurance"
+      ]
     },
     {
       "id": "fpf-q20",
       "type": "mcq",
       "prompt": "Tracking monthly expenses is important because:",
-      "choices": ["SEBI requires it", "You can't optimize what you don't measure — awareness drives behavioral change", "Banks charge fees without tracking", "Tax calculation requires it"],
+      "choices": [
+        "SEBI requires it",
+        "You can't optimize what you don't measure — awareness drives behavioral change",
+        "Banks charge fees without tracking",
+        "Tax calculation requires it"
+      ],
       "answerIndex": 1,
       "explanation": "Expense tracking reveals hidden leaks. Studies show people who track spending save 15-20% more monthly.",
-      "tags": ["budgeting", "behavioral-finance"]
+      "tags": [
+        "budgeting",
+        "behavioral-finance"
+      ]
     }
   ],
   "flashcards": [
-    { "id": "fpf-fc1", "front": "50/30/20 Rule", "back": "50% Needs, 30% Wants, 20% Savings/Investments. Automate the 20% on salary day ('pay yourself first').", "tags": ["budgeting"] },
-    { "id": "fpf-fc2", "front": "Emergency Fund", "back": "3-6 months of essential expenses. Stored in liquid fund or savings account. Ensures no forced investment selling.", "tags": ["emergency-fund"] },
-    { "id": "fpf-fc3", "front": "Term vs ULIP insurance", "back": "Term = pure life coverage, low premium. ULIP = insurance+investment hybrid, high fees, poor returns. Always choose term.", "tags": ["insurance"] },
-    { "id": "fpf-fc4", "front": "Debt avalanche vs snowball", "back": "Avalanche: pay highest-interest debt first (saves more money). Snowball: pay smallest balance first (psychological wins).", "tags": ["debt-management"] },
-    { "id": "fpf-fc5", "front": "Section 80C", "back": "Tax deduction up to ₹1.5L/year for ELSS, PPF, EPF, life insurance premiums, home loan principal, tuition fees.", "tags": ["tax"] },
-    { "id": "fpf-fc6", "front": "Lifestyle inflation trap", "back": "Income rises → expenses rise equally → savings stagnate. Fix: automate savings increase with every salary hike.", "tags": ["behavioral-finance"] },
-    { "id": "fpf-fc7", "front": "Real return formula", "back": "Real Return ≈ Nominal Return − Inflation Rate. 6% FD − 6% inflation = 0% real gain. Must beat inflation.", "tags": ["inflation"] },
-    { "id": "fpf-fc8", "front": "Financial priority ladder", "back": "1. Insurance 2. Emergency fund 3. Eliminate high-interest debt 4. Invest. Skip steps = rebuild from scratch after crisis.", "tags": ["financial-planning"] }
+    {
+      "id": "fpf-fc1",
+      "front": "50/30/20 Rule",
+      "back": "50% Needs, 30% Wants, 20% Savings/Investments. Automate the 20% on salary day ('pay yourself first').",
+      "tags": [
+        "budgeting"
+      ]
+    },
+    {
+      "id": "fpf-fc2",
+      "front": "Emergency Fund",
+      "back": "3-6 months of essential expenses. Stored in liquid fund or savings account. Ensures no forced investment selling.",
+      "tags": [
+        "emergency-fund"
+      ]
+    },
+    {
+      "id": "fpf-fc3",
+      "front": "Term vs ULIP insurance",
+      "back": "Term = pure life coverage, low premium. ULIP = insurance+investment hybrid, high fees, poor returns. Always choose term.",
+      "tags": [
+        "insurance"
+      ]
+    },
+    {
+      "id": "fpf-fc4",
+      "front": "Debt avalanche vs snowball",
+      "back": "Avalanche: pay highest-interest debt first (saves more money). Snowball: pay smallest balance first (psychological wins).",
+      "tags": [
+        "debt-management"
+      ]
+    },
+    {
+      "id": "fpf-fc5",
+      "front": "Section 80C",
+      "back": "Tax deduction up to ₹1.5L/year for ELSS, PPF, EPF, life insurance premiums, home loan principal, tuition fees.",
+      "tags": [
+        "tax"
+      ]
+    },
+    {
+      "id": "fpf-fc6",
+      "front": "Lifestyle inflation trap",
+      "back": "Income rises → expenses rise equally → savings stagnate. Fix: automate savings increase with every salary hike.",
+      "tags": [
+        "behavioral-finance"
+      ]
+    },
+    {
+      "id": "fpf-fc7",
+      "front": "Real return formula",
+      "back": "Real Return ≈ Nominal Return − Inflation Rate. 6% FD − 6% inflation = 0% real gain. Must beat inflation.",
+      "tags": [
+        "inflation"
+      ]
+    },
+    {
+      "id": "fpf-fc8",
+      "front": "Financial priority ladder",
+      "back": "1. Insurance 2. Emergency fund 3. Eliminate high-interest debt 4. Invest. Skip steps = rebuild from scratch after crisis.",
+      "tags": [
+        "financial-planning"
+      ]
+    }
   ],
   "project": {
     "brief": "**Personal Financial Audit:** Take a hard look at your (or a hypothetical person's) finances:\n- Monthly income: ₹80,000\n- Rent: ₹18,000, Food: ₹10,000, Utilities: ₹3,000\n- Netflix/OTT/Dining out: ₹8,000\n- No emergency fund, No life insurance, ₹40,000 in credit card debt (at 36%)\n- Currently investing ₹5,000/month in equity SIP\n\nCreate a complete financial recovery plan for this person for the next 12 months. Prioritize correctly and show the math.",
     "checklist": [
-      { "id": "p1", "text": "Map current expenses into 50/30/20 and identify the budget problem", "weight": 15 },
-      { "id": "p2", "text": "Prioritize and justify: what to fix first — credit card debt, emergency fund, or SIP?", "weight": 25 },
-      { "id": "p3", "text": "Show the math: how long to clear credit card debt at X monthly payment?", "weight": 20 },
-      { "id": "p4", "text": "Design a 12-month plan showing how emergency fund, insurance, and investing get built", "weight": 25 },
-      { "id": "p5", "text": "Identify 2+ behavioral changes needed for this plan to succeed", "weight": 15 }
+      {
+        "id": "p1",
+        "text": "Map current expenses into 50/30/20 and identify the budget problem",
+        "weight": 15
+      },
+      {
+        "id": "p2",
+        "text": "Prioritize and justify: what to fix first — credit card debt, emergency fund, or SIP?",
+        "weight": 25
+      },
+      {
+        "id": "p3",
+        "text": "Show the math: how long to clear credit card debt at X monthly payment?",
+        "weight": 20
+      },
+      {
+        "id": "p4",
+        "text": "Design a 12-month plan showing how emergency fund, insurance, and investing get built",
+        "weight": 25
+      },
+      {
+        "id": "p5",
+        "text": "Identify 2+ behavioral changes needed for this plan to succeed",
+        "weight": 15
+      }
     ],
     "hints": [
       "With ₹40k credit card debt at 3% monthly interest, you're paying ₹1,200 in interest per month. That's the true cost.",
@@ -213,4 +452,3 @@
     ]
   }
 }
-

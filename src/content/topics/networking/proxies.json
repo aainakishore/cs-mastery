@@ -1,7 +1,7 @@
 {
   "id": "proxies",
-  "unit": 3,
-  "order": 12,
+  "unit": 6,
+  "order": 48,
   "title": "Proxies - Forward and Reverse",
   "summary": "Master Proxies - Forward and Reverse: trade-offs, failure modes, and production patterns.",
   "prereqs": [

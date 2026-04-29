@@ -1,14 +1,14 @@
 {
   "id": "dsa-java-dp-intro",
-  "unit": 9,
-  "order": 73,
+  "unit": 8,
+  "order": 74,
   "title": "Dynamic Programming Intro in Java",
   "summary": "Overlapping subproblems, optimal substructure, memoization (top-down) vs tabulation (bottom-up), Fibonacci, climbing stairs, coin change.",
   "prereqs": [
     "dsa-java-recursion",
     "dsa-java-arrays"
   ],
-  "guide": "# Dynamic Programming Intro in Java\n\nDynamic Programming (DP) is not a data structure or an algorithm \u2014 it is a **problem-solving technique**. The core idea: if a recursive solution recomputes the same sub-answers over and over, *remember* those answers (memoize or tabulate) and reuse them. The result is often an exponential-time brute force transformed into polynomial time.\n\n## The two DP signals \u2014 recognise them first\nBefore writing any code, ask two questions:\n\n**1. Overlapping subproblems** \u2014 does the recursion tree compute the same inputs repeatedly?\n\n```\nfib(5)\n\u251c\u2500\u2500 fib(4)           fib(3) computed here\n\u2502   \u251c\u2500\u2500 fib(3)        \u2191 already computed above\n\u2502   \u2514\u2500\u2500 fib(2)\n\u2514\u2500\u2500 fib(3)   \u2190 DUPLICATE \u2014 this is the signal\n```\n\n**2. Optimal substructure** \u2014 can the best answer to a big problem be built from best answers to smaller problems? (Shortest path: yes. Longest simple path: no.)\n\n## Memoization \u2014 top-down, lazy, recursive\n```java\n// Top-down: start from the big problem, recurse down, cache on the way back up.\n// Think of it as: 'solve it recursively, but write the answer on a sticky note\n// so you never solve the same sub-problem twice.'\n//\nint fib(int n, int[] memo) {\n    if (n <= 1) return n;\n    if (memo[n] != -1) return memo[n];     // sticky note already exists\n    return memo[n] = fib(n-1, memo) + fib(n-2, memo);  // write and return\n}\n// Usage: int[] memo = new int[n+1]; Arrays.fill(memo, -1); fib(n, memo);\n// Time: O(n)   Space: O(n) array + O(n) call stack\n```\n\n## Tabulation \u2014 bottom-up, eager, iterative\n```java\n// Bottom-up: fill a table from the smallest sub-problems up to the answer.\n// No recursion. Think of it as: 'fill in a spreadsheet row by row.\n// Each cell needs only the cells already filled.'\n//\nint fib(int n) {\n    if (n <= 1) return n;\n    int[] dp = new int[n + 1];\n    dp[0] = 0; dp[1] = 1;\n    for (int i = 2; i <= n; i++)\n        dp[i] = dp[i-1] + dp[i-2];\n    return dp[n];\n}\n// Space optimised: only need last 2 values\nint fibO1(int n) {\n    if (n <= 1) return n;\n    int a = 0, b = 1;\n    for (int i = 2; i <= n; i++) { int c = a + b; a = b; b = c; }\n    return b;\n}\n// Time: O(n)   Space: O(1)\n```\n\n## Climbing Stairs \u2014 first 1D DP pattern\n```java\n// Problem: n stairs, each step 1 or 2. How many distinct ways to reach top?\n// At stair i, you came from i-1 (one step) or i-2 (two steps).\n// dp[i] = dp[i-1] + dp[i-2]  \u2190 same recurrence as Fibonacci!\n//\n//  n=4:  dp = [1, 1, 2, 3, 5]\n//         0   1  2  3  4   \u2190 index\n//  ways to reach stair 4 = 5\nint climbStairs(int n) {\n    if (n <= 2) return n;\n    int a = 1, b = 2;\n    for (int i = 3; i <= n; i++) { int c = a + b; a = b; b = c; }\n    return b;\n}\n```\n\n## Coin Change \u2014 first 'unbounded knapsack' pattern\n```java\n// Problem: fewest coins from denominations[] to make amount.\n// dp[i] = min coins to make amount i\n// For each coin, if coin <= i: dp[i] = min(dp[i], dp[i - coin] + 1)\n//\n// Visualise: building a table left to right.\n// dp[0] = 0 (base: 0 coins needed for amount 0)\n// dp[i] = infinity initially \u2192 updated when a coin fits\nint coinChange(int[] coins, int amount) {\n    int[] dp = new int[amount + 1];\n    Arrays.fill(dp, amount + 1);  // sentinel 'infinity'\n    dp[0] = 0;\n    for (int i = 1; i <= amount; i++)\n        for (int coin : coins)\n            if (coin <= i) dp[i] = Math.min(dp[i], dp[i - coin] + 1);\n    return dp[amount] > amount ? -1 : dp[amount];\n}\n```\n\n## Common Pitfalls\n- Confusing memoization (top-down) with tabulation (bottom-up) \u2014 both are DP, different implementation styles\n- Forgetting the base cases in the DP table \u2014 dp[0] is almost always the foundation everything else builds on\n- Using -1 as a memo sentinel when -1 is a valid answer \u2014 choose a sentinel that cannot be a valid result\n- Not identifying overlapping subproblems first \u2014 applying DP to a problem without them gains nothing\n- Coin change: filling dp[i] with 0 as 'infinity' makes finding the minimum impossible\n\n## Connections\n- **Recursion**: memoization IS recursion + caching \u2014 understanding recursion is the prerequisite\n- **Arrays**: tabulation stores the DP table in an array \u2014 array indexing is fundamental\n- **Graphs**: Dijkstra and Bellman-Ford are DP on graphs (optimal substructure of paths)\n- **Searching**: binary search on DP tables is a common optimisation for O(n log n) LIS",
+  "guide": "# Dynamic Programming Intro in Java\n\nDynamic Programming (DP) is not a data structure or an algorithm — it is a **problem-solving technique**. The core idea: if a recursive solution recomputes the same sub-answers over and over, *remember* those answers (memoize or tabulate) and reuse them. The result is often an exponential-time brute force transformed into polynomial time.\n\n## The two DP signals — recognise them first\nBefore writing any code, ask two questions:\n\n**1. Overlapping subproblems** — does the recursion tree compute the same inputs repeatedly?\n\n```\nfib(5)\n├── fib(4)           fib(3) computed here\n│   ├── fib(3)        ↑ already computed above\n│   └── fib(2)\n└── fib(3)   ← DUPLICATE — this is the signal\n```\n\n**2. Optimal substructure** — can the best answer to a big problem be built from best answers to smaller problems? (Shortest path: yes. Longest simple path: no.)\n\n## Memoization — top-down, lazy, recursive\n```java\n// Top-down: start from the big problem, recurse down, cache on the way back up.\n// Think of it as: 'solve it recursively, but write the answer on a sticky note\n// so you never solve the same sub-problem twice.'\n//\nint fib(int n, int[] memo) {\n    if (n <= 1) return n;\n    if (memo[n] != -1) return memo[n];     // sticky note already exists\n    return memo[n] = fib(n-1, memo) + fib(n-2, memo);  // write and return\n}\n// Usage: int[] memo = new int[n+1]; Arrays.fill(memo, -1); fib(n, memo);\n// Time: O(n)   Space: O(n) array + O(n) call stack\n```\n\n## Tabulation — bottom-up, eager, iterative\n```java\n// Bottom-up: fill a table from the smallest sub-problems up to the answer.\n// No recursion. Think of it as: 'fill in a spreadsheet row by row.\n// Each cell needs only the cells already filled.'\n//\nint fib(int n) {\n    if (n <= 1) return n;\n    int[] dp = new int[n + 1];\n    dp[0] = 0; dp[1] = 1;\n    for (int i = 2; i <= n; i++)\n        dp[i] = dp[i-1] + dp[i-2];\n    return dp[n];\n}\n// Space optimised: only need last 2 values\nint fibO1(int n) {\n    if (n <= 1) return n;\n    int a = 0, b = 1;\n    for (int i = 2; i <= n; i++) { int c = a + b; a = b; b = c; }\n    return b;\n}\n// Time: O(n)   Space: O(1)\n```\n\n## Climbing Stairs — first 1D DP pattern\n```java\n// Problem: n stairs, each step 1 or 2. How many distinct ways to reach top?\n// At stair i, you came from i-1 (one step) or i-2 (two steps).\n// dp[i] = dp[i-1] + dp[i-2]  ← same recurrence as Fibonacci!\n//\n//  n=4:  dp = [1, 1, 2, 3, 5]\n//         0   1  2  3  4   ← index\n//  ways to reach stair 4 = 5\nint climbStairs(int n) {\n    if (n <= 2) return n;\n    int a = 1, b = 2;\n    for (int i = 3; i <= n; i++) { int c = a + b; a = b; b = c; }\n    return b;\n}\n```\n\n## Coin Change — first 'unbounded knapsack' pattern\n```java\n// Problem: fewest coins from denominations[] to make amount.\n// dp[i] = min coins to make amount i\n// For each coin, if coin <= i: dp[i] = min(dp[i], dp[i - coin] + 1)\n//\n// Visualise: building a table left to right.\n// dp[0] = 0 (base: 0 coins needed for amount 0)\n// dp[i] = infinity initially → updated when a coin fits\nint coinChange(int[] coins, int amount) {\n    int[] dp = new int[amount + 1];\n    Arrays.fill(dp, amount + 1);  // sentinel 'infinity'\n    dp[0] = 0;\n    for (int i = 1; i <= amount; i++)\n        for (int coin : coins)\n            if (coin <= i) dp[i] = Math.min(dp[i], dp[i - coin] + 1);\n    return dp[amount] > amount ? -1 : dp[amount];\n}\n```\n\n## Common Pitfalls\n- Confusing memoization (top-down) with tabulation (bottom-up) — both are DP, different implementation styles\n- Forgetting the base cases in the DP table — dp[0] is almost always the foundation everything else builds on\n- Using -1 as a memo sentinel when -1 is a valid answer — choose a sentinel that cannot be a valid result\n- Not identifying overlapping subproblems first — applying DP to a problem without them gains nothing\n- Coin change: filling dp[i] with 0 as 'infinity' makes finding the minimum impossible\n\n## Connections\n- **Recursion**: memoization IS recursion + caching — understanding recursion is the prerequisite\n- **Arrays**: tabulation stores the DP table in an array — array indexing is fundamental\n- **Graphs**: Dijkstra and Bellman-Ford are DP on graphs (optimal substructure of paths)\n- **Searching**: binary search on DP tables is a common optimisation for O(n log n) LIS",
   "questions": [
     {
       "id": "djdp-q1",
@@ -37,7 +37,7 @@
         "Sub-arrays overlap in memory"
       ],
       "answerIndex": 1,
-      "explanation": "Naive Fibonacci computes fib(2) an exponential number of times \u2014 that is the overlap.",
+      "explanation": "Naive Fibonacci computes fib(2) an exponential number of times — that is the overlap.",
       "tags": [
         "fundamentals"
       ]
@@ -53,7 +53,7 @@
         "The call stack shrinks"
       ],
       "answerIndex": 1,
-      "explanation": "Cache lookup is O(1) \u2014 every unique fib(k) is computed once, giving n unique computations.",
+      "explanation": "Cache lookup is O(1) — every unique fib(k) is computed once, giving n unique computations.",
       "tags": [
         "memoization"
       ]
@@ -103,7 +103,7 @@
         "Using a HashSet"
       ],
       "answerIndex": 1,
-      "explanation": "dp[i] depends only on dp[i-1] and dp[i-2] \u2014 two variables suffice.",
+      "explanation": "dp[i] depends only on dp[i-1] and dp[i-2] — two variables suffice.",
       "tags": [
         "space-optimisation"
       ]
@@ -119,7 +119,7 @@
         "dp[i] = dp[i/2] + 1"
       ],
       "answerIndex": 1,
-      "explanation": "At stair i you arrived from i-1 or i-2 \u2014 total ways = sum of ways to reach those two stairs.",
+      "explanation": "At stair i you arrived from i-1 or i-2 — total ways = sum of ways to reach those two stairs.",
       "tags": [
         "climbing-stairs"
       ]
@@ -165,11 +165,11 @@
       "choices": [
         "All amounts from 0 to amount",
         "All coins for each amount i",
-        "All amounts for each coin (also valid \u2014 same result)",
+        "All amounts for each coin (also valid — same result)",
         "Only prime coins"
       ],
       "answerIndex": 1,
-      "explanation": "For each target amount i, try every coin \u2014 pick the one that gives the fewest total coins.",
+      "explanation": "For each target amount i, try every coin — pick the one that gives the fewest total coins.",
       "tags": [
         "coin-change"
       ]
@@ -185,7 +185,7 @@
         "All subproblems have the same size"
       ],
       "answerIndex": 1,
-      "explanation": "The coin change optimum for amount 11 builds on the optimum for amount 11-coin \u2014 that is optimal substructure.",
+      "explanation": "The coin change optimum for amount 11 builds on the optimum for amount 11-coin — that is optimal substructure.",
       "tags": [
         "fundamentals"
       ]
@@ -298,12 +298,12 @@
       "prompt": "Top-down DP call stack depth for fib(1000) could cause:",
       "choices": [
         "Heap out of memory",
-        "StackOverflowError \u2014 1000 recursive frames deep",
+        "StackOverflowError — 1000 recursive frames deep",
         "Array index out of bounds",
-        "Nothing \u2014 Java handles it"
+        "Nothing — Java handles it"
       ],
       "answerIndex": 1,
-      "explanation": "JVM default stack handles ~5000\u201310000 frames. fib(1000) is fine, but fib(100000) could fail. Tabulation avoids this.",
+      "explanation": "JVM default stack handles ~5000–10000 frames. fib(1000) is fine, but fib(100000) could fail. Tabulation avoids this.",
       "tags": [
         "overflow"
       ]
@@ -327,15 +327,15 @@
     {
       "id": "djdp-q20",
       "type": "mcq",
-      "prompt": "Greedy works for some problems where DP does \u2014 when should you prefer greedy?",
+      "prompt": "Greedy works for some problems where DP does — when should you prefer greedy?",
       "choices": [
         "Always, it is faster",
         "When a locally optimal choice provably leads to a global optimum (e.g. coin change with canonical denominations)",
-        "Never \u2014 DP is always correct",
+        "Never — DP is always correct",
         "When the input is sorted"
       ],
       "answerIndex": 1,
-      "explanation": "Greedy coin change works for {1,5,10,25} but fails for arbitrary denominations \u2014 DP is the safe general solution.",
+      "explanation": "Greedy coin change works for {1,5,10,25} but fails for arbitrary denominations — DP is the safe general solution.",
       "tags": [
         "greedy-vs-dp"
       ]
@@ -408,7 +408,7 @@
     }
   ],
   "project": {
-    "brief": "Write DPIntroLab.java with:\n1. fibonacci(int n) \u2014 tabulation, O(n) time O(1) space\n2. climbStairs(int n) \u2014 tabulation O(1) space\n3. coinChange(int[] coins, int amount) \u2192 int  (-1 if impossible)\n4. rob(int[] nums) \u2192 int  (house robber)\n5. canJump(int[] nums) \u2192 boolean  (Jump Game \u2014 greedy DP)\nInclude main() tests: coin change impossible case, house robber single element, jump game with zero gap.",
+    "brief": "Write DPIntroLab.java with:\n1. fibonacci(int n) — tabulation, O(n) time O(1) space\n2. climbStairs(int n) — tabulation O(1) space\n3. coinChange(int[] coins, int amount) → int  (-1 if impossible)\n4. rob(int[] nums) → int  (house robber)\n5. canJump(int[] nums) → boolean  (Jump Game — greedy DP)\nInclude main() tests: coin change impossible case, house robber single element, jump game with zero gap.",
     "checklist": [
       {
         "id": "c1",

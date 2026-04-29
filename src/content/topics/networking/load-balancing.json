@@ -1,7 +1,7 @@
 {
   "id": "load-balancing",
-  "unit": 3,
-  "order": 18,
+  "unit": 6,
+  "order": 54,
   "title": "Load Balancing",
   "summary": "Master Load Balancing: trade-offs, failure modes, and production patterns.",
   "prereqs": [

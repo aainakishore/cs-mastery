@@ -1,13 +1,13 @@
 {
   "id": "dsa-java-searching",
-  "unit": 9,
+  "unit": 8,
   "order": 68,
   "title": "Searching Algorithms in Java",
   "summary": "Binary search intuition, boundary variants (lower/upper bound), rotated arrays, and when NOT to binary search.",
   "prereqs": [
     "dsa-java-sorting"
   ],
-  "guide": "# Searching Algorithms in Java\n\nBinary search is deceptively simple to describe but easy to get wrong at the boundaries. The key mental model: **at every step you are cutting the search space in half and deciding which half to discard**. You must be able to prove your loop terminates and that you never discard the answer.\n\n## Classic binary search \u2014 visualise the shrinking window\n```java\n// [l ............. m ............. r]\n// If nums[m] == target \u2192 found at m\n// If nums[m] < target  \u2192 answer is RIGHT of m  \u2192 l = m + 1\n// If nums[m] > target  \u2192 answer is LEFT  of m  \u2192 r = m - 1\nint binarySearch(int[] nums, int target) {\n    int l = 0, r = nums.length - 1;\n    while (l <= r) {\n        int m = l + (r - l) / 2;   // avoids int overflow vs (l+r)/2\n        if (nums[m] == target) return m;\n        if (nums[m] < target)  l = m + 1;\n        else                   r = m - 1;\n    }\n    return -1;  // not found\n}\n```\n\n## Lower bound \u2014 first index where nums[i] >= target\n```java\n// Picture: [< target | >= target]\n// We want the LEFT boundary of the >= region.\nint lowerBound(int[] nums, int target) {\n    int l = 0, r = nums.length;  // r = length (open right bound)\n    while (l < r) {              // loop ends when l == r\n        int m = l + (r - l) / 2;\n        if (nums[m] < target) l = m + 1;  // m is too small, discard left\n        else                  r = m;       // m could be the answer, keep it\n    }\n    return l;  // l == r == first position with nums[i] >= target\n}\n```\n\n## Upper bound \u2014 first index where nums[i] > target\n```java\n// Picture: [<= target | > target]\n// Shift condition: discard when nums[m] <= target.\nint upperBound(int[] nums, int target) {\n    int l = 0, r = nums.length;\n    while (l < r) {\n        int m = l + (r - l) / 2;\n        if (nums[m] <= target) l = m + 1;\n        else                   r = m;\n    }\n    return l;  // first position with nums[i] > target\n}\n// Count of target = upperBound(target) - lowerBound(target)\n```\n\n## Rotated sorted array \u2014 which half is sorted?\n```java\n// [4 5 6 | 1 2 3]  \u2014 rotation breaks global sort but ONE half is always sorted.\n// Key insight: compare nums[l] and nums[m] to find the sorted half,\n// then check if target lies inside it.\nint searchRotated(int[] nums, int target) {\n    int l = 0, r = nums.length - 1;\n    while (l <= r) {\n        int m = l + (r - l) / 2;\n        if (nums[m] == target) return m;\n        if (nums[l] <= nums[m]) {          // LEFT half is sorted\n            if (nums[l] <= target && target < nums[m]) r = m - 1;\n            else l = m + 1;\n        } else {                           // RIGHT half is sorted\n            if (nums[m] < target && target <= nums[r]) l = m + 1;\n            else r = m - 1;\n        }\n    }\n    return -1;\n}\n```\n\n## Binary search on the ANSWER \u2014 think outside the array\n```java\n// Problem: find minimum capacity so you can ship packages in D days.\n// Answer space: [max(packages), sum(packages)]\n// Predicate: canShip(capacity, packages, D) \u2014 monotonic in capacity.\nint lo = max(packages), hi = sum(packages);\nwhile (lo < hi) {\n    int mid = lo + (hi - lo) / 2;\n    if (canShip(mid)) hi = mid;   // mid works \u2014 try smaller\n    else              lo = mid + 1; // mid too small \u2014 go bigger\n}\nreturn lo;  // smallest capacity that works\n```\n\n## Common Pitfalls\n- Using (l + r) / 2 when l and r are large ints \u2014 overflows. Use l + (r-l)/2.\n- Off-by-one: loop condition l <= r vs l < r \u2014 wrong choice causes infinite loop or missing answer.\n- Setting r = m-1 vs r = m \u2014 crucial difference between classic search and lower-bound variants.\n- Assuming binary search only works on arrays \u2014 it works on any MONOTONIC predicate over an ordered space.\n\n## Connections\n- **Sorting**: binary search requires a sorted (or partially ordered) input\n- **Two Pointers**: both use left/right indices but two-pointer doesn't halve; they converge\n- **DP**: sometimes binary search finds the transition point in a monotonic DP table\n- **Rotated arrays**: combine binary search with the observation that one half is always sorted",
+  "guide": "# Searching Algorithms in Java\n\nBinary search is deceptively simple to describe but easy to get wrong at the boundaries. The key mental model: **at every step you are cutting the search space in half and deciding which half to discard**. You must be able to prove your loop terminates and that you never discard the answer.\n\n## Classic binary search — visualise the shrinking window\n```java\n// [l ............. m ............. r]\n// If nums[m] == target → found at m\n// If nums[m] < target  → answer is RIGHT of m  → l = m + 1\n// If nums[m] > target  → answer is LEFT  of m  → r = m - 1\nint binarySearch(int[] nums, int target) {\n    int l = 0, r = nums.length - 1;\n    while (l <= r) {\n        int m = l + (r - l) / 2;   // avoids int overflow vs (l+r)/2\n        if (nums[m] == target) return m;\n        if (nums[m] < target)  l = m + 1;\n        else                   r = m - 1;\n    }\n    return -1;  // not found\n}\n```\n\n## Lower bound — first index where nums[i] >= target\n```java\n// Picture: [< target | >= target]\n// We want the LEFT boundary of the >= region.\nint lowerBound(int[] nums, int target) {\n    int l = 0, r = nums.length;  // r = length (open right bound)\n    while (l < r) {              // loop ends when l == r\n        int m = l + (r - l) / 2;\n        if (nums[m] < target) l = m + 1;  // m is too small, discard left\n        else                  r = m;       // m could be the answer, keep it\n    }\n    return l;  // l == r == first position with nums[i] >= target\n}\n```\n\n## Upper bound — first index where nums[i] > target\n```java\n// Picture: [<= target | > target]\n// Shift condition: discard when nums[m] <= target.\nint upperBound(int[] nums, int target) {\n    int l = 0, r = nums.length;\n    while (l < r) {\n        int m = l + (r - l) / 2;\n        if (nums[m] <= target) l = m + 1;\n        else                   r = m;\n    }\n    return l;  // first position with nums[i] > target\n}\n// Count of target = upperBound(target) - lowerBound(target)\n```\n\n## Rotated sorted array — which half is sorted?\n```java\n// [4 5 6 | 1 2 3]  — rotation breaks global sort but ONE half is always sorted.\n// Key insight: compare nums[l] and nums[m] to find the sorted half,\n// then check if target lies inside it.\nint searchRotated(int[] nums, int target) {\n    int l = 0, r = nums.length - 1;\n    while (l <= r) {\n        int m = l + (r - l) / 2;\n        if (nums[m] == target) return m;\n        if (nums[l] <= nums[m]) {          // LEFT half is sorted\n            if (nums[l] <= target && target < nums[m]) r = m - 1;\n            else l = m + 1;\n        } else {                           // RIGHT half is sorted\n            if (nums[m] < target && target <= nums[r]) l = m + 1;\n            else r = m - 1;\n        }\n    }\n    return -1;\n}\n```\n\n## Binary search on the ANSWER — think outside the array\n```java\n// Problem: find minimum capacity so you can ship packages in D days.\n// Answer space: [max(packages), sum(packages)]\n// Predicate: canShip(capacity, packages, D) — monotonic in capacity.\nint lo = max(packages), hi = sum(packages);\nwhile (lo < hi) {\n    int mid = lo + (hi - lo) / 2;\n    if (canShip(mid)) hi = mid;   // mid works — try smaller\n    else              lo = mid + 1; // mid too small — go bigger\n}\nreturn lo;  // smallest capacity that works\n```\n\n## Common Pitfalls\n- Using (l + r) / 2 when l and r are large ints — overflows. Use l + (r-l)/2.\n- Off-by-one: loop condition l <= r vs l < r — wrong choice causes infinite loop or missing answer.\n- Setting r = m-1 vs r = m — crucial difference between classic search and lower-bound variants.\n- Assuming binary search only works on arrays — it works on any MONOTONIC predicate over an ordered space.\n\n## Connections\n- **Sorting**: binary search requires a sorted (or partially ordered) input\n- **Two Pointers**: both use left/right indices but two-pointer doesn't halve; they converge\n- **DP**: sometimes binary search finds the transition point in a monotonic DP table\n- **Rotated arrays**: combine binary search with the observation that one half is always sorted",
   "questions": [
     {
       "id": "dse-q1",
@@ -20,7 +20,7 @@
         "O(1)"
       ],
       "answerIndex": 1,
-      "explanation": "Each step discards half the remaining elements \u2014 log\u2082n steps maximum.",
+      "explanation": "Each step discards half the remaining elements — log₂n steps maximum.",
       "tags": [
         "complexity"
       ]
@@ -52,7 +52,7 @@
         "Only l <= r is correct"
       ],
       "answerIndex": 1,
-      "explanation": "Classic search exits when element found or space empty (l > r). Boundary variants exit when l == r \u2014 the answer.",
+      "explanation": "Classic search exits when element found or space empty (l > r). Boundary variants exit when l == r — the answer.",
       "tags": [
         "boundaries"
       ]
@@ -69,7 +69,7 @@
         "4"
       ],
       "answerIndex": 0,
-      "explanation": "6 is not in the array. l crosses r without finding it \u2192 return -1.",
+      "explanation": "6 is not in the array. l crosses r without finding it → return -1.",
       "tags": [
         "tracing"
       ]
@@ -142,12 +142,12 @@
       "id": "dse-q9",
       "type": "codeOutput",
       "prompt": "Search for 1 in [4,5,6,1,2,3]. Which half does the algorithm search first?",
-      "code": "// l=0 r=5 m=2, nums[m]=6\n// nums[l]=4 <= nums[m]=6 \u2192 left half [4,5,6] is sorted\n// Is 1 in [4..6)? No \u2192 go right",
+      "code": "// l=0 r=5 m=2, nums[m]=6\n// nums[l]=4 <= nums[m]=6 → left half [4,5,6] is sorted\n// Is 1 in [4..6)? No → go right",
       "choices": [
         "Left half [4,5,6]",
         "Right half [1,2,3]",
         "Both halves simultaneously",
-        "Neither \u2014 returns -1 immediately"
+        "Neither — returns -1 immediately"
       ],
       "answerIndex": 1,
       "explanation": "Left half is sorted [4,5,6]; 1 is not in it, so search moves to the right half.",
@@ -161,12 +161,12 @@
       "prompt": "Binary search requires the input to be:",
       "choices": [
         "Sorted in ascending order only",
-        "Monotonically ordered \u2014 sorted ascending OR the predicate is monotonic",
+        "Monotonically ordered — sorted ascending OR the predicate is monotonic",
         "An array specifically",
         "Free of duplicates"
       ],
       "answerIndex": 1,
-      "explanation": "Binary search generalises to any monotonic predicate \u2014 not just sorted arrays.",
+      "explanation": "Binary search generalises to any monotonic predicate — not just sorted arrays.",
       "tags": [
         "generalisation"
       ]
@@ -182,7 +182,7 @@
         "Only valid for integer answers"
       ],
       "answerIndex": 1,
-      "explanation": "If feasibility(x) is monotonic (false\u2026false\u2026true\u2026true), binary search finds the transition.",
+      "explanation": "If feasibility(x) is monotonic (false…false…true…true), binary search finds the transition.",
       "tags": [
         "answer-space"
       ]
@@ -195,10 +195,10 @@
         "[0, n]",
         "[0, n/2]",
         "[1, n]",
-        "[0, n\u00b2]"
+        "[0, n²]"
       ],
       "answerIndex": 0,
-      "explanation": "lo=0, hi=n. Predicate: is mid*mid <= n? Largest mid satisfying it is floor(\u221an).",
+      "explanation": "lo=0, hi=n. Predicate: is mid*mid <= n? Largest mid satisfying it is floor(√n).",
       "tags": [
         "answer-space"
       ]
@@ -209,12 +209,12 @@
       "prompt": "In lower-bound, the loop condition is l < r (not l <= r) because:",
       "choices": [
         "It is a convention",
-        "Loop exits when l == r pointing to the answer \u2014 no equality check needed mid-loop",
+        "Loop exits when l == r pointing to the answer — no equality check needed mid-loop",
         "It runs one fewer iteration",
         "It handles duplicates better"
       ],
       "answerIndex": 1,
-      "explanation": "When l == r both pointers are at the same answer location \u2014 no need to keep narrowing.",
+      "explanation": "When l == r both pointers are at the same answer location — no need to keep narrowing.",
       "tags": [
         "lower-bound"
       ]
@@ -245,7 +245,7 @@
       "prompt": "Setting r = m (not r = m-1) in lower-bound is necessary because:",
       "choices": [
         "m-1 could go negative",
-        "m might BE the answer \u2014 discarding it would lose it",
+        "m might BE the answer — discarding it would lose it",
         "It makes the loop faster",
         "Only even-sized arrays need it"
       ],
@@ -283,7 +283,7 @@
         "Both"
       ],
       "answerIndex": 1,
-      "explanation": "nums[l]=3 <= nums[m]=5 \u2192 left half [3,4,5] is sorted.",
+      "explanation": "nums[l]=3 <= nums[m]=5 → left half [3,4,5] is sorted.",
       "tags": [
         "rotated"
       ]
@@ -294,7 +294,7 @@
       "prompt": "Why does binary search on 'minimum days to make m bouquets' work?",
       "choices": [
         "Array is sorted",
-        "feasibility(days) is monotonic \u2014 more days always makes it easier",
+        "feasibility(days) is monotonic — more days always makes it easier",
         "The array has no duplicates",
         "It uses a heap internally"
       ],
@@ -308,7 +308,7 @@
       "id": "dse-q19",
       "type": "codeOutput",
       "prompt": "Binary search iterations to find target in array of size 1 000 000:",
-      "code": "// log2(1_000_000) \u2248 ?",
+      "code": "// log2(1_000_000) ≈ ?",
       "choices": [
         "10",
         "20",
@@ -316,7 +316,7 @@
         "500"
       ],
       "answerIndex": 1,
-      "explanation": "log\u2082(1 000 000) \u2248 19.9 \u2192 at most 20 iterations.",
+      "explanation": "log₂(1 000 000) ≈ 19.9 → at most 20 iterations.",
       "tags": [
         "complexity"
       ]
@@ -327,12 +327,12 @@
       "prompt": "When binary search returns l after a lower-bound search:",
       "choices": [
         "l is always the target index",
-        "l is the insertion point \u2014 where target would be inserted to keep array sorted",
+        "l is the insertion point — where target would be inserted to keep array sorted",
         "l could be past the array end",
         "Both B and C are correct"
       ],
       "answerIndex": 3,
-      "explanation": "l == nums.length if target is larger than all elements \u2014 always bounds-check before accessing nums[l].",
+      "explanation": "l == nums.length if target is larger than all elements — always bounds-check before accessing nums[l].",
       "tags": [
         "boundaries"
       ]
@@ -342,7 +342,7 @@
     {
       "id": "dse-fc1",
       "front": "Binary search complexity",
-      "back": "O(log n) \u2014 halves the search space each step.",
+      "back": "O(log n) — halves the search space each step.",
       "tags": [
         "searching"
       ]
@@ -350,7 +350,7 @@
     {
       "id": "dse-fc2",
       "front": "Overflow-safe midpoint",
-      "back": "m = l + (r - l) / 2  \u2014 never overflows unlike (l+r)/2.",
+      "back": "m = l + (r - l) / 2  — never overflows unlike (l+r)/2.",
       "tags": [
         "searching"
       ]
@@ -405,7 +405,7 @@
     }
   ],
   "project": {
-    "brief": "Write SearchingLab.java with:\n1. binarySearch(int[] nums, int target) \u2192 int  (classic)\n2. lowerBound(int[] nums, int target) \u2192 int\n3. upperBound(int[] nums, int target) \u2192 int\n4. searchRotated(int[] nums, int target) \u2192 int\n5. minCapacityToShip(int[] weights, int days) \u2192 int  (answer-space binary search)\nInclude main() tests covering: target absent, all-duplicates, single element, rotated at index 0.",
+    "brief": "Write SearchingLab.java with:\n1. binarySearch(int[] nums, int target) → int  (classic)\n2. lowerBound(int[] nums, int target) → int\n3. upperBound(int[] nums, int target) → int\n4. searchRotated(int[] nums, int target) → int\n5. minCapacityToShip(int[] weights, int days) → int  (answer-space binary search)\nInclude main() tests covering: target absent, all-duplicates, single element, rotated at index 0.",
     "checklist": [
       {
         "id": "c1",
@@ -429,7 +429,7 @@
       },
       {
         "id": "c5",
-        "text": "minCapacityToShip finds the exact minimum \u2014 not just any valid capacity",
+        "text": "minCapacityToShip finds the exact minimum — not just any valid capacity",
         "weight": 1
       }
     ],

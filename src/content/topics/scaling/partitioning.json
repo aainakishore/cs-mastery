@@ -1,7 +1,7 @@
 {
   "id": "partitioning",
-  "unit": 4,
-  "order": 21,
+  "unit": 9,
+  "order": 82,
   "title": "Partitioning",
   "summary": "Master Partitioning: trade-offs, failure modes, and production patterns.",
   "prereqs": [

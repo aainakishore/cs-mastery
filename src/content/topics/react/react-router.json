@@ -1,10 +1,12 @@
 {
   "id": "react-router",
-  "unit": 10,
-  "order": 93,
+  "unit": 4,
+  "order": 33,
   "title": "React Router v6+",
   "summary": "Routing, nested routes, outlet, loaders, actions, navigation hooks, and protected route patterns in React Router v6/v7.",
-  "prereqs": ["react-rendering"],
+  "prereqs": [
+    "react-rendering"
+  ],
   "guide": "# React Router v6+\n\n## The Mental Model — Router as Component Tree\n\nReact Router maps URL paths to component trees. Think of routes like a directory structure: the URL `/dashboard/settings` maps to a nested component tree `<App> → <Dashboard> → <Settings>`.\n\n```\nURL: /dashboard/settings\n\nComponent tree rendered:\n  <RouterProvider>\n    <Root>\n      <Nav />\n      <Outlet />           ← renders matched child route\n        <Dashboard>\n          <Outlet />       ← renders matched grandchild route\n            <Settings />\n        </Dashboard>\n    </Root>\n  </RouterProvider>\n```\n\n## Setting Up Routes (v6 data router style)\n\n```tsx\nimport { createBrowserRouter, RouterProvider } from 'react-router-dom';\n\nconst router = createBrowserRouter([\n  {\n    path: '/',\n    element: <Root />,\n    errorElement: <ErrorBoundary />,\n    children: [\n      { index: true, element: <Home /> },          // /\n      {\n        path: 'dashboard',\n        element: <Dashboard />,\n        children: [\n          { index: true, element: <DashHome /> },  // /dashboard\n          { path: 'settings', element: <Settings /> },  // /dashboard/settings\n          { path: 'user/:id', element: <UserDetail /> }, // /dashboard/user/42\n        ],\n      },\n      { path: '*', element: <NotFound /> },          // catch-all 404\n    ],\n  },\n]);\n\nfunction App() {\n  return <RouterProvider router={router} />;\n}\n```\n\n## Outlet — where child routes render\n\n```tsx\n// Parent route component must render <Outlet />\n// where it wants its child route to appear\n\nfunction Dashboard() {\n  return (\n    <div className=\"dashboard-layout\">\n      <DashboardNav />\n      <main>\n        <Outlet />  {/* /dashboard renders DashHome, /dashboard/settings renders Settings */}\n      </main>\n    </div>\n  );\n}\n```\n\n## Route Parameters and URL Search Params\n\n```tsx\n// Route: path: 'user/:id'\nfunction UserDetail() {\n  const { id } = useParams();           // 'id' from URL segment\n  const [searchParams, setSearchParams] = useSearchParams();\n  const tab = searchParams.get('tab') ?? 'profile'; // ?tab=orders\n\n  return (\n    <div>\n      <h1>User {id}</h1>\n      <Tabs current={tab} onChange={tab => setSearchParams({ tab })} />\n    </div>\n  );\n}\n```\n\n## Loaders — data fetching before render\n\nLoaders run before the component renders, so the component always has data — no loading spinners needed in the component itself.\n\n```tsx\n// Define loader alongside route\nconst router = createBrowserRouter([\n  {\n    path: 'dashboard/user/:id',\n    element: <UserDetail />,\n    loader: async ({ params }) => {\n      const user = await fetch(`/api/users/${params.id}`).then(r => r.json());\n      if (!user) throw new Response('Not Found', { status: 404 });\n      return user;\n    },\n  },\n]);\n\n// Component reads loader data — always defined, no loading state\nfunction UserDetail() {\n  const user = useLoaderData() as User;\n  return <div>{user.name}</div>;\n}\n```\n\n```\nNavigation lifecycle with loader:\n  User clicks link to /dashboard/user/42\n           │\n           ▼\n  Router calls loader({ params: { id: '42' } })\n           │\n           ▼\n  Loader fetches data\n           │\n       ┌───┴───┐\n    success   error\n       │          └──► errorElement renders\n       ▼\n  Component renders with useLoaderData()\n  Navigation URL changes to /dashboard/user/42\n```\n\n## Navigation — Link, NavLink, useNavigate\n\n```tsx\nimport { Link, NavLink, useNavigate } from 'react-router-dom';\n\n// Declarative navigation\n<Link to='/dashboard'>Dashboard</Link>\n\n// NavLink adds active class when URL matches\n<NavLink to='/dashboard' className={({ isActive }) => isActive ? 'active' : ''}>\n  Dashboard\n</NavLink>\n\n// Programmatic navigation\nfunction LoginForm() {\n  const navigate = useNavigate();\n\n  async function handleSubmit(data: LoginData) {\n    await login(data);\n    navigate('/dashboard', { replace: true }); // replace history entry\n  }\n}\n```\n\n## Protected Routes Pattern\n\n```tsx\n// Pattern 1: wrapper component\nfunction ProtectedRoute({ children }: { children: React.ReactNode }) {\n  const { user } = useAuth();\n  if (!user) return <Navigate to='/login' replace />;\n  return <>{children}</>;\n}\n\n// Pattern 2: loader-based (preferred in v6.4+)\nconst router = createBrowserRouter([\n  {\n    path: 'dashboard',\n    loader: async () => {\n      const user = await getUser();\n      if (!user) throw redirect('/login'); // redirects in loader\n      return user;\n    },\n    element: <Dashboard />,\n  },\n]);\n```\n\n## useLocation and useMatch\n\n```tsx\nfunction NavItem({ to }: { to: string }) {\n  const location = useLocation();\n  // location.pathname, location.search, location.hash, location.state\n\n  const match = useMatch({ path: to, end: true });\n  // match is non-null when URL matches\n\n  return <a className={match ? 'active' : ''} href={to}>{to}</a>;\n}\n\n// Pass state between routes\nnavigate('/confirm', { state: { orderId: 42 } });\nconst { state } = useLocation(); // { orderId: 42 } on the target page\n```\n\n## Route Methods Summary\n\n```\n| Feature        | Hook / API          | Purpose                        |\n|----------------|---------------------|--------------------------------|\n| URL params     | useParams()         | :id segments                   |\n| Query string   | useSearchParams()   | ?key=value pairs               |\n| Navigate       | useNavigate()       | Programmatic navigation        |\n| Current URL    | useLocation()       | Path, search, hash, state      |\n| Loader data    | useLoaderData()     | Access pre-fetched route data  |\n| Match check    | useMatch()          | Does URL match pattern?        |\n| Nested render  | <Outlet />          | Render matched child route     |\n```\n\n## Common Pitfalls\n- Forgetting `<Outlet />` in parent layout components — child routes render nowhere\n- Using `window.location.href` instead of `navigate()` — causes full page reload, loses React state\n- Not adding `replace: true` on post-login navigate — back button returns to login\n- Loader errors: always handle 404/401 by throwing a Response and using errorElement\n- Nesting routes incorrectly — a path without required parent path prefix won't match\n\n## Connections\n- **react-state-effects** — loader pattern replaces useEffect data fetching in routes\n- **react-context** — protected routes use auth context to decide redirect\n- **react-performance** — lazy loading route components with React.lazy + Suspense",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Outlet is the 'slot' where child routes appear inside a layout component. Without Outlet, child routes are defined but never render. A layout component wraps shared UI (nav, sidebar) and places Outlet where the page content goes.",
-      "tags": ["routing", "outlet", "nested-routes"]
+      "tags": [
+        "routing",
+        "outlet",
+        "nested-routes"
+      ]
     },
     {
       "id": "rrtr-q2",
@@ -33,7 +39,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useEffect runs after render — so the component renders once without data (showing a loader), then re-renders with data. React Router's loader runs before navigation completes. The component receives data on its first render via useLoaderData() — eliminating the empty-state flash.",
-      "tags": ["routing", "loader", "data-fetching"]
+      "tags": [
+        "routing",
+        "loader",
+        "data-fetching"
+      ]
     },
     {
       "id": "rrtr-q3",
@@ -47,7 +57,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useParams() returns an object with all dynamic path segments as keys. For path `user/:id` at URL `/user/42`, it returns `{ id: '42' }`. Note: always a string — parse to number if needed with `Number(params.id)`.",
-      "tags": ["routing", "useParams", "dynamic-routes"]
+      "tags": [
+        "routing",
+        "useParams",
+        "dynamic-routes"
+      ]
     },
     {
       "id": "rrtr-q4",
@@ -61,7 +75,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React Router intercepts Link clicks to update the URL via the History API — no reload. JavaScript continues running, React state is preserved, only the matched route changes. `window.location.href` is a full navigation — the browser tears down and reloads the entire app.",
-      "tags": ["routing", "navigation", "Link"]
+      "tags": [
+        "routing",
+        "navigation",
+        "Link"
+      ]
     },
     {
       "id": "rrtr-q5",
@@ -75,7 +93,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Without replace: history is [/, /login, /dashboard]. Back button goes to /login — the user is already logged in, so they get bounced to /dashboard again (frustrating). With replace: history is [/, /dashboard]. Back goes to home. Always use replace after authentication redirects.",
-      "tags": ["routing", "navigation", "history"]
+      "tags": [
+        "routing",
+        "navigation",
+        "history"
+      ]
     },
     {
       "id": "rrtr-q6",
@@ -89,7 +111,10 @@
       ],
       "answerIndex": 1,
       "explanation": "An index route renders inside its parent's Outlet when the parent path is matched exactly. Example: parent path is `/dashboard`, index route renders at `/dashboard`. Without an index, `/dashboard` shows the layout but Outlet is empty until a child is selected.",
-      "tags": ["routing", "index-route"]
+      "tags": [
+        "routing",
+        "index-route"
+      ]
     },
     {
       "id": "rrtr-q7",
@@ -101,9 +126,16 @@
         "useEffect",
         "useSearchParams"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "useParams, useNavigate, and useSearchParams are React Router hooks. useEffect is a core React hook unrelated to routing (though you might use it alongside routing hooks).",
-      "tags": ["routing", "hooks"]
+      "tags": [
+        "routing",
+        "hooks"
+      ]
     },
     {
       "id": "rrtr-q8",
@@ -117,7 +149,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Throwing a Response from a loader triggers the errorElement for that route (or the nearest ancestor errorElement). The RouteError boundary renders instead of the normal component tree. Use useRouteError() inside the error component to read the thrown value.",
-      "tags": ["routing", "loader", "error-handling"]
+      "tags": [
+        "routing",
+        "loader",
+        "error-handling"
+      ]
     },
     {
       "id": "rrtr-q9",
@@ -132,7 +168,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Child routes need an Outlet in the parent to render. Without `<Outlet />` in Dashboard, React Router has nowhere to insert Settings. The URL changes to /dashboard/settings but the UI only shows 'Dashboard' — Settings is matched but never rendered. This is a common silent bug.",
-      "tags": ["routing", "outlet", "nested-routes"]
+      "tags": [
+        "routing",
+        "outlet",
+        "nested-routes"
+      ]
     },
     {
       "id": "rrtr-q10",
@@ -146,7 +186,11 @@
       ],
       "answerIndex": 1,
       "explanation": "A wrapper ProtectedRoute component renders first, then redirects — the protected component briefly renders before redirect. A loader throws before navigation completes, so the component never renders at all. For data-sensitive pages, the loader approach is more secure.",
-      "tags": ["routing", "protected-routes", "loader"]
+      "tags": [
+        "routing",
+        "protected-routes",
+        "loader"
+      ]
     },
     {
       "id": "rrtr-q11",
@@ -160,7 +204,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`useLocation()` returns `{ pathname, search, hash, state, key }`. `pathname` is the path segment (`/dashboard/settings`). `search` is the query string (`?tab=orders`). `state` is navigation state passed via navigate().",
-      "tags": ["routing", "useLocation"]
+      "tags": [
+        "routing",
+        "useLocation"
+      ]
     },
     {
       "id": "rrtr-q12",
@@ -174,7 +221,11 @@
       ],
       "answerIndex": 1,
       "explanation": "NavLink's `className` and `style` props receive `{ isActive, isPending }`. This lets you apply active styling without manually checking `useLocation().pathname`. Perfect for navigation menus where the current page link should look different.",
-      "tags": ["routing", "NavLink", "active-styles"]
+      "tags": [
+        "routing",
+        "NavLink",
+        "active-styles"
+      ]
     },
     {
       "id": "rrtr-q13",
@@ -188,7 +239,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`path: '*'` matches any URL that no other route has matched — it's the 404 fallback. React Router evaluates routes in specificity order (not definition order) and `*` has the lowest specificity, so it only wins when nothing else matches.",
-      "tags": ["routing", "catch-all", "404"]
+      "tags": [
+        "routing",
+        "catch-all",
+        "404"
+      ]
     },
     {
       "id": "rrtr-q14",
@@ -202,7 +257,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`useNavigation().state` has three values: `'idle'` (no navigation), `'loading'` (loader running), `'submitting'` (form/action running). Use it to show global loading indicators during route transitions.",
-      "tags": ["routing", "useNavigation", "loader"]
+      "tags": [
+        "routing",
+        "useNavigation",
+        "loader"
+      ]
     },
     {
       "id": "rrtr-q15",
@@ -217,7 +276,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useSearchParams returns a tuple: [URLSearchParams, setFn]. `.get('tab')` returns the string value of the `tab` param or null. To update: `setSearchParams({ tab: 'profile' })` — this updates the URL query string reactively without a page reload.",
-      "tags": ["routing", "useSearchParams", "query-params"]
+      "tags": [
+        "routing",
+        "useSearchParams",
+        "query-params"
+      ]
     },
     {
       "id": "rrtr-q16",
@@ -231,7 +294,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Navigation state is passed in-memory (not in the URL). useLocation() on the target page returns the current location object including `.state`. This is useful for passing data to a confirmation page without exposing it in the URL.",
-      "tags": ["routing", "navigation-state", "useLocation"]
+      "tags": [
+        "routing",
+        "navigation-state",
+        "useLocation"
+      ]
     },
     {
       "id": "rrtr-q17",
@@ -243,9 +310,16 @@
         "Using useEffect in every protected component to check auth",
         "Adding auth check in the root errorElement"
       ],
-      "answerIndexes": [0, 1],
+      "answerIndexes": [
+        0,
+        1
+      ],
       "explanation": "Wrapper component (A) and loader redirect (B) are both valid patterns. B is preferred (component never renders). useEffect-in-component (C) causes flashes and is error-prone. errorElement (D) handles errors, not auth checks.",
-      "tags": ["routing", "protected-routes", "auth"]
+      "tags": [
+        "routing",
+        "protected-routes",
+        "auth"
+      ]
     },
     {
       "id": "rrtr-q18",
@@ -259,7 +333,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React Router v6.4 introduced Data Routers (createBrowserRouter, createHashRouter). These unlock loaders, actions, fetchers, and deferred data. The older `<BrowserRouter>` doesn't support these features. New projects should use createBrowserRouter.",
-      "tags": ["routing", "data-router", "createBrowserRouter"]
+      "tags": [
+        "routing",
+        "data-router",
+        "createBrowserRouter"
+      ]
     },
     {
       "id": "rrtr-q19",
@@ -273,7 +351,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`React.lazy(() => import('./Dashboard'))` creates a lazily loaded component. Wrapping the Outlet (or the Router) in `<Suspense fallback={<Spinner />}>` handles the loading state. This code-splits the route's bundle — Dashboard's JS is only downloaded when that route is first visited.",
-      "tags": ["routing", "lazy-loading", "code-splitting"]
+      "tags": [
+        "routing",
+        "lazy-loading",
+        "code-splitting"
+      ]
     },
     {
       "id": "rrtr-q20",
@@ -287,7 +369,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useParams() returns a key-value object for every named segment (`:name`). For path `user/:id/details/:section` at `/user/42/details/bio`: `{ id: '42', section: 'bio' }`. Static segments (user, details) are not in the params object — only the dynamic `:segments`.",
-      "tags": ["routing", "useParams", "dynamic-routes"]
+      "tags": [
+        "routing",
+        "useParams",
+        "dynamic-routes"
+      ]
     }
   ],
   "flashcards": [
@@ -295,59 +381,103 @@
       "id": "rrtr-fc1",
       "front": "Outlet",
       "back": "Renders the matched child route inside a layout component. Without Outlet in the parent, child routes are matched but never displayed.",
-      "tags": ["routing", "outlet"]
+      "tags": [
+        "routing",
+        "outlet"
+      ]
     },
     {
       "id": "rrtr-fc2",
       "front": "Loader vs useEffect for data",
       "back": "Loader runs before navigation completes — component always has data on first render. useEffect runs after render — causes loading state flash. Prefer loaders for route-level data.",
-      "tags": ["routing", "loader"]
+      "tags": [
+        "routing",
+        "loader"
+      ]
     },
     {
       "id": "rrtr-fc3",
       "front": "navigate(to, { replace: true })",
       "back": "Replaces current history entry. Use after login to prevent back button returning to login page.",
-      "tags": ["routing", "navigation"]
+      "tags": [
+        "routing",
+        "navigation"
+      ]
     },
     {
       "id": "rrtr-fc4",
       "front": "useParams / useSearchParams",
       "back": "useParams(): `{ id: '42' }` from path segments. useSearchParams(): URLSearchParams for `?key=val`. Both return strings.",
-      "tags": ["routing", "params"]
+      "tags": [
+        "routing",
+        "params"
+      ]
     },
     {
       "id": "rrtr-fc5",
       "front": "Protected route — loader pattern",
       "back": "`throw redirect('/login')` inside loader if unauthorized. Component never renders. More secure than wrapper component which renders briefly before redirect.",
-      "tags": ["routing", "auth"]
+      "tags": [
+        "routing",
+        "auth"
+      ]
     },
     {
       "id": "rrtr-fc6",
       "front": "index route",
       "back": "Renders inside parent Outlet when parent path matches exactly. `{ index: true, element: <Home /> }` renders at parent's base path.",
-      "tags": ["routing", "index-route"]
+      "tags": [
+        "routing",
+        "index-route"
+      ]
     },
     {
       "id": "rrtr-fc7",
       "front": "Link vs window.location.href",
       "back": "Link = client-side navigation, no reload, React state preserved. window.location.href = full browser reload, React app restarts.",
-      "tags": ["routing", "navigation"]
+      "tags": [
+        "routing",
+        "navigation"
+      ]
     },
     {
       "id": "rrtr-fc8",
       "front": "NavLink isActive",
       "back": "`className={({ isActive }) => isActive ? 'active' : ''}` — auto-applies active class when URL matches. No manual location check needed.",
-      "tags": ["routing", "NavLink"]
+      "tags": [
+        "routing",
+        "NavLink"
+      ]
     }
   ],
   "project": {
     "brief": "Design the route configuration for a multi-role SaaS app with: 1) Public routes: `/`, `/login`, `/signup`. 2) Authenticated user routes: `/dashboard`, `/dashboard/orders`, `/dashboard/orders/:orderId`. 3) Admin-only routes: `/admin`, `/admin/users`. Specify: the full createBrowserRouter config, how auth is checked (loader or wrapper), how admin check differs from user check, which components use Outlet and where, and how order detail data is loaded. Also: what happens at /admin if a non-admin user navigates there?",
     "checklist": [
-      { "id": "c1", "text": "Public root with Login and Signup as children, no auth check", "weight": 1 },
-      { "id": "c2", "text": "AuthGuard loader: checks session, throws redirect('/login') if no auth", "weight": 1 },
-      { "id": "c3", "text": "AdminGuard loader: checks role === 'admin', throws redirect('/dashboard') if not admin", "weight": 1 },
-      { "id": "c4", "text": "Order detail route: loader fetches order by params.orderId, errorElement for 404", "weight": 1 },
-      { "id": "c5", "text": "Outlet present in Dashboard (for orders) and Admin (for users)", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Public root with Login and Signup as children, no auth check",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "AuthGuard loader: checks session, throws redirect('/login') if no auth",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "AdminGuard loader: checks role === 'admin', throws redirect('/dashboard') if not admin",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Order detail route: loader fetches order by params.orderId, errorElement for 404",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Outlet present in Dashboard (for orders) and Admin (for users)",
+        "weight": 1
+      }
     ],
     "hints": [
       "Nest authenticated routes under a layout route that has a loader with the auth check.",
@@ -357,4 +487,3 @@
     ]
   }
 }
-

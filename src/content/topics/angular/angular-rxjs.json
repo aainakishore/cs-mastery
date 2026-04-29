@@ -1,10 +1,12 @@
 {
   "id": "angular-rxjs",
-  "unit": 10,
-  "order": 101,
+  "unit": 5,
+  "order": 41,
   "title": "RxJS and Observables in Angular",
   "summary": "Observables, operators (map, filter, switchMap, takeUntil), subscription management, and common Angular RxJS patterns.",
-  "prereqs": ["angular-services-di"],
+  "prereqs": [
+    "angular-services-di"
+  ],
   "guide": "# RxJS and Observables in Angular\n\nRxJS treats **events as streams of values over time** — like a river of data that you can intercept, transform, filter, and combine before it reaches its destination. An Observable is a lazy stream: nothing flows until something subscribes.\n\n```\nPromise (single value, eager):        Observable (multiple values, lazy):\n  request → [   ] → one response        timer → -0--1--2--3--4-- (infinite)\n  (starts immediately when called)       click → ---click--click--- (events)\n                                         HTTP  → --------response| (single)\n                                         (nothing starts until .subscribe())\n```\n\n## The Observable Lifecycle\n\n```\nObservable created  →  .subscribe() called  →  values flow  →  complete/error\n\nCreation:     const obs$ = new Observable(subscriber => {\n                subscriber.next(1);   // emit value\n                subscriber.next(2);\n                subscriber.complete(); // stream done\n              });\n\nSubscription: obs$.subscribe({\n                next:     (v) => console.log(v),  // 1, 2\n                error:    (e) => console.error(e),\n                complete: ()  => console.log('done')\n              });\n\nConvention: variable$ suffix marks an Observable\n```\n\n## Common Creation Functions\n\n```typescript\nimport { of, from, interval, fromEvent, EMPTY, throwError } from 'rxjs';\n\nof(1, 2, 3)                      // emits 1, 2, 3 then completes\nfrom([10, 20, 30])               // same as of but from an array/Promise\nfrom(fetch('/api/data'))         // wraps a Promise\ninterval(1000)                   // emits 0, 1, 2... every second (never completes)\nfromEvent(button, 'click')       // emits on every click\nEMPTY                            // completes immediately, emits nothing\nthrowError(() => new Error('!')) // errors immediately\n```\n\n## The Pipe Operator — Transformation Pipeline\n\n```\nObservable source\n     │\n  .pipe(\n     │    map(x => x * 2)          ← transform each value\n     │    filter(x => x > 5)       ← drop values failing predicate\n     │    tap(x => console.log(x)) ← side effect, pass through unchanged\n     │    take(3)                  ← complete after 3 values\n     │    debounceTime(300)        ← swallow rapid values, emit last after 300ms\n     │    distinctUntilChanged()   ← drop consecutive duplicates\n  )\n     │\n  .subscribe(result => ...)\n```\n\n## Key Operators\n\n```typescript\nimport { map, filter, switchMap, mergeMap, concatMap,\n         catchError, retry, takeUntil, debounceTime,\n         distinctUntilChanged, combineLatest, forkJoin } from 'rxjs/operators';\n\n// switchMap — cancel previous inner, start new (typeahead search)\nsearchTerm$.pipe(\n  debounceTime(300),\n  distinctUntilChanged(),\n  switchMap(term => this.http.get(`/search?q=${term}`))  // cancels previous request\n)\n\n// mergeMap — allow multiple concurrent inners (parallel)\nclicks$.pipe(mergeMap(click => this.http.post('/log', click)))\n\n// concatMap — queue inners in order (sequential)\noperations$.pipe(concatMap(op => this.http.post('/op', op)))\n\n// catchError — recover from errors\nthis.http.get('/data').pipe(\n  catchError(error => {\n    console.error(error);\n    return of([]);  // return a fallback Observable\n  })\n)\n\n// forkJoin — wait for ALL to complete (like Promise.all)\nforkJoin([\n  this.http.get('/users'),\n  this.http.get('/products')\n]).subscribe(([users, products]) => ...)\n\n// combineLatest — emit when ANY input emits, with latest from all\ncombineLatest([user$, settings$]).subscribe(([user, settings]) => ...)\n```\n\n## switchMap vs mergeMap vs concatMap\n\n```\n   Input:  --A-----B-----C--> (three requests triggered)\n\n   switchMap:                    mergeMap:                  concatMap:\n   A starts, then B triggers →   A, B, C all run in         A runs, completes,\n   A is CANCELLED.               parallel (concurrent).      then B, then C\n   B starts, then C triggers →   All results arrive          (strict ordering).\n   B is CANCELLED.               in arrival order.\n   Only C's response arrives.    May arrive out of order.\n\n   Use for: typeahead,           Use for: fire-and-forget    Use for: sequential\n   live search (latest           analytics events, logging,  operations where\n   query wins)                   parallel fetches             order matters\n```\n\n## Subscription Management — Memory Leaks\n\n**The single most common source of memory leaks in Angular apps:**\n\n```typescript\n// BAD — subscription never cleaned up:\nexport class MyComponent implements OnInit {\n  ngOnInit() {\n    this.interval$.subscribe(v => this.value = v);  // LEAK: still runs after destroy\n  }\n}\n\n// GOOD — Method 1: takeUntil pattern\nexport class MyComponent implements OnInit, OnDestroy {\n  private destroy$ = new Subject<void>();\n\n  ngOnInit() {\n    this.interval$.pipe(\n      takeUntil(this.destroy$)\n    ).subscribe(v => this.value = v);\n  }\n\n  ngOnDestroy() {\n    this.destroy$.next();\n    this.destroy$.complete();\n  }\n}\n\n// GOOD — Method 2: async pipe (auto-manages subscription)\n// In template: {{ data$ | async }}\n// Angular subscribes on init, unsubscribes on destroy. No manual cleanup needed.\n\n// GOOD — Method 3: takeUntilDestroyed() (Angular 16+)\nexport class MyComponent {\n  private destroyRef = inject(DestroyRef);\n  ngOnInit() {\n    this.interval$.pipe(\n      takeUntilDestroyed(this.destroyRef)\n    ).subscribe(...);\n  }\n}\n```\n\n## The async Pipe — Preferred Subscription Method\n\n```typescript\n// component.ts\n@Component({ ... })\nexport class UserListComponent {\n  users$ = this.userService.getUsers();  // Observable, not subscribed yet\n  constructor(private userService: UserService) {}\n}\n```\n\n```html\n<!-- template — async pipe subscribes and unsubscribes automatically -->\n<ul>\n  <li *ngFor=\"let user of users$ | async\">{{ user.name }}</li>\n</ul>\n\n<!-- Capture the value to avoid multiple subscriptions: -->\n<ng-container *ngIf=\"users$ | async as users\">\n  <p>Total: {{ users.length }}</p>\n  <li *ngFor=\"let user of users\">{{ user.name }}</li>\n</ng-container>\n```\n\n## Subject Types\n\n```typescript\nimport { Subject, BehaviorSubject, ReplaySubject } from 'rxjs';\n\n// Subject — multicasts to current subscribers only\nconst events$ = new Subject<string>();\nevents$.next('click');  // only current subscribers receive it\n\n// BehaviorSubject — has current value; new subscribers get latest immediately\nconst user$ = new BehaviorSubject<User | null>(null);\nuser$.next(loggedInUser);\nuser$.getValue();  // synchronously get current value\n// New subscriber immediately gets current user (even if subscribed after emit)\n\n// ReplaySubject — replays N past values to new subscribers\nconst logs$ = new ReplaySubject<string>(5);  // remember last 5\n```\n\n## Common Pitfalls\n- **Nested .subscribe()** — subscribing inside a subscribe callback. Use switchMap/mergeMap instead.\n- **Not unsubscribing** — interval, timer, custom Subject streams run forever. Use async pipe or takeUntil.\n- **Multiple subscriptions to the same Observable** — each subscription re-executes the source (HTTP calls fire twice). Use `shareReplay(1)` to multicast.\n- **Calling subscribe() in a service** — services usually shouldn't subscribe (no lifecycle to clean up). Return Observables; let components subscribe via async pipe.\n- **switchMap on write operations** — cancelling a save/delete request mid-flight leaves the backend in an inconsistent state. Use concatMap or mergeMap for writes.\n\n## Connections\n- **angular-services-di** — services return Observables from HttpClient\n- **angular-routing** — route guards and resolvers use Observables\n- **angular-signals** — signals are Angular's newer reactive primitive, simpler than RxJS for component state",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "A Promise starts executing when created; an Observable starts when subscribed. Promises emit one value then settle. Observables can emit many values, can represent streams (clicks, intervals), and can be cancelled by unsubscribing. Converting a Promise to Observable: `from(myPromise)`.",
-      "tags": ["rxjs", "observables", "promise-vs-observable"]
+      "tags": [
+        "rxjs",
+        "observables",
+        "promise-vs-observable"
+      ]
     },
     {
       "id": "arx-q2",
@@ -33,7 +39,11 @@
       ],
       "answerIndex": 1,
       "explanation": "switchMap is 'winner-takes-all' — only the latest inner Observable matters. For search: latest query wins, stale results discarded. For saves/deletes: you don't want to cancel a save because another action happened. Use concatMap (queue, in-order) or mergeMap (parallel) for write operations.",
-      "tags": ["rxjs", "switchMap", "operators"]
+      "tags": [
+        "rxjs",
+        "switchMap",
+        "operators"
+      ]
     },
     {
       "id": "arx-q3",
@@ -48,7 +58,11 @@
       ],
       "answerIndex": 2,
       "explanation": "filter keeps only even numbers: 2, 4. map multiplies by 10: 20, 40. Operators run in sequence left-to-right in the pipe. filter runs first (drops 1, 3, 5), then map transforms the remaining 2 and 4.",
-      "tags": ["rxjs", "operators", "pipe"]
+      "tags": [
+        "rxjs",
+        "operators",
+        "pipe"
+      ]
     },
     {
       "id": "arx-q4",
@@ -63,7 +77,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`interval` never completes. When the component is destroyed, the subscription continues — the callback still runs, trying to set `this.count` on a destroyed component. Fixes: async pipe (auto-unsubscribed), `takeUntil(this.destroy$)`, or storing the subscription and calling `this.sub.unsubscribe()` in ngOnDestroy.",
-      "tags": ["rxjs", "memory-leak", "subscription-management"]
+      "tags": [
+        "rxjs",
+        "memory-leak",
+        "subscription-management"
+      ]
     },
     {
       "id": "arx-q5",
@@ -77,7 +95,11 @@
       ],
       "answerIndex": 0,
       "explanation": "If you subscribe to a Subject AFTER the last value was emitted, you get nothing. With BehaviorSubject, you always get the most recent value on subscription. This makes it ideal for auth state, current user, settings — where late subscribers need the current value immediately.",
-      "tags": ["rxjs", "BehaviorSubject", "Subject"]
+      "tags": [
+        "rxjs",
+        "BehaviorSubject",
+        "Subject"
+      ]
     },
     {
       "id": "arx-q6",
@@ -91,7 +113,11 @@
       ],
       "answerIndex": 1,
       "explanation": "The async pipe is Angular's safest subscription mechanism: it subscribes in ngOnInit, updates the view on each emission, and unsubscribes in ngOnDestroy. No manual cleanup needed. Always prefer `| async` over manual subscribe() in components.",
-      "tags": ["rxjs", "async-pipe", "subscription-management"]
+      "tags": [
+        "rxjs",
+        "async-pipe",
+        "subscription-management"
+      ]
     },
     {
       "id": "arx-q7",
@@ -105,7 +131,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`catchError` intercepts an error and must return a new Observable to replace the failed one. `of([])` emits an empty array then completes — the subscriber gets `[]` as if the request succeeded with no data. Use this for graceful degradation. For retry: use `retry(3)` before catchError.",
-      "tags": ["rxjs", "catchError", "error-handling"]
+      "tags": [
+        "rxjs",
+        "catchError",
+        "error-handling"
+      ]
     },
     {
       "id": "arx-q8",
@@ -119,7 +149,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Each `| async` creates an independent subscription. For HTTP Observables (cold), each subscription triggers a new HTTP request. Fix: `*ngIf=\"users$ | async as users\"` to subscribe once and reuse the `users` variable throughout the template. Or use `shareReplay(1)` on the Observable.",
-      "tags": ["rxjs", "async-pipe", "multiple-subscriptions"]
+      "tags": [
+        "rxjs",
+        "async-pipe",
+        "multiple-subscriptions"
+      ]
     },
     {
       "id": "arx-q9",
@@ -131,9 +165,17 @@
         "takeUntilDestroyed(inject(DestroyRef)) — Angular 16+",
         "Never subscribing — just calling .pipe() without subscribe"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "async pipe, takeUntil with destroy$, and takeUntilDestroyed (Angular 16+) all correctly unsubscribe on component destroy. Just `.pipe()` without `.subscribe()` — nothing executes at all (Observables are lazy). Pick one strategy per component and use it consistently.",
-      "tags": ["rxjs", "memory-leak", "lifecycle"]
+      "tags": [
+        "rxjs",
+        "memory-leak",
+        "lifecycle"
+      ]
     },
     {
       "id": "arx-q10",
@@ -147,7 +189,11 @@
       ],
       "answerIndex": 1,
       "explanation": "forkJoin = Promise.all for Observables — waits for all to complete, emits an array of their last values. combineLatest emits every time ANY source emits (with latest from all) — not suitable for one-shot HTTP requests. Use forkJoin for parallel requests that each complete once.",
-      "tags": ["rxjs", "forkJoin", "combineLatest"]
+      "tags": [
+        "rxjs",
+        "forkJoin",
+        "combineLatest"
+      ]
     },
     {
       "id": "arx-q11",
@@ -161,7 +207,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`debounceTime` creates a 'settle period'. If you type 'a', 'b', 'c' rapidly, debounceTime waits until 300ms of silence, then emits 'abc'. Without it, each keystroke fires a search. Contrast with `delay(300)` which adds a fixed delay to every value regardless of subsequent emissions.",
-      "tags": ["rxjs", "debounceTime", "operators"]
+      "tags": [
+        "rxjs",
+        "debounceTime",
+        "operators"
+      ]
     },
     {
       "id": "arx-q12",
@@ -175,7 +225,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Services live for the app lifetime (singleton). If a service subscribes to an interval or event stream, it must manually manage cleanup. The safest pattern: services return Observables, components subscribe (via async pipe). If a service must subscribe: use takeUntil with an app-level shutdown signal.",
-      "tags": ["rxjs", "services", "subscriptions"]
+      "tags": [
+        "rxjs",
+        "services",
+        "subscriptions"
+      ]
     },
     {
       "id": "arx-q13",
@@ -189,7 +243,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`shareReplay(1)` is essential for HTTP calls used in multiple places. Without it: each subscriber triggers a new HTTP request. With it: first subscriber triggers HTTP, result cached; subsequent subscribers get the cached result. The '1' means remember the last 1 emission for late subscribers.",
-      "tags": ["rxjs", "shareReplay", "multicasting"]
+      "tags": [
+        "rxjs",
+        "shareReplay",
+        "multicasting"
+      ]
     },
     {
       "id": "arx-q14",
@@ -203,7 +261,11 @@
       ],
       "answerIndex": 1,
       "explanation": "If a user types 'react', pauses, then the cursor blinks without typing — `debounceTime` would emit again. `distinctUntilChanged()` drops the emission if the value is same as the last emitted value. Pair with `debounceTime` to get: settle → compare → search only if changed.",
-      "tags": ["rxjs", "distinctUntilChanged", "operators"]
+      "tags": [
+        "rxjs",
+        "distinctUntilChanged",
+        "operators"
+      ]
     },
     {
       "id": "arx-q15",
@@ -215,9 +277,16 @@
         "new Observable(sub => sub.next([1,2,3]))",
         "asObservable([1, 2, 3])"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "`of(1,2,3)` emits each arg separately. `from([1,2,3])` iterates the array. `new Observable(subscriber => ...)` is the low-level constructor. `asObservable()` is a method on Subject to hide the emit capability — not a creation function with array argument.",
-      "tags": ["rxjs", "creation-operators"]
+      "tags": [
+        "rxjs",
+        "creation-operators"
+      ]
     },
     {
       "id": "arx-q16",
@@ -231,7 +300,12 @@
       ],
       "answerIndex": 1,
       "explanation": "`tap(x => console.log(x))` — logs x, passes x through unchanged. `map(x => x * 2)` — transforms x to x*2, forwards the new value. Use tap for debugging/logging without affecting the stream. Never use tap to transform values — use map.",
-      "tags": ["rxjs", "tap", "map", "operators"]
+      "tags": [
+        "rxjs",
+        "tap",
+        "map",
+        "operators"
+      ]
     },
     {
       "id": "arx-q17",
@@ -245,7 +319,12 @@
       ],
       "answerIndex": 1,
       "explanation": "mergeMap: subscribe to all inners immediately (parallel). Results arrive in any order. concatMap: queue the inners. Only start the next when the current completes. Results arrive in input order. Use concatMap for: sequential file uploads, ordered database writes, undo/redo queues.",
-      "tags": ["rxjs", "concatMap", "mergeMap", "operators"]
+      "tags": [
+        "rxjs",
+        "concatMap",
+        "mergeMap",
+        "operators"
+      ]
     },
     {
       "id": "arx-q18",
@@ -259,7 +338,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`BehaviorSubject(null)` — replays 1 value to new subscribers, requires initial value. `ReplaySubject(3)` — replays last 3 emissions, no initial value needed. Use ReplaySubject for: chat history (last N messages), log streams (last N entries). BehaviorSubject for: current user, selected item (one current value).",
-      "tags": ["rxjs", "ReplaySubject", "BehaviorSubject"]
+      "tags": [
+        "rxjs",
+        "ReplaySubject",
+        "BehaviorSubject"
+      ]
     },
     {
       "id": "arx-q19",
@@ -273,7 +356,11 @@
       ],
       "answerIndex": 2,
       "explanation": "The async pipe tracks the component's lifecycle. When Angular destroys the component (ngOnDestroy), the async pipe calls unsubscribe. This is automatic — you don't need to implement OnDestroy. If the Observable never completes (like a Subject), this prevents the leak.",
-      "tags": ["rxjs", "async-pipe", "lifecycle"]
+      "tags": [
+        "rxjs",
+        "async-pipe",
+        "lifecycle"
+      ]
     },
     {
       "id": "arx-q20",
@@ -287,7 +374,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Nested subscribe makes code hard to read, impossible to cancel outer subscriptions, and prone to leaks. Instead: `outerObs$.pipe(switchMap(val => innerObs$(val))).subscribe(...)`. The flat-mapping operators compose chains, handle cancellation, and keep code linear.",
-      "tags": ["rxjs", "anti-patterns", "nested-subscribe"]
+      "tags": [
+        "rxjs",
+        "anti-patterns",
+        "nested-subscribe"
+      ]
     }
   ],
   "flashcards": [
@@ -295,59 +386,103 @@
       "id": "arx-fc1",
       "front": "Observable vs Promise",
       "back": "Observable: lazy (starts on subscribe), multiple values, cancellable, can be transformed with operators. Promise: eager, single value, not cancellable. Use Observables in Angular for streams, events, HTTP.",
-      "tags": ["rxjs", "observables"]
+      "tags": [
+        "rxjs",
+        "observables"
+      ]
     },
     {
       "id": "arx-fc2",
       "front": "switchMap vs mergeMap vs concatMap",
       "back": "switchMap: cancels previous (typeahead). mergeMap: parallel, any order (analytics). concatMap: sequential, ordered (writes). Match to your use case — switchMap on writes is dangerous.",
-      "tags": ["rxjs", "operators"]
+      "tags": [
+        "rxjs",
+        "operators"
+      ]
     },
     {
       "id": "arx-fc3",
       "front": "async pipe benefits",
       "back": "Auto-subscribes on init, re-renders on emit, auto-unsubscribes on destroy. Prevents memory leaks. Use `*ngIf=\"obs$ | async as val\"` to subscribe once and reuse value.",
-      "tags": ["rxjs", "async-pipe"]
+      "tags": [
+        "rxjs",
+        "async-pipe"
+      ]
     },
     {
       "id": "arx-fc4",
       "front": "BehaviorSubject use case",
       "back": "Holds the current value — late subscribers get it immediately. Unlike Subject (must be present at emit time). Use for: current user, selected tab, any 'current state' that new subscribers need.",
-      "tags": ["rxjs", "BehaviorSubject"]
+      "tags": [
+        "rxjs",
+        "BehaviorSubject"
+      ]
     },
     {
       "id": "arx-fc5",
       "front": "takeUntil pattern",
       "back": "private destroy$ = new Subject(). .pipe(takeUntil(this.destroy$)). ngOnDestroy: destroy$.next(); destroy$.complete(). Cleaner alternative: takeUntilDestroyed(inject(DestroyRef)) in Angular 16+.",
-      "tags": ["rxjs", "memory-leak"]
+      "tags": [
+        "rxjs",
+        "memory-leak"
+      ]
     },
     {
       "id": "arx-fc6",
       "front": "shareReplay(1)",
       "back": "Multicasts to all subscribers, caches last 1 emission. New subscribers get cached value without re-executing source. Essential for HTTP Observables used in multiple places — prevents duplicate requests.",
-      "tags": ["rxjs", "shareReplay"]
+      "tags": [
+        "rxjs",
+        "shareReplay"
+      ]
     },
     {
       "id": "arx-fc7",
       "front": "catchError usage",
       "back": "Must return a new Observable. `catchError(err => of(fallback))` — graceful degradation. `catchError(err => throwError(() => err))` — re-throw. Place after retry() if using both.",
-      "tags": ["rxjs", "error-handling"]
+      "tags": [
+        "rxjs",
+        "error-handling"
+      ]
     },
     {
       "id": "arx-fc8",
       "front": "forkJoin vs combineLatest",
       "back": "forkJoin: emits once when ALL sources complete (Promise.all equivalent). combineLatest: emits when ANY source emits, with latest from all. forkJoin for parallel HTTP; combineLatest for live combined state.",
-      "tags": ["rxjs", "combination-operators"]
+      "tags": [
+        "rxjs",
+        "combination-operators"
+      ]
     }
   ],
   "project": {
     "brief": "Design the complete RxJS pipeline for an autocomplete search component. Requirements: (1) User types in an input — each keystroke triggers a value. (2) Wait 300ms of silence before searching (debounceTime). (3) Don't search if the value hasn't changed (distinctUntilChanged). (4) Cancel any in-flight request when a new search starts (switchMap). (5) Handle errors gracefully — return empty array on fail (catchError). (6) Unsubscribe when the component is destroyed. (7) Display a loading indicator while the request is in-flight. Sketch the full pipe chain, explain why switchMap over mergeMap, and describe what happens to the loading state if the user types rapidly and cancels 5 requests.",
     "checklist": [
-      { "id": "c1", "text": "Pipe chain: debounceTime(300) → distinctUntilChanged() → tap(setLoading) → switchMap(search) → catchError → tap(clearLoading)", "weight": 1 },
-      { "id": "c2", "text": "switchMap rationale: latest query wins, stale responses discarded (no outdated results appearing)", "weight": 1 },
-      { "id": "c3", "text": "Loading state: if 5 requests fired, 4 cancelled by switchMap — loading cleared after the 5th completes", "weight": 1 },
-      { "id": "c4", "text": "Error handling: catchError returns of([]) — user sees empty results, not a broken UI", "weight": 1 },
-      { "id": "c5", "text": "Cleanup: takeUntil(destroy$) or async pipe — subscription cleaned up on component destroy", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Pipe chain: debounceTime(300) → distinctUntilChanged() → tap(setLoading) → switchMap(search) → catchError → tap(clearLoading)",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "switchMap rationale: latest query wins, stale responses discarded (no outdated results appearing)",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Loading state: if 5 requests fired, 4 cancelled by switchMap — loading cleared after the 5th completes",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Error handling: catchError returns of([]) — user sees empty results, not a broken UI",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Cleanup: takeUntil(destroy$) or async pipe — subscription cleaned up on component destroy",
+        "weight": 1
+      }
     ],
     "hints": [
       "Use a Subject or fromEvent(input, 'input') as the source. Pipe the operators in order.",
@@ -357,4 +492,3 @@
     ]
   }
 }
-

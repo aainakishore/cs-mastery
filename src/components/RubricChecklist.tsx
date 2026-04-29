@@ -36,7 +36,7 @@ export function RubricChecklist({ rubric, onSubmit }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-800 rounded-2xl p-6">
+      <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
         <GuideView markdown={rubric.brief} />
       </div>
 
@@ -55,8 +55,8 @@ export function RubricChecklist({ rubric, onSubmit }: Props) {
         </div>
       )}
 
-      <div className="bg-slate-800 rounded-2xl p-6 space-y-3">
-        <h3 className="text-slate-100 font-bold text-lg">Rubric Checklist</h3>
+      <div className="rounded-2xl p-6 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <h3 className="font-bold text-lg" style={{ color: 'var(--text-primary)' }}>Rubric Checklist</h3>
         {hintsUsed < rubric.hints.length && (
           <p className="text-xs text-amber-400">
             ⚠ Using a hint caps max score at {maxScore === 100 ? 90 : maxScore - 10}%
@@ -73,18 +73,18 @@ export function RubricChecklist({ rubric, onSubmit }: Props) {
               onChange={() => toggle(item.id)}
               className="mt-1 accent-indigo-500 w-4 h-4 flex-shrink-0"
             />
-            <span className="text-slate-200 text-sm group-hover:text-white transition">
+            <span className="text-sm transition" style={{ color: 'var(--text-primary)' }}>
               {item.text}
-              <span className="ml-2 text-slate-500 text-xs">({item.weight} pts)</span>
+              <span className="ml-2 text-xs" style={{ color: 'var(--text-subtle)' }}>({item.weight} pts)</span>
             </span>
           </label>
         ))}
       </div>
 
-      <div className="flex items-center justify-between bg-slate-900 rounded-2xl p-4">
+      <div className="flex items-center justify-between rounded-2xl p-4" style={{ background: 'var(--bg-card2, var(--bg-card))', border: '1px solid var(--border)' }}>
         <div>
-          <div className="text-2xl font-bold text-white">{finalScore}<span className="text-slate-400 text-base">/100</span></div>
-          <div className="text-xs text-slate-400">{finalScore >= 80 ? '✅ Pass!' : 'Keep going...'}</div>
+          <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{finalScore}<span className="text-base" style={{ color: 'var(--text-muted)' }}>/100</span></div>
+          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{finalScore >= 80 ? '✅ Pass!' : 'Keep going...'}</div>
         </div>
         <div className="flex gap-3">
           {rubric.hints.length > 0 && hintsUsed < rubric.hints.length && (

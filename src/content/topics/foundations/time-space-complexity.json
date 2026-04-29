@@ -1,7 +1,7 @@
 {
   "id": "time-space-complexity",
   "unit": 1,
-  "order": 1,
+  "order": 5,
   "title": "Time & Space Complexity",
   "summary": "Big-O notation, complexity hierarchy, common data structure operations, and practical performance thinking.",
   "prereqs": [],

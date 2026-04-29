@@ -1,7 +1,7 @@
 {
   "id": "angular-signals",
-  "unit": 10,
-  "order": 104,
+  "unit": 5,
+  "order": 44,
   "title": "Angular Signals",
   "summary": "Signals, computed, effect, signal inputs/outputs, and fine-grained change detection.",
   "prereqs": [
@@ -50,7 +50,7 @@
       "prompt": "computed() recalculates:",
       "choices": [
         "Every CD cycle",
-        "Only when a signal it reads changes \u2014 lazy and memoized",
+        "Only when a signal it reads changes — lazy and memoized",
         "Asynchronously",
         "Never after init"
       ],
@@ -67,7 +67,7 @@
       "prompt": "Why use computed() not effect() for derived values?",
       "choices": [
         "Computed is faster",
-        "effect() \u2192 set() creates cycles; computed() is the correct reactive derivation tool",
+        "effect() → set() creates cycles; computed() is the correct reactive derivation tool",
         "Identical",
         "effect() can't read signals"
       ],
@@ -85,7 +85,7 @@
       "prompt": "What does model() provide?",
       "choices": [
         "Read-only input",
-        "Two-way bindable signal \u2014 parent binds with [(value)], component reads and updates",
+        "Two-way bindable signal — parent binds with [(value)], component reads and updates",
         "Model layer only",
         "Async input"
       ],
@@ -103,7 +103,7 @@
       "choices": [
         "Anywhere",
         "Only constructor",
-        "Injection context \u2014 constructor, field initializer, or runInInjectionContext",
+        "Injection context — constructor, field initializer, or runInInjectionContext",
         "Only services"
       ],
       "answerIndex": 2,
@@ -124,7 +124,7 @@
         "Wraps in BehaviorSubject"
       ],
       "answerIndex": 1,
-      "explanation": "toSignal bridges RxJS \u2192 Signals. Synchronously readable in templates.",
+      "explanation": "toSignal bridges RxJS → Signals. Synchronously readable in templates.",
       "tags": [
         "signals",
         "rxjs-interop"
@@ -145,7 +145,7 @@
         1,
         2
       ],
-      "explanation": "set, update, mutate \u2014 the three mutation methods. .next() is RxJS.",
+      "explanation": "set, update, mutate — the three mutation methods. .next() is RxJS.",
       "tags": [
         "signals"
       ]
@@ -200,7 +200,10 @@
       ],
       "answerIndex": 1,
       "explanation": "untracked() reads a signal without registering a dependency. Useful when you need a value but don't want re-computation on its change.",
-      "tags": ["signals", "computed"]
+      "tags": [
+        "signals",
+        "computed"
+      ]
     },
     {
       "id": "asig-q12",
@@ -215,7 +218,10 @@
       ],
       "answerIndex": 1,
       "explanation": "computed is lazy — recalculates on first read after a dependency changes. a.set(3) invalidates b; b() triggers recalc: 3 * 10 = 30.",
-      "tags": ["signals", "computed"]
+      "tags": [
+        "signals",
+        "computed"
+      ]
     },
     {
       "id": "asig-q13",
@@ -229,7 +235,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Default initialValue is undefined. In strict templates this causes type errors unless you provide initialValue or mark the type as T | undefined.",
-      "tags": ["signals", "rxjs-interop"]
+      "tags": [
+        "signals",
+        "rxjs-interop"
+      ]
     },
     {
       "id": "asig-q14",
@@ -243,7 +252,10 @@
       ],
       "answerIndex": 1,
       "explanation": "@Input requires ngOnChanges to react to changes. InputSignal is a readable signal: use in computed() or template directly.",
-      "tags": ["signals", "signal-inputs"]
+      "tags": [
+        "signals",
+        "signal-inputs"
+      ]
     },
     {
       "id": "asig-q15",
@@ -257,7 +269,10 @@
       ],
       "answerIndex": 1,
       "explanation": "OnPush alone limits checks to inputs/events. Signals add surgical intra-component tracking — only the exact DOM binding updates.",
-      "tags": ["signals", "change-detection"]
+      "tags": [
+        "signals",
+        "change-detection"
+      ]
     },
     {
       "id": "asig-q16",
@@ -269,9 +284,16 @@
         "Memoized — same value returned until dependencies change",
         "Can read other computed() signals"
       ],
-      "answerIndexes": [0, 2, 3],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
       "explanation": "computed() is read-only, lazy, memoized. It evaluates only when read after a dependency change — not eagerly. It can depend on other computed signals.",
-      "tags": ["signals", "computed"]
+      "tags": [
+        "signals",
+        "computed"
+      ]
     },
     {
       "id": "asig-q17",
@@ -285,7 +307,10 @@
       ],
       "answerIndex": 1,
       "explanation": "model() creates a WritableSignal that the parent binds with [(modelName)]. Internally emits a change event on .set().",
-      "tags": ["signals", "model"]
+      "tags": [
+        "signals",
+        "model"
+      ]
     },
     {
       "id": "asig-q18",
@@ -300,7 +325,10 @@
       ],
       "answerIndex": 0,
       "explanation": "Field initializers in Angular components run inside the injection context. Both constructor body and field initializers are valid for effect().",
-      "tags": ["signals", "effect"]
+      "tags": [
+        "signals",
+        "effect"
+      ]
     },
     {
       "id": "asig-q19",
@@ -314,7 +342,10 @@
       ],
       "answerIndex": 2,
       "explanation": "effect() returns an EffectRef. Call ref.destroy() to manually stop it. It also auto-cleans up with the injector on component destroy.",
-      "tags": ["signals", "effect"]
+      "tags": [
+        "signals",
+        "effect"
+      ]
     },
     {
       "id": "asig-q20",
@@ -328,7 +359,10 @@
       ],
       "answerIndex": 2,
       "explanation": "toObservable schedules emissions via effect() under the hood. Emissions happen asynchronously — not in the same synchronous flush as the signal set().",
-      "tags": ["signals", "rxjs-interop"]
+      "tags": [
+        "signals",
+        "rxjs-interop"
+      ]
     }
   ],
   "flashcards": [
@@ -343,7 +377,7 @@
     {
       "id": "asig-fc2",
       "front": "computed() guarantees",
-      "back": "Lazy, memoized, auto-tracked. Only recalculates when a read signal changes. Read-only \u2014 no set/update.",
+      "back": "Lazy, memoized, auto-tracked. Only recalculates when a read signal changes. Read-only — no set/update.",
       "tags": [
         "signals",
         "computed"
@@ -352,7 +386,7 @@
     {
       "id": "asig-fc3",
       "front": "effect() rules",
-      "back": "Side effects only. Injection context required. Never set another signal inside \u2014 use computed() for derivations.",
+      "back": "Side effects only. Injection context required. Never set another signal inside — use computed() for derivations.",
       "tags": [
         "signals",
         "effect"
@@ -361,7 +395,7 @@
     {
       "id": "asig-fc4",
       "front": "Signal inputs (Angular 17.1+)",
-      "back": "input<T>(): optional. input(default). input.required<T>(). Returns InputSignal \u2014 reactive, no ngOnChanges needed.",
+      "back": "input<T>(): optional. input(default). input.required<T>(). Returns InputSignal — reactive, no ngOnChanges needed.",
       "tags": [
         "signals",
         "signal-inputs"
@@ -370,7 +404,7 @@
     {
       "id": "asig-fc5",
       "front": "toSignal / toObservable",
-      "back": "toSignal(obs$, { initialValue: [] }): Observable \u2192 Signal. toObservable(sig): Signal \u2192 Observable (for RxJS pipelines). Both require injection context.",
+      "back": "toSignal(obs$, { initialValue: [] }): Observable → Signal. toObservable(sig): Signal → Observable (for RxJS pipelines). Both require injection context.",
       "tags": [
         "signals",
         "rxjs-interop"
@@ -379,7 +413,7 @@
     {
       "id": "asig-fc6",
       "front": "Signals + OnPush",
-      "back": "Optimal combo \u2014 OnPush + signals. Angular tracks template signal reads. Updates only affected components. No markForCheck() needed.",
+      "back": "Optimal combo — OnPush + signals. Angular tracks template signal reads. Updates only affected components. No markForCheck() needed.",
       "tags": [
         "signals",
         "change-detection"
@@ -389,26 +423,31 @@
       "id": "asig-fc7",
       "front": "untracked()",
       "back": "untracked(() => sig()) reads a signal without registering it as a dependency. Use in computed/effect when you need a value but don't want re-run on its change.",
-      "tags": ["signals"]
+      "tags": [
+        "signals"
+      ]
     },
     {
       "id": "asig-fc8",
       "front": "model() two-way signal",
       "back": "model(initialValue): WritableSignal that parent binds with [(name)]. Replaces @Input() value + @Output() valueChange pair. Component calls value.set() to emit upstream.",
-      "tags": ["signals", "model"]
+      "tags": [
+        "signals",
+        "model"
+      ]
     }
   ],
   "project": {
-    "brief": "Design a live dashboard: (1) metrics Observable \u2192 toSignal; (2) selectedId: writable signal; (3) selectedMetric: computed from both; (4) theme toggle \u2192 effect to localStorage; (5) search: toObservable(term) \u2192 debounce \u2192 switchMap \u2192 toSignal. Where are signals vs computed vs effect?",
+    "brief": "Design a live dashboard: (1) metrics Observable → toSignal; (2) selectedId: writable signal; (3) selectedMetric: computed from both; (4) theme toggle → effect to localStorage; (5) search: toObservable(term) → debounce → switchMap → toSignal. Where are signals vs computed vs effect?",
     "checklist": [
       {
         "id": "c1",
-        "text": "metrics = toSignal(svc.getMetrics$(), { initialValue: [] }) \u2014 Observable bridged to Signal",
+        "text": "metrics = toSignal(svc.getMetrics$(), { initialValue: [] }) — Observable bridged to Signal",
         "weight": 1
       },
       {
         "id": "c2",
-        "text": "selectedId = signal<string|null>(null) \u2014 writable, user updates on click",
+        "text": "selectedId = signal<string|null>(null) — writable, user updates on click",
         "weight": 1
       },
       {
@@ -418,7 +457,7 @@
       },
       {
         "id": "c4",
-        "text": "effect(() => localStorage.setItem('theme', theme())) \u2014 legitimate side effect",
+        "text": "effect(() => localStorage.setItem('theme', theme())) — legitimate side effect",
         "weight": 1
       },
       {
@@ -428,7 +467,7 @@
       }
     ],
     "hints": [
-      "effect() must NOT set another signal \u2014 that's computed()'s domain.",
+      "effect() must NOT set another signal — that's computed()'s domain.",
       "All toSignal/toObservable calls go in constructor (injection context).",
       "selectedMetric defaults to metrics()[0] if selectedId() is null."
     ]

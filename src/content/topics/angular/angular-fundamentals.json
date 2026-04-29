@@ -1,10 +1,12 @@
 {
   "id": "angular-fundamentals",
-  "unit": 10,
-  "order": 97,
+  "unit": 5,
+  "order": 37,
   "title": "Angular Fundamentals",
   "summary": "Modules, components, templates, and the Angular lifecycle — how Angular bootstraps and renders your application.",
-  "prereqs": ["ts-fundamentals"],
+  "prereqs": [
+    "ts-fundamentals"
+  ],
   "guide": "# Angular Fundamentals\n\nAngular is an **opinionated, full-framework** approach to building web apps. Where React gives you a rendering library and lets you choose everything else, Angular ships with routing, forms, HTTP, DI, and state management conventions built in. The mental model: Angular is an **assembly line** — every piece is in a defined place with a defined job.\n\n```\n     Browser loads index.html\n          │\n          ▼\n     main.ts  →  bootstrapApplication(AppComponent)\n          │\n          ▼\n     AppComponent (root)   ← replaces <app-root> in HTML\n        /    \\\n    NavComp  RouterOutlet\n                  │\n              (active route's component)\n```\n\n## NgModules vs Standalone Components (modern Angular)\n\n```\n CLASSIC (Angular <14)              MODERN (Angular 17+)\n ┌─────────────────────┐            ┌─────────────────────┐\n │  @NgModule           │            │  @Component          │\n │  declarations: [C]   │     vs     │  standalone: true    │\n │  imports: [M]        │            │  imports: [NgIf,…]   │\n │  providers: [S]      │            │  (self-contained)    │\n └─────────────────────┘            └─────────────────────┘\n Modules group components.          Components declare their\n Required wiring for each.          own deps. Simpler mental model.\n```\n\n```ts\n// Modern standalone component\n@Component({\n  selector: 'app-user-card',\n  standalone: true,\n  imports: [NgIf, NgFor, DatePipe],   // bring in what you need\n  template: `\n    <div class=\"card\">\n      <h2>{{ user.name }}</h2>\n      <p *ngIf=\"user.role\">{{ user.role }}</p>\n    </div>\n  `,\n})\nexport class UserCardComponent {\n  @Input() user!: User;    // required input\n}\n```\n\n## Component Anatomy\n\n```\n@Component decorator\n     │\n     ├── selector: 'app-xyz'   ← the HTML tag name: <app-xyz />\n     ├── template / templateUrl\n     ├── styles / styleUrls\n     └── standalone, imports\n\nClass body\n     ├── @Input() props        ← data IN from parent\n     ├── @Output() EventEmitters  ← events OUT to parent\n     ├── Injected services     ← constructor(private svc: MyService)\n     └── Lifecycle hooks       ← ngOnInit, ngOnDestroy, etc.\n```\n\n```ts\n@Component({ selector: 'app-counter', standalone: true, template: `\n  <button (click)=\"increment()\">+</button>\n  <span>{{ count }}</span>\n` })\nexport class CounterComponent {\n  count = 0;\n  increment() { this.count++; }\n}\n```\n\n## Templates — Angular's DSL\n\nAngular templates are HTML with a superset of expressions and directives:\n\n```html\n<!-- Interpolation: {{ expression }} -->\n<p>Hello, {{ user.name }}</p>\n\n<!-- Property binding: [prop]=\"expression\" -->\n<img [src]=\"avatarUrl\" [alt]=\"user.name\">\n\n<!-- Event binding: (event)=\"handler($event)\" -->\n<button (click)=\"save()\">Save</button>\n\n<!-- Two-way binding: [(ngModel)]=\"prop\" (FormsModule required) -->\n<input [(ngModel)]=\"searchQuery\">\n\n<!-- Structural directives: change the DOM tree -->\n<li *ngFor=\"let item of items; trackBy: trackById\">{{ item.name }}</li>\n<div *ngIf=\"isAdmin\">Admin panel</div>\n\n<!-- New control flow (Angular 17+) -->\n@if (isAdmin) { <div>Admin panel</div> }\n@for (item of items; track item.id) { <li>{{ item.name }}</li> }\n```\n\n## Lifecycle Hooks — component birth → death\n\n```\n  new Component()\n        │\n        ▼\n  ngOnChanges()     ← input values first set / changed\n        │\n        ▼\n  ngOnInit()        ← component initialised, safe to use @Input values\n        │\n        ▼\n  ngAfterViewInit() ← template + child components rendered\n        │\n    [change detection loop]\n        │\n        ▼\n  ngOnDestroy()     ← cleanup: unsubscribe, clear timers\n```\n\n```ts\nexport class DataComponent implements OnInit, OnDestroy {\n  private sub!: Subscription;\n\n  ngOnInit() {\n    this.sub = this.dataService.data$.subscribe(d => this.data = d);\n  }\n\n  ngOnDestroy() {\n    this.sub.unsubscribe();  // prevent memory leak\n  }\n}\n```\n\n## Dependency Injection — services wired automatically\n\nAngular's DI container builds and injects services. You declare what you need, Angular provides it.\n\n```\nprovidedIn: 'root'            ← singleton, available app-wide\nproviders: [MyService]        ← in component/module metadata\n\n  AppComponent\n       │  constructor(private http: HttpClient)\n       │\n       ▼\n  DI Container  →  finds HttpClientModule provider  →  gives instance\n```\n\n```ts\n@Injectable({ providedIn: 'root' })\nexport class UserService {\n  constructor(private http: HttpClient) {}\n\n  getUser(id: number): Observable<User> {\n    return this.http.get<User>(`/api/users/${id}`);\n  }\n}\n\n// Component receives it via constructor — no manual instantiation\n@Component({…})\nexport class ProfileComponent {\n  constructor(private users: UserService) {}\n\n  ngOnInit() {\n    this.users.getUser(1).subscribe(u => this.user = u);\n  }\n}\n```\n\n## Change Detection — how Angular knows to update the DOM\n\n```\nEvent / timer / HTTP response fires\n          │\n          ▼\n  Zone.js intercepts (classic Angular)\n          │\n          ▼\n  Angular runs change detection\n  from root downward through ALL components\n          │\n          ▼\n  Compares old vs new template expressions\n          │\n          ▼\n  Patches only changed DOM nodes\n\nOnPush strategy:  only checks when\n  • @Input reference changes\n  • An event fires inside the component\n  • An Observable emits (with async pipe)\n```\n\n## Complexity Cheatsheet\n\n| Concept | Key rule |\n|---|---|\n| selector | The HTML tag: `<app-name>` maps to `selector: 'app-name'` |\n| @Input | Receive data from parent |\n| @Output + EventEmitter | Send events to parent |\n| ngOnInit | First safe place to use @Input values (constructor is too early) |\n| ngOnDestroy | Always unsubscribe from Observables here |\n| providedIn: 'root' | Singleton service, tree-shakeable |\n\n## Common Pitfalls\n- Accessing Angular `@Input()` values in the constructor — they're not set yet; use `ngOnInit`\n- Forgetting to unsubscribe in `ngOnDestroy` — causes memory leaks and ghost callbacks\n- Using index as `trackBy` in `*ngFor` — same bug as React index keys\n- Not importing standalone component dependencies in `imports: []` — template fails silently in dev\n- Using `InMemoryWebApiModule` in production — a testing utility accidentally left in\n\n## Connections\n- **angular-data-binding** — deep dive into `[]`, `()`, `[()]` binding syntax\n- **angular-services-di** — hierarchical injectors, component-scoped services\n- **angular-signals** — modern change detection without Zone.js\n- **ts-fundamentals** — TypeScript underpins every Angular class",
   "questions": [
     {
@@ -19,7 +21,10 @@
       ],
       "answerIndex": 1,
       "explanation": "The selector is a CSS-like selector that Angular matches against HTML. When it finds `<app-user>` in a template, it replaces that element with the component's rendered template.",
-      "tags": ["component", "selector"]
+      "tags": [
+        "component",
+        "selector"
+      ]
     },
     {
       "id": "ang-fund-q2",
@@ -33,7 +38,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular instantiates the class (constructor runs) then sets @Input properties. By the time ngOnInit runs, all @Input values are ready. Reading @Input in the constructor will get `undefined`.",
-      "tags": ["lifecycle", "input", "gotcha"]
+      "tags": [
+        "lifecycle",
+        "input",
+        "gotcha"
+      ]
     },
     {
       "id": "ang-fund-q3",
@@ -48,7 +57,10 @@
       ],
       "answerIndex": 1,
       "explanation": "In Angular templates: `[]` = property binding (data in). `()` = event binding (event out). `[()]` = two-way binding. Square brackets pass values to a child; parentheses listen for outputs from a child.",
-      "tags": ["data-binding", "event-binding"]
+      "tags": [
+        "data-binding",
+        "event-binding"
+      ]
     },
     {
       "id": "ang-fund-q4",
@@ -62,7 +74,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Active subscriptions hold references to the component. If the component is destroyed but the subscription lives on, the callback still fires on the dead component (ghost callback) and the memory is never freed.",
-      "tags": ["lifecycle", "memory-leak", "observables"]
+      "tags": [
+        "lifecycle",
+        "memory-leak",
+        "observables"
+      ]
     },
     {
       "id": "ang-fund-q5",
@@ -76,7 +92,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`providedIn: 'root'` registers the service with the root injector lazily. One instance is shared everywhere. If nothing injects it, the bundler can remove it (tree-shaking). No need to add it to any `providers` array.",
-      "tags": ["dependency-injection", "services"]
+      "tags": [
+        "dependency-injection",
+        "services"
+      ]
     },
     {
       "id": "ang-fund-q6",
@@ -88,9 +107,16 @@
         "ngAfterViewInit — required to render templates",
         "ngOnChanges — react to input value updates"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "ngAfterViewInit is for interacting with child component instances / DOM refs — not required for data fetching. ngOnInit, ngOnDestroy, and ngOnChanges are the trio for data-driven components.",
-      "tags": ["lifecycle", "data-fetching"]
+      "tags": [
+        "lifecycle",
+        "data-fetching"
+      ]
     },
     {
       "id": "ang-fund-q7",
@@ -105,7 +131,11 @@
       ],
       "answerIndex": 2,
       "explanation": "Standalone components must explicitly import all directives they use. `NgFor` must be in `imports: [NgFor]` (or `CommonModule`). Without it, `*ngFor` is an unknown attribute and Angular throws an error.",
-      "tags": ["standalone", "directives", "imports"]
+      "tags": [
+        "standalone",
+        "directives",
+        "imports"
+      ]
     },
     {
       "id": "ang-fund-q8",
@@ -119,7 +149,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Zone.js monkey-patches async APIs. When a setTimeout callback runs, Zone.js intercepts the completion and tells Angular 'something may have changed — run change detection'. This is why async code automatically triggers updates.",
-      "tags": ["change-detection", "zonejs"]
+      "tags": [
+        "change-detection",
+        "zonejs"
+      ]
     },
     {
       "id": "ang-fund-q9",
@@ -133,7 +166,11 @@
       ],
       "answerIndex": 1,
       "explanation": "OnPush skips the component during global change detection unless one of three things happens: an @Input gets a new reference, an event originates within the component tree, or an Observable subscribed via `async` pipe emits. This forces immutable data patterns.",
-      "tags": ["change-detection", "onpush", "performance"]
+      "tags": [
+        "change-detection",
+        "onpush",
+        "performance"
+      ]
     },
     {
       "id": "ang-fund-q10",
@@ -148,7 +185,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`*ngIf` is a structural directive — it adds/removes DOM nodes. When false, the `<div>` is completely absent from the DOM (not hidden). The `<p>` is independent and always renders. `else` is optional.",
-      "tags": ["directives", "ngif", "structural"]
+      "tags": [
+        "directives",
+        "ngif",
+        "structural"
+      ]
     },
     {
       "id": "ang-fund-q11",
@@ -162,7 +203,11 @@
       ],
       "answerIndex": 0,
       "explanation": "`[(x)]` is Angular's 'banana-in-a-box' syntax: a property binding `[x]` + an event binding `(xChange)`. For ngModel: `[ngModel]=\"val\"` sets the value and `(ngModelChange)=\"val=$event\"` updates it on change.",
-      "tags": ["data-binding", "two-way", "ngmodel"]
+      "tags": [
+        "data-binding",
+        "two-way",
+        "ngmodel"
+      ]
     },
     {
       "id": "ang-fund-q12",
@@ -176,7 +221,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular does not enforce immutability of @Input values. You CAN mutate an object passed via @Input — Angular will not warn you. React enforces props as read-only by convention. Both patterns work similarly architecturally: parent→child data flow.",
-      "tags": ["input", "props", "comparison"]
+      "tags": [
+        "input",
+        "props",
+        "comparison"
+      ]
     },
     {
       "id": "ang-fund-q13",
@@ -191,7 +240,11 @@
       ],
       "answerIndex": 0,
       "explanation": "Angular 17 introduced built-in control flow: `@if`, `@for`, `@switch`. The `@for` requires a `track` expression (like trackBy) which is now mandatory, not optional — encouraging correct performance practice.",
-      "tags": ["control-flow", "ngfor", "angular17"]
+      "tags": [
+        "control-flow",
+        "ngfor",
+        "angular17"
+      ]
     },
     {
       "id": "ang-fund-q14",
@@ -205,7 +258,11 @@
       ],
       "answerIndex": 2,
       "explanation": "An active subscription holds a reference to the component class, preventing garbage collection. If the Observable emits again (HTTP polling, WebSocket, interval), it tries to update state on a destroyed component — often causing 'ExpressionChangedAfterItHasBeenChecked' errors or silent state corruption.",
-      "tags": ["memory-leak", "observables", "lifecycle"]
+      "tags": [
+        "memory-leak",
+        "observables",
+        "lifecycle"
+      ]
     },
     {
       "id": "ang-fund-q15",
@@ -217,9 +274,16 @@
         "NgModules are required in Angular 17+ for lazy loading",
         "Standalone components enable better tree-shaking and simpler mental model"
       ],
-      "answerIndexes": [0, 3],
+      "answerIndexes": [
+        0,
+        3
+      ],
       "explanation": "Standalone components CAN use all Angular features — they just import them directly. NgModules are NOT required in Angular 17+; standalone-based lazy loading works via `loadComponent`. Standalone = simpler, more explicit, better tree-shaking.",
-      "tags": ["standalone", "ngmodule", "comparison"]
+      "tags": [
+        "standalone",
+        "ngmodule",
+        "comparison"
+      ]
     },
     {
       "id": "ang-fund-q16",
@@ -233,7 +297,11 @@
       ],
       "answerIndex": 1,
       "explanation": "The async pipe handles the subscribe/unsubscribe lifecycle automatically. It also triggers OnPush change detection when a new value arrives. It is the most common way to avoid manual subscription management in templates.",
-      "tags": ["async-pipe", "observables", "template"]
+      "tags": [
+        "async-pipe",
+        "observables",
+        "template"
+      ]
     },
     {
       "id": "ang-fund-q17",
@@ -248,7 +316,11 @@
       ],
       "answerIndex": 1,
       "explanation": "@Output + EventEmitter is Angular's way for a child to notify its parent. The parent uses event binding syntax `(clicked)=\"myHandler($event)\"` to receive the emitted string. This closes the loop of parent→child data and child→parent events.",
-      "tags": ["output", "event-emitter", "data-flow"]
+      "tags": [
+        "output",
+        "event-emitter",
+        "data-flow"
+      ]
     },
     {
       "id": "ang-fund-q18",
@@ -262,7 +334,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular reads the TypeScript constructor parameter types using emitted metadata (`emitDecoratorMetadata: true`). `constructor(private http: HttpClient)` — Angular sees `HttpClient` and looks it up in its DI container. The type annotation = the DI token.",
-      "tags": ["dependency-injection", "typescript", "metadata"]
+      "tags": [
+        "dependency-injection",
+        "typescript",
+        "metadata"
+      ]
     },
     {
       "id": "ang-fund-q19",
@@ -276,7 +352,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Without trackBy, any array change causes Angular to destroy and recreate all DOM nodes in the list (expensive). With trackBy returning a stable id, Angular matches old nodes to new items by identity — only new items get new DOM nodes.",
-      "tags": ["ngfor", "performance", "trackby"]
+      "tags": [
+        "ngfor",
+        "performance",
+        "trackby"
+      ]
     },
     {
       "id": "ang-fund-q20",
@@ -290,7 +370,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular's DI is hierarchical (root → module → component). Providing a service at the component level creates a new instance for that component subtree. Child components get this instance, not the root singleton. This enables isolated, test-friendly service scope.",
-      "tags": ["dependency-injection", "hierarchy", "scoped-services"]
+      "tags": [
+        "dependency-injection",
+        "hierarchy",
+        "scoped-services"
+      ]
     }
   ],
   "flashcards": [
@@ -298,59 +382,104 @@
       "id": "ang-fund-fc1",
       "front": "Angular component selector",
       "back": "The HTML tag that triggers this component: `selector: 'app-hero'` → use `<app-hero>` in templates. Must be unique per app.",
-      "tags": ["component", "selector"]
+      "tags": [
+        "component",
+        "selector"
+      ]
     },
     {
       "id": "ang-fund-fc2",
       "front": "@Input() vs @Output()",
       "back": "@Input = data IN from parent via `[prop]` binding. @Output + EventEmitter = event OUT to parent via `(event)` binding. Together they form the component contract.",
-      "tags": ["input", "output", "data-flow"]
+      "tags": [
+        "input",
+        "output",
+        "data-flow"
+      ]
     },
     {
       "id": "ang-fund-fc3",
       "front": "ngOnInit vs constructor",
       "back": "Constructor: service injection only — @Input not yet set. ngOnInit: first safe place for logic using @Input values. Rule: inject in constructor, initialise in ngOnInit.",
-      "tags": ["lifecycle", "oninit"]
+      "tags": [
+        "lifecycle",
+        "oninit"
+      ]
     },
     {
       "id": "ang-fund-fc4",
       "front": "ngOnDestroy — what to do there",
       "back": "Unsubscribe from all Observables/Subjects. Clear setInterval/setTimeout. Disconnect ResizeObserver. Prevents memory leaks and ghost callbacks.",
-      "tags": ["lifecycle", "memory-leak"]
+      "tags": [
+        "lifecycle",
+        "memory-leak"
+      ]
     },
     {
       "id": "ang-fund-fc5",
       "front": "providedIn: 'root'",
       "back": "Singleton service available app-wide, tree-shakeable if unused. No need to add to providers array. Use for shared stateless services (HttpClient wrapper, AuthService).",
-      "tags": ["dependency-injection", "singleton"]
+      "tags": [
+        "dependency-injection",
+        "singleton"
+      ]
     },
     {
       "id": "ang-fund-fc6",
       "front": "OnPush change detection — when it checks",
       "back": "@Input reference changes OR event fires inside component OR async pipe emits. Use as default for all components — forces immutable update patterns.",
-      "tags": ["change-detection", "onpush"]
+      "tags": [
+        "change-detection",
+        "onpush"
+      ]
     },
     {
       "id": "ang-fund-fc7",
       "front": "async pipe",
       "back": "Subscribes to Observable/Promise in template, unwraps value, auto-unsubscribes on destroy. Works with OnPush. Eliminates manual subscribe/unsubscribe boilerplate.",
-      "tags": ["async-pipe", "template"]
+      "tags": [
+        "async-pipe",
+        "template"
+      ]
     },
     {
       "id": "ang-fund-fc8",
       "front": "Standalone component imports array",
       "back": "Every directive, pipe, and component used in the template must be listed here. Not imported → unknown template element → error. Replaces NgModule declarations for standalone.",
-      "tags": ["standalone", "imports"]
+      "tags": [
+        "standalone",
+        "imports"
+      ]
     }
   ],
   "project": {
     "brief": "Design a 'Product Catalogue' feature in Angular. It shows a list of products, allows filtering by category, and shows a detail panel on click. 1) Sketch the component tree with selectors shown. 2) Decide which components are standalone and which (if any) use NgModule — justify. 3) For state: where does the selected product live? Where does the filter query live? 4) Identify which lifecycle hooks each component needs and explain why. 5) You have a ProductService that fetches products via HTTP. How do you inject it? How do you unsubscribe safely? 6) Which components should use OnPush and why?",
     "checklist": [
-      { "id": "c1", "text": "Component tree drawn with selectors and @Input/@Output on edges", "weight": 1 },
-      { "id": "c2", "text": "State ownership justified — selected product and filter query placement explained", "weight": 1 },
-      { "id": "c3", "text": "Lifecycle hooks per component identified with reasons (ngOnInit for fetch, ngOnDestroy for cleanup)", "weight": 1 },
-      { "id": "c4", "text": "ProductService injection and unsubscribe strategy described (async pipe or takeUntilDestroyed)", "weight": 1 },
-      { "id": "c5", "text": "OnPush strategy applied to at least ProductCard and justified", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Component tree drawn with selectors and @Input/@Output on edges",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "State ownership justified — selected product and filter query placement explained",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Lifecycle hooks per component identified with reasons (ngOnInit for fetch, ngOnDestroy for cleanup)",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "ProductService injection and unsubscribe strategy described (async pipe or takeUntilDestroyed)",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "OnPush strategy applied to at least ProductCard and justified",
+        "weight": 1
+      }
     ],
     "hints": [
       "The filter query belongs in the parent (CatalogueComponent) — it needs to filter before passing to the list.",
@@ -360,4 +489,3 @@
     ]
   }
 }
-

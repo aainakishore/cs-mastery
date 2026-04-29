@@ -1,7 +1,7 @@
 {
   "id": "relational-databases-sql",
   "unit": 1,
-  "order": 5,
+  "order": 3,
   "title": "Relational Databases & SQL",
   "summary": "Tables, queries, joins, transactions, indexes, normalisation, and the ACID guarantees that make databases trustworthy.",
   "prereqs": [

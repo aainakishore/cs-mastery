@@ -1,7 +1,7 @@
 {
   "id": "prompting-fundamentals",
-  "unit": 2,
-  "order": 9,
+  "unit": 7,
+  "order": 59,
   "title": "Prompting Fundamentals",
   "summary": "Master Prompting Fundamentals: trade-offs, failure modes, and production patterns.",
   "prereqs": [

@@ -1,10 +1,12 @@
 {
   "id": "react-hooks",
-  "unit": 10,
-  "order": 90,
+  "unit": 4,
+  "order": 30,
   "title": "React Hooks Deep Dive",
   "summary": "useMemo, useCallback, useRef, useReducer, and custom hooks — when and why to use each one.",
-  "prereqs": ["react-state-effects"],
+  "prereqs": [
+    "react-state-effects"
+  ],
   "guide": "# React Hooks Deep Dive\n\n## The Hooks You Reach For After useState/useEffect\n\nOnce you understand state and effects, the next layer of hooks controls two things: **performance** (useMemo, useCallback) and **escape hatches** from the rendering model (useRef, useReducer).\n\n```\nHook taxonomy:\n  State:       useState, useReducer       ← triggers re-renders\n  Side effect: useEffect, useLayoutEffect ← bridges outside world\n  Performance: useMemo, useCallback       ← skip re-computation\n  Imperative:  useRef                     ← mutable, doesn't re-render\n  Custom:      use*                       ← compose the above\n```\n\n## useRef — a box that persists without triggering re-renders\n\nThink of `useRef` as a cardboard box sitting next to your component. You can put anything in it, take it out, change it — and React never notices. No re-render.\n\n```\n  useState:  value change ──► re-render ──► new snapshot\n  useRef:    value change ──► NOTHING   ──► same render (just the box changed)\n```\n\n### Two use cases\n\n```tsx\n// 1. DOM reference — access the real DOM node\nconst inputRef = useRef<HTMLInputElement>(null);\n\nreturn (\n  <>\n    <input ref={inputRef} />\n    <button onClick={() => inputRef.current?.focus()}>Focus</button>\n  </>\n);\n// inputRef.current is the real DOM <input> element after mount\n\n// 2. Storing a mutable value that survives re-renders but doesn't trigger one\nconst timerId = useRef<ReturnType<typeof setTimeout> | null>(null);\n\nfunction handleSearch(query: string) {\n  if (timerId.current) clearTimeout(timerId.current);\n  timerId.current = setTimeout(() => doSearch(query), 300);\n  // changing timerId.current never causes a re-render\n}\n```\n\n### The key difference from state\n\n```\nuseState:                    useRef:\n  render 1: count = 0          render 1: ref.current = 0\n  setState(1)                  ref.current = 1\n  render 2: count = 1          (no render 2 happens)\n  — React updates the UI       — React is unaware\n```\n\n## useMemo — cache expensive calculations\n\n`useMemo` returns a cached value and only recomputes it when dependencies change.\n\n```tsx\n// Without useMemo: filterProducts runs on every re-render\nconst filtered = filterProducts(products, query);\n\n// With useMemo: only runs when products or query change\nconst filtered = useMemo(\n  () => filterProducts(products, query),\n  [products, query]\n);\n```\n\n```\nRender 1: products=[...], query='a'  → filterProducts runs → cached\nRender 2: someOtherState changed     → filterProducts SKIPPED → return cache\nRender 3: query='ab'                 → filterProducts runs → new cache\n```\n\n### When NOT to use useMemo\n\n```\nuseMemo overhead: ref comparison + function call bookkeeping\n\nOnly beneficial when:\n  ✓ Computation is genuinely expensive (>1ms)\n  ✓ Component re-renders frequently with unchanged deps\n  ✗ Cheap calculations — useMemo costs more than the calc\n  ✗ Value is used in JSX directly — React.memo is the tool for that\n```\n\n## useCallback — stable function references\n\n`useCallback` is `useMemo` for functions. It returns the same function reference unless deps change.\n\n```tsx\n// Without useCallback: new function reference on every render\nconst handleClick = () => doSomething(id);\n// Every render creates a new function → breaks React.memo on children\n\n// With useCallback: same reference when id hasn't changed\nconst handleClick = useCallback(\n  () => doSomething(id),\n  [id]\n);\n```\n\n```\nRender 1: id=5   → handleClick_v1 created, cached\nRender 2: name changed (id still 5) → handleClick_v1 RETURNED from cache\nRender 3: id=6   → handleClick_v2 created, cached\n\n<ExpensiveChild onClick={handleClick} />  ← same ref = no re-render in v1/v2 boundary\n```\n\n### useCallback + React.memo pattern\n\n```tsx\n// Child wrapped in memo — only re-renders when props change by reference\nconst Button = React.memo(({ onClick }: { onClick: () => void }) => {\n  return <button onClick={onClick}>Click</button>;\n});\n\n// Parent: stable callback reference prevents unnecessary Button re-renders\nconst Parent = () => {\n  const [count, setCount] = useState(0);\n  const handleClick = useCallback(() => setCount(c => c + 1), []);\n  //                                                           ^^ no deps = always same ref\n  return <Button onClick={handleClick} />;\n};\n```\n\n## useReducer — complex state with actions\n\nWhen state transitions depend on previous state in complex ways, `useReducer` models the change as an explicit action dispatched to a reducer function.\n\n```\nuseState:\n  setItems([...items, newItem])  ← caller decides HOW to change state\n\nuseReducer:\n  dispatch({ type: 'ADD_ITEM', payload: newItem })  ← caller says WHAT happened\n  reducer decides HOW to change state               ← logic is centralised\n```\n\n```tsx\ntype State = { items: string[]; loading: boolean; error: string | null };\ntype Action =\n  | { type: 'FETCH_START' }\n  | { type: 'FETCH_SUCCESS'; payload: string[] }\n  | { type: 'FETCH_ERROR'; payload: string };\n\nfunction reducer(state: State, action: Action): State {\n  switch (action.type) {\n    case 'FETCH_START':   return { ...state, loading: true, error: null };\n    case 'FETCH_SUCCESS': return { ...state, loading: false, items: action.payload };\n    case 'FETCH_ERROR':   return { ...state, loading: false, error: action.payload };\n  }\n}\n\nconst [state, dispatch] = useReducer(reducer, { items: [], loading: false, error: null });\n```\n\n## Custom hooks — composing hooks into reusable units\n\nA custom hook is just a function that calls other hooks. The naming convention `use*` tells React (and linters) that hook rules apply.\n\n```tsx\n// Extract repeated logic into a reusable hook\nfunction useWindowSize() {\n  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });\n\n  useEffect(() => {\n    const handler = () => setSize({ w: window.innerWidth, h: window.innerHeight });\n    window.addEventListener('resize', handler);\n    return () => window.removeEventListener('resize', handler);\n  }, []);\n\n  return size;\n}\n\n// Usage:\nconst { w, h } = useWindowSize();\n```\n\n```\nCustom hook anatomy:\n  function use<Name>(params) {\n    // 1. Declare state/refs\n    // 2. Set up effects\n    // 3. Return values/actions\n  }\n\n  Each component calling use<Name> gets its OWN instance of the state.\n  Hooks do NOT share state between components (unless combined with Context).\n```\n\n## useLayoutEffect — synchronous DOM measurement\n\n```\nuseEffect:         layout → paint → effect runs\nuseLayoutEffect:   layout → effect runs → paint\n\nUse when you need to read/mutate the DOM synchronously\nbefore the browser paints — e.g. measuring element size,\nscrolling to position, tooltip placement.\n\nWarning: blocks paint — use sparingly.\n```\n\n## Complexity and Cost Reference\n\n| Hook | Re-renders | Cost | Use when |\n|---|---|---|---|\n| useMemo | 0 | deps comparison overhead | Expensive computation, frequent re-renders |\n| useCallback | 0 | deps comparison overhead | Passing callbacks to memo'd children |\n| useRef | 0 | Negligible | DOM refs, persisting values without render |\n| useReducer | 1 per dispatch | Low | Complex multi-field state transitions |\n\n## Common Pitfalls\n- `useMemo`/`useCallback` premature optimisation — profile first, add memos second\n- `useRef` for values that SHOULD trigger a re-render — use useState instead\n- Custom hook calling regular functions with hooks named `use*` — only matters if linters misread it; ensure hooks are always called unconditionally\n- `useReducer` referential stability: dispatch function is stable (same reference every render) — safe in effect dep arrays\n\n## Connections\n- **react-rendering** — React.memo + useCallback prevent unnecessary child re-renders\n- **react-state-effects** — useReducer replaces complex useState patterns\n- **react-context** — custom hooks are the standard way to expose context values",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useRef is a mutable box outside the rendering cycle. Mutating `ref.current` is invisible to React — no re-render triggered. useState causes a re-render when called with a new value. Use useRef for values you want to persist between renders but not display.",
-      "tags": ["useRef", "useState", "rendering"]
+      "tags": [
+        "useRef",
+        "useState",
+        "rendering"
+      ]
     },
     {
       "id": "rhk-q2",
@@ -33,7 +39,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useMemo memoises a value. On re-renders where deps haven't changed, it returns the cached value and skips the computation. It does NOT prevent re-renders — the component still re-renders, but the expensive calculation is skipped.",
-      "tags": ["useMemo", "performance", "memoisation"]
+      "tags": [
+        "useMemo",
+        "performance",
+        "memoisation"
+      ]
     },
     {
       "id": "rhk-q3",
@@ -47,7 +57,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`useCallback(fn, deps)` is identical to `useMemo(() => fn, deps)`. Both cache a value; useCallback specialises in caching function references. A stable reference prevents React.memo'd children from re-rendering unnecessarily.",
-      "tags": ["useCallback", "useMemo", "reference-stability"]
+      "tags": [
+        "useCallback",
+        "useMemo",
+        "reference-stability"
+      ]
     },
     {
       "id": "rhk-q4",
@@ -62,7 +76,10 @@
       ],
       "answerIndex": 1,
       "explanation": "The console logs 1, 2, 3 correctly — `countRef.current` is updated. But the button label stays at 0 because changing a ref never triggers a re-render. The JSX captures `countRef.current` at render time (0) and never gets a chance to re-read it.",
-      "tags": ["useRef", "rendering"]
+      "tags": [
+        "useRef",
+        "rendering"
+      ]
     },
     {
       "id": "rhk-q5",
@@ -76,7 +93,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Without useCallback: every render creates a new function object. If that function is passed to a React.memo child or listed in a dep array, the new reference breaks the optimisation. useCallback prevents this by returning the same reference when deps haven't changed.",
-      "tags": ["useCallback", "React.memo", "performance"]
+      "tags": [
+        "useCallback",
+        "React.memo",
+        "performance"
+      ]
     },
     {
       "id": "rhk-q6",
@@ -90,7 +111,11 @@
       ],
       "answerIndex": 1,
       "explanation": "When state transitions are complex (multiple fields affecting each other, error states, loading states), useReducer makes changes predictable and testable. The reducer is a pure function — easy to unit test. With useState: transition logic scatters across event handlers.",
-      "tags": ["useReducer", "complex-state", "design"]
+      "tags": [
+        "useReducer",
+        "complex-state",
+        "design"
+      ]
     },
     {
       "id": "rhk-q7",
@@ -105,7 +130,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React guarantees that `dispatch` from useReducer has a stable reference — like `setState` from useState. This means you can safely put dispatch in effect dep arrays without causing infinite loops. No need to wrap it in useCallback.",
-      "tags": ["useReducer", "dispatch", "reference-stability"]
+      "tags": [
+        "useReducer",
+        "dispatch",
+        "reference-stability"
+      ]
     },
     {
       "id": "rhk-q8",
@@ -117,9 +146,16 @@
         "Storing the previous value of a prop to compare on next render",
         "State that should appear in the component's JSX"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "All except D. useRef is for: DOM access (A), mutable values that survive renders without triggering them (B, C). D is wrong — if a value should affect what the user sees, use useState (changing ref.current won't update the rendered output).",
-      "tags": ["useRef", "use-cases"]
+      "tags": [
+        "useRef",
+        "use-cases"
+      ]
     },
     {
       "id": "rhk-q9",
@@ -133,7 +169,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Custom hooks are regular functions that follow hook rules. They can call any combination of other hooks. The `use` prefix signals to React's linter that hook rules apply. Each component calling a custom hook gets its own state instance.",
-      "tags": ["custom-hooks", "hooks-rules"]
+      "tags": [
+        "custom-hooks",
+        "hooks-rules"
+      ]
     },
     {
       "id": "rhk-q10",
@@ -147,7 +186,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Custom hooks do NOT share state. Each component gets its own isolated copy of the hook's state. If you want to share state between components, use Context (or an external store). Custom hooks provide code reuse, not state sharing.",
-      "tags": ["custom-hooks", "state-sharing"]
+      "tags": [
+        "custom-hooks",
+        "state-sharing"
+      ]
     },
     {
       "id": "rhk-q11",
@@ -161,7 +203,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useLayoutEffect fires synchronously after DOM mutations but BEFORE the browser paints. Use it when you need to measure the DOM (getBoundingClientRect, scrollHeight) and set state based on that measurement — to prevent the user seeing a flash of wrong layout. For async side effects (fetch, timers), useEffect is correct.",
-      "tags": ["useLayoutEffect", "DOM", "paint"]
+      "tags": [
+        "useLayoutEffect",
+        "DOM",
+        "paint"
+      ]
     },
     {
       "id": "rhk-q12",
@@ -176,7 +222,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useMemo caches the result. If both `items` and `query` pass the Object.is comparison (same reference/value), React returns the cached result and skips the filter entirely. The component still re-renders — useMemo only skips the memoised computation.",
-      "tags": ["useMemo", "memoisation", "cache"]
+      "tags": [
+        "useMemo",
+        "memoisation",
+        "cache"
+      ]
     },
     {
       "id": "rhk-q13",
@@ -190,7 +240,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useCallback is not free — it stores the function, stores deps, and compares deps on every render. For most functions that are NOT passed to memo'd children or dep arrays, wrapping in useCallback adds overhead without benefit. Profile first.",
-      "tags": ["useCallback", "performance", "optimisation"]
+      "tags": [
+        "useCallback",
+        "performance",
+        "optimisation"
+      ]
     },
     {
       "id": "rhk-q14",
@@ -204,7 +258,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Reducers must be pure functions like a Redux reducer. Side effects (fetch, setTimeout) happen outside in event handlers or effects. Dispatch just triggers a state transition. Defining the reducer outside the component also prevents re-creation on every render.",
-      "tags": ["useReducer", "pure-function"]
+      "tags": [
+        "useReducer",
+        "pure-function"
+      ]
     },
     {
       "id": "rhk-q15",
@@ -218,7 +275,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`<input ref={myRef} />` — React sets `myRef.current` to the actual DOM node after the component mounts. On unmount, it's set back to null. You can then read `myRef.current.value`, call `myRef.current.focus()`, etc. in event handlers or effects.",
-      "tags": ["useRef", "DOM"]
+      "tags": [
+        "useRef",
+        "DOM"
+      ]
     },
     {
       "id": "rhk-q16",
@@ -230,9 +290,17 @@
         "Functions defined inside the component body",
         "useCallback-wrapped functions with empty[] deps"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "React guarantees dispatch and setState are stable across renders. useCallback with [] also provides a stable reference. Plain functions defined inside component body are NEW references on every render — they would trigger effects if listed as deps.",
-      "tags": ["reference-stability", "useReducer", "useCallback"]
+      "tags": [
+        "reference-stability",
+        "useReducer",
+        "useCallback"
+      ]
     },
     {
       "id": "rhk-q17",
@@ -246,7 +314,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Every component that calls a custom hook gets completely independent state. `useToggle()` in A and `useToggle()` in B are two separate useState calls with two separate memory slots in React's fiber tree. To share state, lift it up or use Context.",
-      "tags": ["custom-hooks", "state-isolation"]
+      "tags": [
+        "custom-hooks",
+        "state-isolation"
+      ]
     },
     {
       "id": "rhk-q18",
@@ -260,7 +331,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React.memo uses Object.is for prop comparison. `() => doSomething()` creates a new object reference every render — different from the previous one. memo sees 'changed prop' and re-renders the child. useCallback provides the same reference when deps haven't changed → memo's comparison succeeds → child skips render.",
-      "tags": ["useCallback", "React.memo", "reference-stability"]
+      "tags": [
+        "useCallback",
+        "React.memo",
+        "reference-stability"
+      ]
     },
     {
       "id": "rhk-q19",
@@ -275,7 +350,11 @@
       ],
       "answerIndex": 2,
       "explanation": "Renders happen at clicks 2 and 4 (when ref.current is even). At those renders, ref.current displays its CURRENT value (2, then 4). After click 5: ref.current = 5 but no render. Last render was click 4: showed '4 / 2'. That's what the user sees — ref.current in JSX is read at render time, not live.",
-      "tags": ["useRef", "rendering", "snapshot"]
+      "tags": [
+        "useRef",
+        "rendering",
+        "snapshot"
+      ]
     },
     {
       "id": "rhk-q20",
@@ -289,7 +368,10 @@
       ],
       "answerIndex": 1,
       "explanation": "React tracks hooks by their call ORDER within a component (like an indexed array). If `useEffect` is called on render 1 but skipped on render 2 due to a condition, the internal index shifts — the wrong state slot is read. This causes corrupted state and React throws an error about broken hook call order.",
-      "tags": ["hooks-rules", "conditional-hooks"]
+      "tags": [
+        "hooks-rules",
+        "conditional-hooks"
+      ]
     }
   ],
   "flashcards": [
@@ -297,59 +379,100 @@
       "id": "rhk-fc1",
       "front": "useRef vs useState",
       "back": "useRef: mutable box, no re-render on change. useState: triggers re-render when changed. Use useRef for DOM nodes, timers, previous values. Use useState for anything affecting the UI.",
-      "tags": ["useRef", "useState"]
+      "tags": [
+        "useRef",
+        "useState"
+      ]
     },
     {
       "id": "rhk-fc2",
       "front": "useMemo — when to use",
       "back": "Cache expensive computation when: 1) It's measurably slow, 2) Component re-renders frequently. NOT for cheap calculations — memo has its own overhead. Profile before adding.",
-      "tags": ["useMemo", "performance"]
+      "tags": [
+        "useMemo",
+        "performance"
+      ]
     },
     {
       "id": "rhk-fc3",
       "front": "useCallback — when it matters",
       "back": "Only helps when the function is passed to a React.memo'd child OR listed in a dep array. Every other case adds overhead with no benefit.",
-      "tags": ["useCallback", "React.memo"]
+      "tags": [
+        "useCallback",
+        "React.memo"
+      ]
     },
     {
       "id": "rhk-fc4",
       "front": "useReducer vs useState",
       "back": "useState: simple values, few transitions. useReducer: complex multi-field state, many transition types. Reducer is pure and testable. dispatch is stable (safe in dep arrays).",
-      "tags": ["useReducer", "useState"]
+      "tags": [
+        "useReducer",
+        "useState"
+      ]
     },
     {
       "id": "rhk-fc5",
       "front": "Custom hook — state sharing?",
       "back": "NO — each component calling a custom hook gets its OWN state instance. To share state, lift it up or use Context. Custom hooks = code reuse, not state sharing.",
-      "tags": ["custom-hooks"]
+      "tags": [
+        "custom-hooks"
+      ]
     },
     {
       "id": "rhk-fc6",
       "front": "useLayoutEffect vs useEffect",
       "back": "useLayoutEffect fires after DOM mutation, BEFORE paint (synchronous). useEffect fires AFTER paint. Use useLayoutEffect for DOM measurement or mutation that must be invisible to the user.",
-      "tags": ["useLayoutEffect", "useEffect"]
+      "tags": [
+        "useLayoutEffect",
+        "useEffect"
+      ]
     },
     {
       "id": "rhk-fc7",
       "front": "Stable hook references",
       "back": "setState and dispatch are always stable references. useCallback([]) is stable. Plain functions inside components are NEW refs every render. Put stable refs in dep arrays safely.",
-      "tags": ["reference-stability"]
+      "tags": [
+        "reference-stability"
+      ]
     },
     {
       "id": "rhk-fc8",
       "front": "Rules of hooks",
       "back": "Only call hooks at the top level (never in loops/conditions/nested functions). Only call hooks from React components or custom hooks. Violated order = corrupted state.",
-      "tags": ["hooks-rules"]
+      "tags": [
+        "hooks-rules"
+      ]
     }
   ],
   "project": {
     "brief": "Design a `useDebounce<T>(value: T, delay: number): T` custom hook. It should: return the debounced value (only updates after `delay` ms of the input not changing), cancel any pending debounce when the component unmounts or value changes, and use only useEffect and useRef (no useState — think carefully about why). Then design a second hook `usePrevious<T>(value: T): T | undefined` that returns the value from the previous render. Which hook(s) do you reach for and why? What would break if you used useState instead of useRef for usePrevious?",
     "checklist": [
-      { "id": "c1", "text": "useDebounce uses useState for the debounced output value (triggers re-render when debounce fires)", "weight": 1 },
-      { "id": "c2", "text": "useEffect clears previous timeout with clearTimeout before setting a new one", "weight": 1 },
-      { "id": "c3", "text": "Cleanup returns () => clearTimeout(timer) — cancels on unmount or value change", "weight": 1 },
-      { "id": "c4", "text": "usePrevious uses useRef to store previous value — updates ref AFTER render so it always holds last render's value", "weight": 1 },
-      { "id": "c5", "text": "Explains: useState for usePrevious would cause an extra re-render every time value changes — defeating the purpose", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "useDebounce uses useState for the debounced output value (triggers re-render when debounce fires)",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "useEffect clears previous timeout with clearTimeout before setting a new one",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Cleanup returns () => clearTimeout(timer) — cancels on unmount or value change",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "usePrevious uses useRef to store previous value — updates ref AFTER render so it always holds last render's value",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Explains: useState for usePrevious would cause an extra re-render every time value changes — defeating the purpose",
+        "weight": 1
+      }
     ],
     "hints": [
       "useDebounce: `const [debounced, setDebounced] = useState(value)` + useEffect with a setTimeout.",
@@ -359,4 +482,3 @@
     ]
   }
 }
-

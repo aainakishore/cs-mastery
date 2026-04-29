@@ -21,22 +21,38 @@ export function getNextTopic(id: string): Topic | undefined {
 }
 
 export const UNIT_LABELS: Record<Unit, string> = {
-  1: 'Foundations',
-  2: 'AI Primer',
-  3: 'Networking & Protocols',
-  4: 'Scaling & Data',
-  5: 'Cloud & DevOps',
-  6: 'AI Advanced',
-  7: 'Tooling',
-  8: 'Financial Literacy',
-  9: 'DSA in Java',
-  10: 'Frontend Frameworks',
-  11: 'Security & System Design',
-  12: 'Languages & Scripting',
+  1:  'Foundations',
+  2:  'Python',
+  3:  'TypeScript',
+  4:  'React',
+  5:  'Angular',
+  6:  'Networking',
+  7:  'AI Primer',
+  8:  'DSA in Java',
+  9:  'Scaling & Data',
+  10: 'Cloud & DevOps',
+  11: 'AI Advanced',
+  12: 'Security',
+  13: 'System Design',
+  14: 'Java Advanced',
+  15: 'Financial Literacy',
+  16: 'Advanced Engineering',
+  17: 'Tooling',
+  18: 'AWS',
+}
+
+export const UNIT_DIFFICULTY: Record<Unit, string> = {
+  1: 'beginner', 2: 'beginner',
+  3: 'intermediate', 4: 'intermediate', 5: 'intermediate',
+  6: 'intermediate', 7: 'intermediate',
+  8: 'advanced', 9: 'advanced', 10: 'advanced',
+  11: 'advanced', 12: 'advanced', 18: 'advanced',
+  13: 'expert', 14: 'expert',
+  15: 'optional', 16: 'optional', 17: 'optional',
 }
 
 export function getTopicsByUnit(unit: Unit): Topic[] {
   return topics.filter((t) => t.unit === unit)
 }
 
-export const UNITS: Unit[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+export const UNITS: Unit[] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]

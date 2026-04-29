@@ -1,7 +1,7 @@
 {
   "id": "angular-forms",
-  "unit": 10,
-  "order": 103,
+  "unit": 5,
+  "order": 43,
   "title": "Angular Forms",
   "summary": "Template-driven vs reactive forms, FormControl, FormGroup, FormArray, validators, and form patterns.",
   "prereqs": [
@@ -21,7 +21,7 @@
         "Template-driven has no validation"
       ],
       "answerIndex": 1,
-      "explanation": "Reactive forms hold FormGroup in TypeScript \u2014 synchronous, predictable, unit-testable.",
+      "explanation": "Reactive forms hold FormGroup in TypeScript — synchronous, predictable, unit-testable.",
       "tags": [
         "forms"
       ]
@@ -32,7 +32,7 @@
       "prompt": "Why guard error display with `touched` or `dirty`?",
       "choices": [
         "Angola skips validation until touched",
-        "Showing 'required' before user interacts is bad UX \u2014 blank forms with red errors are confusing",
+        "Showing 'required' before user interacts is bad UX — blank forms with red errors are confusing",
         "Validators don't run",
         "Only touched fields validate"
       ],
@@ -120,7 +120,7 @@
         "After 1 second"
       ],
       "answerIndex": 2,
-      "explanation": "Angular short-circuits \u2014 no async HTTP calls if sync validation already fails.",
+      "explanation": "Angular short-circuits — no async HTTP calls if sync validation already fails.",
       "tags": [
         "forms",
         "async-validators"
@@ -156,7 +156,7 @@
         "Async only"
       ],
       "answerIndex": 1,
-      "explanation": "Cross-field validators receive the group \u2014 apply at FormGroup level.",
+      "explanation": "Cross-field validators receive the group — apply at FormGroup level.",
       "tags": [
         "forms"
       ]
@@ -189,7 +189,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Angular treats any non-null return as an error object. Return null for valid. { valid: true } adds a 'valid' error key.",
-      "tags": ["forms", "validation"]
+      "tags": [
+        "forms",
+        "validation"
+      ]
     },
     {
       "id": "arf-q12",
@@ -204,7 +207,9 @@
       ],
       "answerIndex": 1,
       "explanation": "form.value excludes disabled controls. Use form.getRawValue() to get { name: 'Alice', age: 30 }.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     },
     {
       "id": "arf-q13",
@@ -218,7 +223,10 @@
       ],
       "answerIndex": 2,
       "explanation": "Angular short-circuits: if sync validators return errors, async validators are never called, saving unnecessary HTTP requests.",
-      "tags": ["forms", "async-validators"]
+      "tags": [
+        "forms",
+        "async-validators"
+      ]
     },
     {
       "id": "arf-q14",
@@ -232,7 +240,9 @@
       ],
       "answerIndex": 1,
       "explanation": "Use formArrayName='items' on the container, then *ngFor='let ctrl of items.controls; let i=index' with [formGroupName]='i' or [formControl]='ctrl'.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     },
     {
       "id": "arf-q15",
@@ -246,7 +256,9 @@
       ],
       "answerIndex": 1,
       "explanation": "By default reset() sets value to null. nonNullable: true makes reset() return to the initial value passed in the constructor instead.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     },
     {
       "id": "arf-q16",
@@ -258,9 +270,16 @@
         "ctrl.validators.push(Validators.required)",
         "ctrl.updateValueAndValidity() after setValidators"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "addValidators appends; setValidators replaces. Both need updateValueAndValidity() to retrigger. You cannot push into validators — it's not an array you own.",
-      "tags": ["forms", "validation"]
+      "tags": [
+        "forms",
+        "validation"
+      ]
     },
     {
       "id": "arf-q17",
@@ -275,7 +294,9 @@
       ],
       "answerIndex": 1,
       "explanation": "setValue throws if not all fields are provided. The throw happens before any mutation, so form stays at original values.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     },
     {
       "id": "arf-q18",
@@ -289,7 +310,9 @@
       ],
       "answerIndex": 0,
       "explanation": "pristine = opposite of dirty. pristine is false once the user changes the value. touched/untouched tracks focus, not value change.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     },
     {
       "id": "arf-q19",
@@ -303,7 +326,9 @@
       ],
       "answerIndex": 1,
       "explanation": "FormsModule provides ngModel, ngForm directives for template-driven. ReactiveFormsModule provides formGroup/formControlName for reactive.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     },
     {
       "id": "arf-q20",
@@ -317,7 +342,10 @@
       ],
       "answerIndex": 1,
       "explanation": "fb.group(controls, { validators: [...], asyncValidators: [...] }) — second arg is AbstractControlOptions. The validator receives the group as AbstractControl.",
-      "tags": ["forms", "validation"]
+      "tags": [
+        "forms",
+        "validation"
+      ]
     }
   ],
   "flashcards": [
@@ -373,13 +401,18 @@
       "id": "arf-fc7",
       "front": "Async validator signature",
       "back": "AsyncValidatorFn = (ctrl: AbstractControl) => Observable<ValidationErrors | null>. Return of(null) on error. Only fires after all sync validators pass.",
-      "tags": ["forms", "async-validators"]
+      "tags": [
+        "forms",
+        "async-validators"
+      ]
     },
     {
       "id": "arf-fc8",
       "front": "nonNullable FormControl",
       "back": "new FormControl<string>('', { nonNullable: true }). reset() returns to initial value not null. Type is string not string|null.",
-      "tags": ["forms"]
+      "tags": [
+        "forms"
+      ]
     }
   ],
   "project": {
@@ -412,7 +445,7 @@
       }
     ],
     "hints": [
-      "Async validator only fires after Validators.email passes \u2014 add it as sync validator to avoid wasted HTTP.",
+      "Async validator only fires after Validators.email passes — add it as sync validator to avoid wasted HTTP.",
       "skills: get skills() { return this.form.get('skills') as FormArray; }",
       "Template: formArrayName='skills', inner div with [formGroupName]='i'"
     ]

@@ -1,7 +1,7 @@
 {
   "id": "memory-stack-heap",
   "unit": 1,
-  "order": 3,
+  "order": 7,
   "title": "Memory: Stack vs Heap",
   "summary": "How memory is organised, when stack vs heap is used, garbage collection, and finding memory leaks.",
   "prereqs": [

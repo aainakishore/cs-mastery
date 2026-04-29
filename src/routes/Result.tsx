@@ -27,8 +27,8 @@ export function Result() {
         <div className="max-w-sm w-full space-y-6 mt-4">
           <div className="text-6xl">{passed ? '🎉' : '😅'}</div>
           <div>
-            <h1 className="text-3xl font-black text-white mb-1">{passed ? 'You passed!' : 'Not quite'}</h1>
-            <p className="text-slate-400 text-sm">{topic?.title}</p>
+            <h1 className="text-3xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>{passed ? 'You passed! 🎉' : 'Not quite'}</h1>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{topic?.title}</p>
           </div>
           <div className={`rounded-2xl p-4 ${passed ? 'bg-emerald-900/40 border border-emerald-600' : 'bg-red-900/30 border border-red-600'}`}>
             <div className="text-4xl font-black text-white">{pct}%</div>

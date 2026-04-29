@@ -1,7 +1,7 @@
 {
   "id": "rate-limiting",
-  "unit": 3,
-  "order": 16,
+  "unit": 6,
+  "order": 52,
   "title": "Rate Limiting",
   "summary": "Token bucket, leaky bucket, fixed/sliding window algorithms and when to use each.",
   "prereqs": [

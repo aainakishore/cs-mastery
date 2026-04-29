@@ -68,15 +68,17 @@ export function QuizCard({ question, index, total, onAnswer }: Props) {
         initial={{ opacity: 0, x: 40 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -40 }}
-        className={`bg-slate-800 rounded-2xl p-6 shadow-xl transition-all ${feedbackBorder}`}
+        className={`rounded-2xl p-6 shadow-xl transition-all ${feedbackBorder}`}
+        style={{ background: 'var(--bg-card)', border: submitted ? undefined : '1px solid var(--border)' }}
       >
-        <div className="text-xs text-slate-400 mb-3">
+        <div className="text-xs mb-3 font-medium" style={{ color: 'var(--text-subtle)' }}>
           Question {index + 1} / {total}
         </div>
-        <p className="text-slate-100 text-lg font-semibold mb-4">{question.prompt}</p>
+        <p className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>{question.prompt}</p>
 
         {question.type === 'codeOutput' && (
-          <pre className="bg-slate-900 text-emerald-300 rounded-lg p-3 text-sm mb-4 overflow-x-auto border border-slate-700">
+          <pre className="rounded-lg p-3 text-sm mb-4 overflow-x-auto"
+            style={{ background: '#0d1117', color: '#a5f3fc', border: '1px solid #1e293b' }}>
             {question.code}
           </pre>
         )}
@@ -145,7 +147,6 @@ export function QuizCard({ question, index, total, onAnswer }: Props) {
           {submitted ? (isCorrect ? '✓ Correct!' : '✗ Wrong') : 'Submit Answer'}
         </button>
 
-        {/* Explanation shown after submit */}
         {submitted && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -166,40 +167,44 @@ export function QuizCard({ question, index, total, onAnswer }: Props) {
 }
 
 function MCQInput({
-  choices,
-  selected,
-  onSelect,
-  disabled,
-  correctIndex,
+  choices, selected, onSelect, disabled, correctIndex,
 }: {
-  choices: string[]
-  selected: number | null
-  onSelect: (i: number) => void
-  disabled: boolean
-  correctIndex?: number
+  choices: string[]; selected: number | null; onSelect: (i: number) => void; disabled: boolean; correctIndex?: number
 }) {
   return (
     <div className="space-y-2">
       {choices.map((c, i) => {
-        let cls = 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'
+        let extraClass = 'quiz-choice'
+        let inlineStyle: React.CSSProperties = {
+          background: 'var(--bg-input)',
+          border: '1.5px solid var(--border)',
+          color: 'var(--text-primary)',
+        }
         if (disabled && correctIndex !== undefined) {
-          if (i === correctIndex) cls = 'bg-emerald-800 border-emerald-500 text-white'
-          else if (i === selected && i !== correctIndex) cls = 'bg-red-800 border-red-500 text-white'
-          else cls = 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+          if (i === correctIndex) {
+            extraClass += ' quiz-choice-correct'
+            inlineStyle = { background: undefined, border: undefined, color: undefined }
+          } else if (i === selected && i !== correctIndex) {
+            extraClass += ' quiz-choice-wrong'
+            inlineStyle = { background: undefined, border: undefined, color: undefined }
+          } else {
+            inlineStyle = { background: 'var(--bg-card)', border: '1.5px solid var(--border)', color: 'var(--text-subtle)', opacity: 0.5 }
+          }
         } else if (selected === i) {
-          cls = 'bg-indigo-700 border-indigo-400 text-white'
+          inlineStyle = { background: '#6366f122', border: '1.5px solid #6366f1', color: '#6366f1' }
         }
         return (
           <button
             key={i}
             onClick={() => onSelect(i)}
             disabled={disabled}
-            className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${cls}`}
+            className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all ${extraClass}`}
+            style={inlineStyle}
           >
-            <span className="font-mono text-slate-500 mr-2">{String.fromCharCode(65 + i)}.</span>
+            <span className="font-mono mr-2 text-xs opacity-60">{String.fromCharCode(65 + i)}.</span>
             {c}
-            {disabled && i === correctIndex && <span className="float-right">✓</span>}
-            {disabled && i === selected && i !== correctIndex && <span className="float-right">✗</span>}
+            {disabled && i === correctIndex && <span className="float-right text-emerald-500">✓</span>}
+            {disabled && i === selected && i !== correctIndex && <span className="float-right text-red-500">✗</span>}
           </button>
         )
       })}
@@ -208,29 +213,24 @@ function MCQInput({
 }
 
 function MultiInput({
-  choices,
-  selected,
-  onToggle,
-  disabled,
+  choices, selected, onToggle, disabled,
 }: {
-  choices: string[]
-  selected: number[]
-  onToggle: (i: number) => void
-  disabled: boolean
+  choices: string[]; selected: number[]; onToggle: (i: number) => void; disabled: boolean
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-400 mb-2">Select all that apply</p>
+      <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Select all that apply</p>
       {choices.map((c, i) => (
         <button
           key={i}
           onClick={() => onToggle(i)}
           disabled={disabled}
-          className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all
-            ${selected.includes(i)
-              ? 'bg-indigo-700 border-indigo-400 text-white'
-              : 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'
-            } disabled:opacity-70`}
+          className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all disabled:opacity-70"
+          style={{
+            background: selected.includes(i) ? '#6366f122' : 'var(--bg-input)',
+            border: `1.5px solid ${selected.includes(i) ? '#6366f1' : 'var(--border)'}`,
+            color: selected.includes(i) ? '#6366f1' : 'var(--text-primary)',
+          }}
         >
           {selected.includes(i) ? '☑' : '☐'} {c}
         </button>
@@ -239,66 +239,44 @@ function MultiInput({
   )
 }
 
-function FillBlankInput({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string
-  onChange: (v: string) => void
-  disabled: boolean
-}) {
+function FillBlankInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
   return (
     <input
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      placeholder="Type your answer..."
-      className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3
-        text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500
-        disabled:opacity-70"
+      placeholder="Type your answer…"
+      className="w-full rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-70"
+      style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
     />
   )
 }
 
 function OrderInput({
-  items,
-  order,
-  onChange,
-  disabled,
+  items, order, onChange, disabled,
 }: {
-  items: string[]
-  order: number[]
-  onChange: (o: number[]) => void
-  disabled: boolean
+  items: string[]; order: number[]; onChange: (o: number[]) => void; disabled: boolean
 }) {
   const move = (from: number, to: number) => {
-    const next = [...order]
-    const [removed] = next.splice(from, 1)
-    next.splice(to, 0, removed)
-    onChange(next)
+    const next = [...order]; const [removed] = next.splice(from, 1); next.splice(to, 0, removed); onChange(next)
   }
-
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-400 mb-2">Order these correctly (top = first)</p>
+      <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Order these correctly (top = first)</p>
       {order.map((itemIdx, pos) => (
         <div key={itemIdx} className="flex items-center gap-2">
-          <div className="flex-1 bg-slate-700 border border-slate-600 rounded-xl px-4 py-2 text-sm text-slate-200">
+          <div className="flex-1 rounded-xl px-4 py-2 text-sm"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
             {items[itemIdx]}
           </div>
           <div className="flex flex-col gap-1">
-            <button
-              onClick={() => !disabled && pos > 0 && move(pos, pos - 1)}
+            <button onClick={() => !disabled && pos > 0 && move(pos, pos - 1)}
               disabled={disabled || pos === 0}
-              className="text-slate-400 hover:text-white disabled:opacity-30 text-xs px-1"
-            >▲</button>
-            <button
-              onClick={() => !disabled && pos < order.length - 1 && move(pos, pos + 1)}
+              className="disabled:opacity-30 text-xs px-1" style={{ color: 'var(--text-muted)' }}>▲</button>
+            <button onClick={() => !disabled && pos < order.length - 1 && move(pos, pos + 1)}
               disabled={disabled || pos === order.length - 1}
-              className="text-slate-400 hover:text-white disabled:opacity-30 text-xs px-1"
-            >▼</button>
+              className="disabled:opacity-30 text-xs px-1" style={{ color: 'var(--text-muted)' }}>▼</button>
           </div>
         </div>
       ))}
@@ -307,49 +285,38 @@ function OrderInput({
 }
 
 function MatchInput({
-  left,
-  right,
-  pairs,
-  onChange,
-  disabled,
+  left, right, pairs, onChange, disabled,
 }: {
-  left: string[]
-  right: string[]
-  pairs: [number, number][]
-  onChange: (p: [number, number][]) => void
-  disabled: boolean
+  left: string[]; right: string[]; pairs: [number, number][]; onChange: (p: [number, number][]) => void; disabled: boolean
 }) {
   const getPairFor = (leftIdx: number) => pairs.find(([l]) => l === leftIdx)?.[1] ?? -1
-
   const setMatch = (leftIdx: number, rightIdx: number) => {
     const withoutLeft = pairs.filter(([l]) => l !== leftIdx)
     const withoutRight = withoutLeft.filter(([, r]) => r !== rightIdx)
     onChange([...withoutRight, [leftIdx, rightIdx]])
   }
-
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-400">Match each item on the left to its definition</p>
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Match each item on the left to its definition</p>
       {left.map((l, li) => (
         <div key={li} className="flex items-center gap-3">
-          <div className="flex-1 bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-200">
+          <div className="flex-1 rounded-xl px-3 py-2 text-sm"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
             {l}
           </div>
-          <span className="text-slate-400">→</span>
+          <span style={{ color: 'var(--text-subtle)' }}>→</span>
           <select
             value={getPairFor(li)}
             onChange={(e) => setMatch(li, Number(e.target.value))}
             disabled={disabled}
-            className="flex-1 bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-200 disabled:opacity-70"
+            className="flex-1 rounded-xl px-3 py-2 text-sm disabled:opacity-70"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
           >
             <option value={-1}>— pick —</option>
-            {right.map((r, ri) => (
-              <option key={ri} value={ri}>{r}</option>
-            ))}
+            {right.map((r, ri) => <option key={ri} value={ri}>{r}</option>)}
           </select>
         </div>
       ))}
     </div>
   )
 }
-

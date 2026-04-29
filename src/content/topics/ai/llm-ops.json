@@ -1,7 +1,7 @@
 {
   "id": "llm-ops",
-  "unit": 6,
-  "order": 121,
+  "unit": 11,
+  "order": 100,
   "title": "LLM Ops",
   "summary": "LangSmith tracing, evaluation frameworks, A/B testing, cost optimisation, and production guardrails for LLM applications.",
   "prereqs": [

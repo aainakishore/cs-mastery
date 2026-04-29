@@ -1,7 +1,7 @@
 {
   "id": "pointers-references",
   "unit": 1,
-  "order": 4,
+  "order": 8,
   "title": "Pointers & References",
   "summary": "Memory addresses, Java references vs C pointers, == vs equals, null safety, aliasing, and defensive copying.",
   "prereqs": [

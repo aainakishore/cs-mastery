@@ -1,7 +1,7 @@
 {
   "id": "fin-stock-market-basics",
-  "unit": 8,
-  "order": 50,
+  "unit": 15,
+  "order": 111,
   "title": "Stock Market Basics",
   "summary": "How stock markets work — exchanges, indices, order types, and how prices move.",
   "prereqs": [],
@@ -11,202 +11,468 @@
       "id": "fsm-q1",
       "type": "mcq",
       "prompt": "What does owning a stock represent?",
-      "choices": ["A loan given to a company", "Fractional ownership in a company", "A fixed return instrument", "A government bond"],
+      "choices": [
+        "A loan given to a company",
+        "Fractional ownership in a company",
+        "A fixed return instrument",
+        "A government bond"
+      ],
       "answerIndex": 1,
       "explanation": "A stock represents fractional ownership — you own a piece of the company's equity.",
-      "tags": ["stock-basics", "equity"]
+      "tags": [
+        "stock-basics",
+        "equity"
+      ]
     },
     {
       "id": "fsm-q2",
       "type": "mcq",
       "prompt": "NIFTY 50 is an index on which exchange?",
-      "choices": ["BSE", "NYSE", "NSE", "MCX"],
+      "choices": [
+        "BSE",
+        "NYSE",
+        "NSE",
+        "MCX"
+      ],
       "answerIndex": 2,
       "explanation": "NIFTY 50 is the benchmark index of NSE (National Stock Exchange).",
-      "tags": ["exchanges", "indices"]
+      "tags": [
+        "exchanges",
+        "indices"
+      ]
     },
     {
       "id": "fsm-q3",
       "type": "mcq",
       "prompt": "A limit order to BUY at ₹500 means:",
-      "choices": ["Buy immediately regardless of price", "Buy only if price is ₹500 or lower", "Buy only if price is ₹500 or higher", "Sell if price reaches ₹500"],
+      "choices": [
+        "Buy immediately regardless of price",
+        "Buy only if price is ₹500 or lower",
+        "Buy only if price is ₹500 or higher",
+        "Sell if price reaches ₹500"
+      ],
       "answerIndex": 1,
       "explanation": "A buy limit order executes only at your specified price or better (lower for buys).",
-      "tags": ["order-types"]
+      "tags": [
+        "order-types"
+      ]
     },
     {
       "id": "fsm-q4",
       "type": "mcq",
       "prompt": "A bear market is defined as a sustained decline of at least:",
-      "choices": ["5%", "10%", "15%", "20%"],
+      "choices": [
+        "5%",
+        "10%",
+        "15%",
+        "20%"
+      ],
       "answerIndex": 3,
       "explanation": "A bear market is conventionally defined as a 20% or more decline from recent highs.",
-      "tags": ["market-cycles"]
+      "tags": [
+        "market-cycles"
+      ]
     },
     {
       "id": "fsm-q5",
       "type": "multi",
       "prompt": "Which of the following are major Indian stock indices? (Select all that apply)",
-      "choices": ["SENSEX", "NIFTY 50", "S&P 500", "NIFTY Bank", "FTSE 100"],
-      "answerIndexes": [0, 1, 3],
+      "choices": [
+        "SENSEX",
+        "NIFTY 50",
+        "S&P 500",
+        "NIFTY Bank",
+        "FTSE 100"
+      ],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "SENSEX (BSE), NIFTY 50 (NSE), and NIFTY Bank (NSE sectoral) are Indian indices. S&P 500 is US, FTSE 100 is UK.",
-      "tags": ["indices", "exchanges"]
+      "tags": [
+        "indices",
+        "exchanges"
+      ]
     },
     {
       "id": "fsm-q6",
       "type": "mcq",
       "prompt": "What triggers a rise in a stock's price?",
-      "choices": ["More sellers than buyers", "More buyers than sellers", "Company issuing more shares", "Market closure"],
+      "choices": [
+        "More sellers than buyers",
+        "More buyers than sellers",
+        "Company issuing more shares",
+        "Market closure"
+      ],
       "answerIndex": 1,
       "explanation": "When demand (buyers) exceeds supply (sellers), the price is bid up.",
-      "tags": ["price-discovery", "supply-demand"]
+      "tags": [
+        "price-discovery",
+        "supply-demand"
+      ]
     },
     {
       "id": "fsm-q7",
       "type": "fillBlank",
       "prompt": "An IPO stands for Initial Public ___.",
-      "accepted": ["offering", "offer"],
+      "accepted": [
+        "offering",
+        "offer"
+      ],
       "explanation": "IPO = Initial Public Offering — the first time a company sells shares to the public.",
-      "tags": ["ipo", "stock-basics"]
+      "tags": [
+        "ipo",
+        "stock-basics"
+      ]
     },
     {
       "id": "fsm-q8",
       "type": "mcq",
       "prompt": "A stop-loss order is primarily used to:",
-      "choices": ["Maximize profits", "Limit potential losses", "Buy at the best price", "Avoid taxes"],
+      "choices": [
+        "Maximize profits",
+        "Limit potential losses",
+        "Buy at the best price",
+        "Avoid taxes"
+      ],
       "answerIndex": 1,
       "explanation": "A stop-loss automatically sells your position when price hits a set floor, limiting downside.",
-      "tags": ["order-types", "risk-management"]
+      "tags": [
+        "order-types",
+        "risk-management"
+      ]
     },
     {
       "id": "fsm-q9",
       "type": "order",
       "prompt": "Arrange in order from SMALLEST to LARGEST scope of ownership:",
-      "items": ["1 share of TCS", "NIFTY 50 index fund", "TCS company (100% owned)", "S&P 500 ETF"],
-      "correctOrder": [0, 2, 1, 3],
+      "items": [
+        "1 share of TCS",
+        "NIFTY 50 index fund",
+        "TCS company (100% owned)",
+        "S&P 500 ETF"
+      ],
+      "correctOrder": [
+        0,
+        2,
+        1,
+        3
+      ],
       "explanation": "1 share < whole company (conceptually — price-wise) < NIFTY 50 (50 Indian companies) < S&P 500 (500 US companies).",
-      "tags": ["stock-basics", "indices"]
+      "tags": [
+        "stock-basics",
+        "indices"
+      ]
     },
     {
       "id": "fsm-q10",
       "type": "mcq",
       "prompt": "Which index is most associated with BSE?",
-      "choices": ["NIFTY 50", "NIFTY Bank", "SENSEX", "MIDCAP 150"],
+      "choices": [
+        "NIFTY 50",
+        "NIFTY Bank",
+        "SENSEX",
+        "MIDCAP 150"
+      ],
       "answerIndex": 2,
       "explanation": "SENSEX is the flagship index of BSE, comprising 30 large-cap companies.",
-      "tags": ["exchanges", "indices"]
+      "tags": [
+        "exchanges",
+        "indices"
+      ]
     },
     {
       "id": "fsm-q11",
       "type": "mcq",
       "prompt": "What is a 'market order'?",
-      "choices": ["An order that executes at the best available current price", "An order that waits for a specific price", "An order to sell when price falls", "A government directive to buy"],
+      "choices": [
+        "An order that executes at the best available current price",
+        "An order that waits for a specific price",
+        "An order to sell when price falls",
+        "A government directive to buy"
+      ],
       "answerIndex": 0,
       "explanation": "Market orders execute immediately at the best available price, prioritizing speed over price control.",
-      "tags": ["order-types"]
+      "tags": [
+        "order-types"
+      ]
     },
     {
       "id": "fsm-q12",
       "type": "mcq",
       "prompt": "A correction in stock markets typically means a decline of:",
-      "choices": ["1-5%", "10-20%", "20-30%", "50%+"],
+      "choices": [
+        "1-5%",
+        "10-20%",
+        "20-30%",
+        "50%+"
+      ],
       "answerIndex": 1,
       "explanation": "A correction is a 10-20% pullback — significant but normal in a long bull run.",
-      "tags": ["market-cycles"]
+      "tags": [
+        "market-cycles"
+      ]
     },
     {
       "id": "fsm-q13",
       "type": "match",
       "prompt": "Match the market term with the correct description:",
-      "left": ["Bull market", "Bear market", "IPO", "Limit order"],
-      "right": ["Sustained 20%+ rise", "Sustained 20%+ fall", "Company's first public share sale", "Trade at specific price or better"],
-      "pairs": [[0,0],[1,1],[2,2],[3,3]],
+      "left": [
+        "Bull market",
+        "Bear market",
+        "IPO",
+        "Limit order"
+      ],
+      "right": [
+        "Sustained 20%+ rise",
+        "Sustained 20%+ fall",
+        "Company's first public share sale",
+        "Trade at specific price or better"
+      ],
+      "pairs": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          3
+        ]
+      ],
       "explanation": "Each term maps directly to its standard market definition.",
-      "tags": ["market-cycles", "order-types", "ipo"]
+      "tags": [
+        "market-cycles",
+        "order-types",
+        "ipo"
+      ]
     },
     {
       "id": "fsm-q14",
       "type": "mcq",
       "prompt": "NASDAQ is primarily known as the exchange for:",
-      "choices": ["Mining companies", "Technology companies", "Government bonds", "Currency trading"],
+      "choices": [
+        "Mining companies",
+        "Technology companies",
+        "Government bonds",
+        "Currency trading"
+      ],
       "answerIndex": 1,
       "explanation": "NASDAQ is heavily weighted toward tech companies like Apple, Microsoft, Google, Amazon.",
-      "tags": ["exchanges"]
+      "tags": [
+        "exchanges"
+      ]
     },
     {
       "id": "fsm-q15",
       "type": "mcq",
       "prompt": "If 70% of your portfolio is in one stock, this is called:",
-      "choices": ["Diversification", "Hedging", "Concentration risk", "Beta exposure"],
+      "choices": [
+        "Diversification",
+        "Hedging",
+        "Concentration risk",
+        "Beta exposure"
+      ],
       "answerIndex": 2,
       "explanation": "Concentration risk arises when too much capital is in a single asset — bad news for that stock is catastrophic.",
-      "tags": ["risk-management", "diversification"]
+      "tags": [
+        "risk-management",
+        "diversification"
+      ]
     },
     {
       "id": "fsm-q16",
       "type": "mcq",
       "prompt": "The 'ask' price in an order book represents:",
-      "choices": ["The price buyers want to pay", "The price sellers are willing to accept", "Yesterday's closing price", "The index value"],
+      "choices": [
+        "The price buyers want to pay",
+        "The price sellers are willing to accept",
+        "Yesterday's closing price",
+        "The index value"
+      ],
       "answerIndex": 1,
       "explanation": "Ask = the lowest price a seller will accept. Bid = the highest price a buyer will pay.",
-      "tags": ["price-discovery", "order-book"]
+      "tags": [
+        "price-discovery",
+        "order-book"
+      ]
     },
     {
       "id": "fsm-q17",
       "type": "mcq",
       "prompt": "FII stands for:",
-      "choices": ["Fixed Income Instrument", "Foreign Institutional Investor", "Futures Index Indicator", "Fund Investor Index"],
+      "choices": [
+        "Fixed Income Instrument",
+        "Foreign Institutional Investor",
+        "Futures Index Indicator",
+        "Fund Investor Index"
+      ],
       "answerIndex": 1,
       "explanation": "FIIs (Foreign Institutional Investors) are large overseas funds (hedge funds, pension funds) that invest in Indian markets.",
-      "tags": ["market-participants"]
+      "tags": [
+        "market-participants"
+      ]
     },
     {
       "id": "fsm-q18",
       "type": "mcq",
       "prompt": "Which of these is NOT a real-world reason for a stock price to fall?",
-      "choices": ["Company misses earnings estimates", "CEO resigns unexpectedly", "Company splits its stock 2:1", "Competitor launches superior product"],
+      "choices": [
+        "Company misses earnings estimates",
+        "CEO resigns unexpectedly",
+        "Company splits its stock 2:1",
+        "Competitor launches superior product"
+      ],
       "answerIndex": 2,
       "explanation": "A 2:1 stock split doubles shares and halves the price per share — market cap stays the same, no fundamental change.",
-      "tags": ["price-discovery", "corporate-actions"]
+      "tags": [
+        "price-discovery",
+        "corporate-actions"
+      ]
     },
     {
       "id": "fsm-q19",
       "type": "mcq",
       "prompt": "An ETF (Exchange Traded Fund) that tracks NIFTY 50 will:",
-      "choices": ["Return exactly 50% per year", "Mirror the performance of all 50 NIFTY stocks", "Guarantee no losses", "Trade only at market close"],
+      "choices": [
+        "Return exactly 50% per year",
+        "Mirror the performance of all 50 NIFTY stocks",
+        "Guarantee no losses",
+        "Trade only at market close"
+      ],
       "answerIndex": 1,
       "explanation": "A NIFTY 50 ETF holds the same stocks in the same proportions as the index, mirroring its performance (minus small fees).",
-      "tags": ["etf", "indices"]
+      "tags": [
+        "etf",
+        "indices"
+      ]
     },
     {
       "id": "fsm-q20",
       "type": "mcq",
       "prompt": "What is the primary purpose of a stock exchange?",
-      "choices": ["To set interest rates", "To provide a regulated marketplace for buying/selling securities", "To print currency", "To audit company accounts"],
+      "choices": [
+        "To set interest rates",
+        "To provide a regulated marketplace for buying/selling securities",
+        "To print currency",
+        "To audit company accounts"
+      ],
       "answerIndex": 1,
       "explanation": "The exchange provides liquidity, price discovery, and regulatory oversight — facilitating trades between buyers and sellers.",
-      "tags": ["exchanges", "market-structure"]
+      "tags": [
+        "exchanges",
+        "market-structure"
+      ]
     }
   ],
   "flashcards": [
-    { "id": "fsm-fc1", "front": "What is a stock/share?", "back": "Fractional ownership in a company. Entitles holder to proportional profits (dividends) and voting rights.", "tags": ["equity"] },
-    { "id": "fsm-fc2", "front": "SENSEX vs NIFTY 50", "back": "SENSEX = BSE index of 30 large-caps. NIFTY 50 = NSE index of 50 large-caps. Both measure market health.", "tags": ["indices"] },
-    { "id": "fsm-fc3", "front": "Market order vs Limit order", "back": "Market order: execute NOW at best available price. Limit order: execute ONLY at specified price or better.", "tags": ["order-types"] },
-    { "id": "fsm-fc4", "front": "Bull market", "back": "Sustained 20%+ rise in prices. Characterized by optimism, low unemployment, GDP growth.", "tags": ["market-cycles"] },
-    { "id": "fsm-fc5", "front": "Bear market", "back": "Sustained 20%+ fall from recent highs. Fear-driven, often coincides with recession.", "tags": ["market-cycles"] },
-    { "id": "fsm-fc6", "front": "Stop-loss order", "back": "Automatically sells a position when price reaches a specified floor. Limits downside risk.", "tags": ["order-types", "risk"] },
-    { "id": "fsm-fc7", "front": "IPO", "back": "Initial Public Offering — first time a private company offers shares to the public to raise capital.", "tags": ["ipo"] },
-    { "id": "fsm-fc8", "front": "Bid-Ask Spread", "back": "Bid = highest price buyer will pay. Ask = lowest price seller will accept. Spread = Ask - Bid. Tighter spread = more liquid market.", "tags": ["price-discovery"] }
+    {
+      "id": "fsm-fc1",
+      "front": "What is a stock/share?",
+      "back": "Fractional ownership in a company. Entitles holder to proportional profits (dividends) and voting rights.",
+      "tags": [
+        "equity"
+      ]
+    },
+    {
+      "id": "fsm-fc2",
+      "front": "SENSEX vs NIFTY 50",
+      "back": "SENSEX = BSE index of 30 large-caps. NIFTY 50 = NSE index of 50 large-caps. Both measure market health.",
+      "tags": [
+        "indices"
+      ]
+    },
+    {
+      "id": "fsm-fc3",
+      "front": "Market order vs Limit order",
+      "back": "Market order: execute NOW at best available price. Limit order: execute ONLY at specified price or better.",
+      "tags": [
+        "order-types"
+      ]
+    },
+    {
+      "id": "fsm-fc4",
+      "front": "Bull market",
+      "back": "Sustained 20%+ rise in prices. Characterized by optimism, low unemployment, GDP growth.",
+      "tags": [
+        "market-cycles"
+      ]
+    },
+    {
+      "id": "fsm-fc5",
+      "front": "Bear market",
+      "back": "Sustained 20%+ fall from recent highs. Fear-driven, often coincides with recession.",
+      "tags": [
+        "market-cycles"
+      ]
+    },
+    {
+      "id": "fsm-fc6",
+      "front": "Stop-loss order",
+      "back": "Automatically sells a position when price reaches a specified floor. Limits downside risk.",
+      "tags": [
+        "order-types",
+        "risk"
+      ]
+    },
+    {
+      "id": "fsm-fc7",
+      "front": "IPO",
+      "back": "Initial Public Offering — first time a private company offers shares to the public to raise capital.",
+      "tags": [
+        "ipo"
+      ]
+    },
+    {
+      "id": "fsm-fc8",
+      "front": "Bid-Ask Spread",
+      "back": "Bid = highest price buyer will pay. Ask = lowest price seller will accept. Spread = Ask - Bid. Tighter spread = more liquid market.",
+      "tags": [
+        "price-discovery"
+      ]
+    }
   ],
   "project": {
     "brief": "**Scenario:** You have ₹1,00,000 to invest for the first time. A friend recommends putting it all in a single mid-cap IT stock because 'it's going to 10x'. Another friend suggests splitting it across 5 different sectors via index funds.\n\nDesign your investment approach. Think through: How would you assess the single-stock tip? What are the risks of each approach? How would you decide your allocation? What order types would you use to enter positions? What would make you exit?",
     "checklist": [
-      { "id": "p1", "text": "Explain the risk difference between single stock vs diversified allocation", "weight": 20 },
-      { "id": "p2", "text": "Describe how you'd research the recommended stock before buying", "weight": 20 },
-      { "id": "p3", "text": "Choose appropriate order types for entry and justify", "weight": 15 },
-      { "id": "p4", "text": "Define a clear stop-loss level and explain the logic", "weight": 20 },
-      { "id": "p5", "text": "Describe what market conditions (bull/bear/correction) would change your strategy", "weight": 15 },
-      { "id": "p6", "text": "Identify at least 2 behavioral biases to guard against", "weight": 10 }
+      {
+        "id": "p1",
+        "text": "Explain the risk difference between single stock vs diversified allocation",
+        "weight": 20
+      },
+      {
+        "id": "p2",
+        "text": "Describe how you'd research the recommended stock before buying",
+        "weight": 20
+      },
+      {
+        "id": "p3",
+        "text": "Choose appropriate order types for entry and justify",
+        "weight": 15
+      },
+      {
+        "id": "p4",
+        "text": "Define a clear stop-loss level and explain the logic",
+        "weight": 20
+      },
+      {
+        "id": "p5",
+        "text": "Describe what market conditions (bull/bear/correction) would change your strategy",
+        "weight": 15
+      },
+      {
+        "id": "p6",
+        "text": "Identify at least 2 behavioral biases to guard against",
+        "weight": 10
+      }
     ],
     "hints": [
       "Think about what 'diversification' actually protects against — and what it doesn't.",
@@ -215,4 +481,3 @@
     ]
   }
 }
-

@@ -1,7 +1,7 @@
 {
   "id": "fine-tuning",
-  "unit": 6,
-  "order": 35,
+  "unit": 11,
+  "order": 96,
   "title": "Fine-Tuning LLMs",
   "summary": "Master Fine-Tuning LLMs: trade-offs, failure modes, and production patterns.",
   "prereqs": [

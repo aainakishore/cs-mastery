@@ -1,7 +1,7 @@
 {
   "id": "caching",
-  "unit": 4,
-  "order": 19,
+  "unit": 9,
+  "order": 80,
   "title": "Caching",
   "summary": "LRU, write-through/back, CDN, cache invalidation: the hardest problem in CS.",
   "prereqs": [

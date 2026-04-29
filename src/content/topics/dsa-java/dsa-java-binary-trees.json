@@ -1,6 +1,6 @@
 {
   "id": "dsa-java-binary-trees",
-  "unit": 9,
+  "unit": 8,
   "order": 69,
   "title": "Binary Trees in Java",
   "summary": "Tree anatomy, DFS traversals (in/pre/post/level), height, diameter, BST properties, and Lowest Common Ancestor.",
@@ -8,7 +8,7 @@
     "dsa-java-recursion",
     "dsa-java-queues"
   ],
-  "guide": "# Binary Trees in Java\n\nPicture a family tree upside-down: one root at the top, each node has at most two children (left and right), and every node except the root has exactly one parent. There are no cycles. This shape makes recursion feel natural \u2014 almost every tree problem solves itself once you ask: 'What should I do at *this* node, and what should I ask my children?'\n\n## Node definition and shape intuition\n```java\nclass TreeNode {\n    int val;\n    TreeNode left, right;\n    TreeNode(int val) { this.val = val; }\n}\n\n// Visual:\n//        4          \u2190 root (depth 0)\n//       / \\\n//      2   6        \u2190 depth 1\n//     / \\ / \\\n//    1  3 5  7      \u2190 depth 2 (leaves)\n```\n\n## The four traversals \u2014 when does each node get visited?\n```java\n// IN-order   (Left \u2192 Root \u2192 Right)  \u2192 sorted output for BST\n// PRE-order   (Root \u2192 Left \u2192 Right)  \u2192 copy/serialise tree\n// POST-order  (Left \u2192 Right \u2192 Root)  \u2192 delete tree, calc subtree sizes\n// LEVEL-order (BFS, level by level)  \u2192 find depth, zigzag print\n\nvoid inorder(TreeNode n) {\n    if (n == null) return;\n    inorder(n.left);\n    visit(n);         // \u2190 comes BETWEEN children \u2192 sorted\n    inorder(n.right);\n}\nvoid preorder(TreeNode n) {\n    if (n == null) return;\n    visit(n);         // \u2190 comes BEFORE children \u2192 root first\n    preorder(n.left);\n    preorder(n.right);\n}\nvoid postorder(TreeNode n) {\n    if (n == null) return;\n    postorder(n.left);\n    postorder(n.right);\n    visit(n);         // \u2190 comes AFTER children \u2192 bottom-up\n}\n```\n\n## Height and diameter \u2014 the two most common recursive patterns\n```java\n// HEIGHT: longest path from node down to any leaf\nint height(TreeNode n) {\n    if (n == null) return -1;  // empty tree height = -1\n    return 1 + Math.max(height(n.left), height(n.right));\n}\n\n// DIAMETER: longest path between ANY two nodes (may not pass through root)\n// Key insight: at each node, the best path through it = leftHeight + rightHeight + 2\nint maxDiameter = 0;\nint diameter(TreeNode n) {\n    if (n == null) return -1;\n    int l = diameter(n.left),  r = diameter(n.right);\n    maxDiameter = Math.max(maxDiameter, l + r + 2);  // path through n\n    return 1 + Math.max(l, r);  // return height to parent\n}\n```\n\n## BST properties \u2014 the sorted invariant\n```java\n// A BST satisfies: for every node N,\n//   ALL values in left subtree  < N.val\n//   ALL values in right subtree > N.val\n//\n// Visual BST:         8\n//                   /   \\\n//                  3     10\n//                 / \\      \\\n//                1   6      14\n//                   / \\\n//                  4   7\n//\n// In-order traversal \u2192 [1, 3, 4, 6, 7, 8, 10, 14]  \u2190 always sorted!\n\n// Validate BST: pass down min/max bounds\nboolean isValid(TreeNode n, long min, long max) {\n    if (n == null) return true;\n    if (n.val <= min || n.val >= max) return false;\n    return isValid(n.left, min, n.val)\n        && isValid(n.right, n.val, max);\n}\n```\n\n## Lowest Common Ancestor (LCA)\n```java\n// LCA of p and q = deepest node that has BOTH p and q in its subtree.\n//\n// Mental model: imagine two people climbing up the tree independently.\n// The first node where their paths MERGE is the LCA.\n//\n// Recursive intuition:\n//   \u2022 If current node IS p or q \u2192 return it (it could be LCA itself)\n//   \u2022 Search left subtree, search right subtree\n//   \u2022 If BOTH sides return non-null \u2192 current node is LCA\n//   \u2022 Otherwise \u2192 return whichever side found something\nTreeNode lca(TreeNode root, TreeNode p, TreeNode q) {\n    if (root == null || root == p || root == q) return root;\n    TreeNode left  = lca(root.left,  p, q);\n    TreeNode right = lca(root.right, p, q);\n    if (left != null && right != null) return root;  // split here\n    return left != null ? left : right;\n}\n```\n\n## Level-order \u2014 BFS on a tree gives you depth information for free\n```java\nList<List<Integer>> levelOrder(TreeNode root) {\n    List<List<Integer>> res = new ArrayList<>();\n    if (root == null) return res;\n    Queue<TreeNode> q = new ArrayDeque<>();\n    q.offer(root);\n    while (!q.isEmpty()) {\n        int sz = q.size();          // nodes on THIS level\n        List<Integer> level = new ArrayList<>();\n        for (int i = 0; i < sz; i++) {\n            TreeNode n = q.poll();\n            level.add(n.val);\n            if (n.left  != null) q.offer(n.left);\n            if (n.right != null) q.offer(n.right);\n        }\n        res.add(level);\n    }\n    return res;\n}\n```\n\n## Common Pitfalls\n- Not checking null before accessing node.left or node.right\n- Height vs depth confusion: height counts edges DOWN from a node; depth counts edges UP from root\n- Diameter problem: forgetting to track a global max \u2014 the best diameter may not pass through the root\n- BST validation: checking only the immediate parent is wrong \u2014 you must propagate the valid range (min/max bounds) down\n- LCA on BST: simpler O(log n) version exists (walk left if both < root, right if both > root) \u2014 use it when the tree is confirmed BST\n\n## Connections\n- **Recursion**: tree problems ARE recursion \u2014 almost always base case = null node\n- **Queues**: level-order traversal is BFS using a queue\n- **Arrays**: in-order of BST produces a sorted array \u2014 connect to searching/sorting\n- **Graphs**: a tree is a connected acyclic undirected graph \u2014 tree algorithms generalise to graphs",
+  "guide": "# Binary Trees in Java\n\nPicture a family tree upside-down: one root at the top, each node has at most two children (left and right), and every node except the root has exactly one parent. There are no cycles. This shape makes recursion feel natural — almost every tree problem solves itself once you ask: 'What should I do at *this* node, and what should I ask my children?'\n\n## Node definition and shape intuition\n```java\nclass TreeNode {\n    int val;\n    TreeNode left, right;\n    TreeNode(int val) { this.val = val; }\n}\n\n// Visual:\n//        4          ← root (depth 0)\n//       / \\\n//      2   6        ← depth 1\n//     / \\ / \\\n//    1  3 5  7      ← depth 2 (leaves)\n```\n\n## The four traversals — when does each node get visited?\n```java\n// IN-order   (Left → Root → Right)  → sorted output for BST\n// PRE-order   (Root → Left → Right)  → copy/serialise tree\n// POST-order  (Left → Right → Root)  → delete tree, calc subtree sizes\n// LEVEL-order (BFS, level by level)  → find depth, zigzag print\n\nvoid inorder(TreeNode n) {\n    if (n == null) return;\n    inorder(n.left);\n    visit(n);         // ← comes BETWEEN children → sorted\n    inorder(n.right);\n}\nvoid preorder(TreeNode n) {\n    if (n == null) return;\n    visit(n);         // ← comes BEFORE children → root first\n    preorder(n.left);\n    preorder(n.right);\n}\nvoid postorder(TreeNode n) {\n    if (n == null) return;\n    postorder(n.left);\n    postorder(n.right);\n    visit(n);         // ← comes AFTER children → bottom-up\n}\n```\n\n## Height and diameter — the two most common recursive patterns\n```java\n// HEIGHT: longest path from node down to any leaf\nint height(TreeNode n) {\n    if (n == null) return -1;  // empty tree height = -1\n    return 1 + Math.max(height(n.left), height(n.right));\n}\n\n// DIAMETER: longest path between ANY two nodes (may not pass through root)\n// Key insight: at each node, the best path through it = leftHeight + rightHeight + 2\nint maxDiameter = 0;\nint diameter(TreeNode n) {\n    if (n == null) return -1;\n    int l = diameter(n.left),  r = diameter(n.right);\n    maxDiameter = Math.max(maxDiameter, l + r + 2);  // path through n\n    return 1 + Math.max(l, r);  // return height to parent\n}\n```\n\n## BST properties — the sorted invariant\n```java\n// A BST satisfies: for every node N,\n//   ALL values in left subtree  < N.val\n//   ALL values in right subtree > N.val\n//\n// Visual BST:         8\n//                   /   \\\n//                  3     10\n//                 / \\      \\\n//                1   6      14\n//                   / \\\n//                  4   7\n//\n// In-order traversal → [1, 3, 4, 6, 7, 8, 10, 14]  ← always sorted!\n\n// Validate BST: pass down min/max bounds\nboolean isValid(TreeNode n, long min, long max) {\n    if (n == null) return true;\n    if (n.val <= min || n.val >= max) return false;\n    return isValid(n.left, min, n.val)\n        && isValid(n.right, n.val, max);\n}\n```\n\n## Lowest Common Ancestor (LCA)\n```java\n// LCA of p and q = deepest node that has BOTH p and q in its subtree.\n//\n// Mental model: imagine two people climbing up the tree independently.\n// The first node where their paths MERGE is the LCA.\n//\n// Recursive intuition:\n//   • If current node IS p or q → return it (it could be LCA itself)\n//   • Search left subtree, search right subtree\n//   • If BOTH sides return non-null → current node is LCA\n//   • Otherwise → return whichever side found something\nTreeNode lca(TreeNode root, TreeNode p, TreeNode q) {\n    if (root == null || root == p || root == q) return root;\n    TreeNode left  = lca(root.left,  p, q);\n    TreeNode right = lca(root.right, p, q);\n    if (left != null && right != null) return root;  // split here\n    return left != null ? left : right;\n}\n```\n\n## Level-order — BFS on a tree gives you depth information for free\n```java\nList<List<Integer>> levelOrder(TreeNode root) {\n    List<List<Integer>> res = new ArrayList<>();\n    if (root == null) return res;\n    Queue<TreeNode> q = new ArrayDeque<>();\n    q.offer(root);\n    while (!q.isEmpty()) {\n        int sz = q.size();          // nodes on THIS level\n        List<Integer> level = new ArrayList<>();\n        for (int i = 0; i < sz; i++) {\n            TreeNode n = q.poll();\n            level.add(n.val);\n            if (n.left  != null) q.offer(n.left);\n            if (n.right != null) q.offer(n.right);\n        }\n        res.add(level);\n    }\n    return res;\n}\n```\n\n## Common Pitfalls\n- Not checking null before accessing node.left or node.right\n- Height vs depth confusion: height counts edges DOWN from a node; depth counts edges UP from root\n- Diameter problem: forgetting to track a global max — the best diameter may not pass through the root\n- BST validation: checking only the immediate parent is wrong — you must propagate the valid range (min/max bounds) down\n- LCA on BST: simpler O(log n) version exists (walk left if both < root, right if both > root) — use it when the tree is confirmed BST\n\n## Connections\n- **Recursion**: tree problems ARE recursion — almost always base case = null node\n- **Queues**: level-order traversal is BFS using a queue\n- **Arrays**: in-order of BST produces a sorted array — connect to searching/sorting\n- **Graphs**: a tree is a connected acyclic undirected graph — tree algorithms generalise to graphs",
   "questions": [
     {
       "id": "djbt-q1",
@@ -21,7 +21,7 @@
         "Pre-order sequence"
       ],
       "answerIndex": 2,
-      "explanation": "BST invariant: left < root < right. In-order visits left\u2192root\u2192right, naturally yielding sorted output.",
+      "explanation": "BST invariant: left < root < right. In-order visits left→root→right, naturally yielding sorted output.",
       "tags": [
         "bst",
         "traversal"
@@ -32,13 +32,13 @@
       "type": "mcq",
       "prompt": "Pre-order traversal visits nodes in order:",
       "choices": [
-        "Left \u2192 Root \u2192 Right",
-        "Left \u2192 Right \u2192 Root",
-        "Root \u2192 Left \u2192 Right",
-        "Right \u2192 Root \u2192 Left"
+        "Left → Root → Right",
+        "Left → Right → Root",
+        "Root → Left → Right",
+        "Right → Root → Left"
       ],
       "answerIndex": 2,
-      "explanation": "Root is visited BEFORE its children \u2014 useful for copying or serialising the tree structure.",
+      "explanation": "Root is visited BEFORE its children — useful for copying or serialising the tree structure.",
       "tags": [
         "traversal"
       ]
@@ -55,7 +55,7 @@
         "4 6 2"
       ],
       "answerIndex": 1,
-      "explanation": "In-order: left(2) \u2192 root(4) \u2192 right(6) \u2192 [2, 4, 6].",
+      "explanation": "In-order: left(2) → root(4) → right(6) → [2, 4, 6].",
       "tags": [
         "traversal",
         "tracing"
@@ -72,7 +72,7 @@
         "Level-by-level output"
       ],
       "answerIndex": 2,
-      "explanation": "Post-order visits children BEFORE the parent \u2014 you have full subtree results before processing the node.",
+      "explanation": "Post-order visits children BEFORE the parent — you have full subtree results before processing the node.",
       "tags": [
         "traversal"
       ]
@@ -88,7 +88,7 @@
         "2"
       ],
       "answerIndex": 1,
-      "explanation": "Height = number of edges on the longest path to a leaf. A leaf has no edges below it \u2192 height 0.",
+      "explanation": "Height = number of edges on the longest path to a leaf. A leaf has no edges below it → height 0.",
       "tags": [
         "height"
       ]
@@ -112,7 +112,7 @@
     {
       "id": "djbt-q7",
       "type": "codeOutput",
-      "prompt": "Height of root=1 \u2192 left=2 \u2192 left=3 (linear chain)?",
+      "prompt": "Height of root=1 → left=2 → left=3 (linear chain)?",
       "code": "//  1\n//   \\\n//    2\n//     \\\n//      3",
       "choices": [
         "1",
@@ -121,7 +121,7 @@
         "0"
       ],
       "answerIndex": 1,
-      "explanation": "Path: 1\u21922\u21923 = 2 edges. height = 2.",
+      "explanation": "Path: 1→2→3 = 2 edges. height = 2.",
       "tags": [
         "height",
         "tracing"
@@ -132,13 +132,13 @@
       "type": "mcq",
       "prompt": "The diameter of a binary tree is:",
       "choices": [
-        "Height \u00d7 2",
+        "Height × 2",
         "Number of nodes",
         "Longest path between any two nodes (may not pass through root)",
         "Depth of the deepest leaf"
       ],
       "answerIndex": 2,
-      "explanation": "The diameter can arc through any node \u2014 its computation tracks the best left-height + right-height + 2 at each node.",
+      "explanation": "The diameter can arc through any node — its computation tracks the best left-height + right-height + 2 at each node.",
       "tags": [
         "diameter"
       ]
@@ -150,11 +150,11 @@
       "choices": [
         "Correct",
         "Correct for balanced trees only",
-        "Incorrect \u2014 must propagate valid min/max bounds down the tree",
+        "Incorrect — must propagate valid min/max bounds down the tree",
         "Correct if tree is complete"
       ],
       "answerIndex": 2,
-      "explanation": "A right child's left subtree could violate the ancestor's upper bound. Example: 10\u2192(right)5 is caught by parent but 10\u2192(right)15\u2192(left)6 is valid locally but 6 > 10 is not.",
+      "explanation": "A right child's left subtree could violate the ancestor's upper bound. Example: 10→(right)5 is caught by parent but 10→(right)15→(left)6 is valid locally but 6 > 10 is not.",
       "tags": [
         "bst",
         "validation"
@@ -171,7 +171,7 @@
         "4"
       ],
       "answerIndex": 2,
-      "explanation": "Both 4 and 7 are in 3's subtree (3 < both < 8). Since they split at 6 (left=4, right=7), LCA is 6 \u2014 but if tree matches the guide diagram, both are under 6, so LCA = 6.",
+      "explanation": "Both 4 and 7 are in 3's subtree (3 < both < 8). Since they split at 6 (left=4, right=7), LCA is 6 — but if tree matches the guide diagram, both are under 6, so LCA = 6.",
       "tags": [
         "lca"
       ]
@@ -183,11 +183,11 @@
       "choices": [
         "Node is a leaf",
         "Current node is below both p and q",
-        "p and q are in DIFFERENT subtrees \u2014 current node is their LCA",
+        "p and q are in DIFFERENT subtrees — current node is their LCA",
         "Only one of p/q was found"
       ],
       "answerIndex": 2,
-      "explanation": "When both sides find a target node, the current node is exactly where the paths diverge \u2014 it is the LCA.",
+      "explanation": "When both sides find a target node, the current node is exactly where the paths diverge — it is the LCA.",
       "tags": [
         "lca"
       ]
@@ -198,7 +198,7 @@
       "prompt": "Level-order traversal uses a queue rather than recursion because:",
       "choices": [
         "Recursion is too slow",
-        "Queue gives FIFO order \u2014 nodes at depth k are processed before depth k+1",
+        "Queue gives FIFO order — nodes at depth k are processed before depth k+1",
         "Trees cannot be recursed level-by-level",
         "It avoids stack overflow"
       ],
@@ -231,11 +231,11 @@
       "choices": [
         "n",
         "n/2",
-        "log\u2082 n",
-        "\u221an"
+        "log₂ n",
+        "√n"
       ],
       "answerIndex": 2,
-      "explanation": "Each level doubles the nodes \u2014 log\u2082n levels for n nodes.",
+      "explanation": "Each level doubles the nodes — log₂n levels for n nodes.",
       "tags": [
         "height",
         "complexity"
@@ -252,7 +252,7 @@
         "O(1)"
       ],
       "answerIndex": 1,
-      "explanation": "Each comparison halves the remaining nodes \u2014 identical to binary search.",
+      "explanation": "Each comparison halves the remaining nodes — identical to binary search.",
       "tags": [
         "bst",
         "complexity"
@@ -269,7 +269,7 @@
         "O(1)"
       ],
       "answerIndex": 1,
-      "explanation": "Inserting sorted data into a plain BST produces a linked list \u2014 all operations become O(n).",
+      "explanation": "Inserting sorted data into a plain BST produces a linked list — all operations become O(n).",
       "tags": [
         "bst",
         "complexity"
@@ -290,7 +290,7 @@
         2,
         3
       ],
-      "explanation": "In-order alone or pre/post alone are insufficient \u2014 you need in-order paired with another traversal to uniquely reconstruct.",
+      "explanation": "In-order alone or pre/post alone are insufficient — you need in-order paired with another traversal to uniquely reconstruct.",
       "tags": [
         "reconstruction"
       ]
@@ -301,7 +301,7 @@
       "prompt": "The path from root to any node in a BST compared to binary search on a sorted array:",
       "choices": [
         "Completely different algorithms",
-        "Structurally identical \u2014 both discard half the search space at each step using the same key comparison",
+        "Structurally identical — both discard half the search space at each step using the same key comparison",
         "BST is always faster",
         "Binary search is always faster"
       ],
@@ -324,7 +324,7 @@
         "4 5 2 3 1"
       ],
       "answerIndex": 2,
-      "explanation": "Pre-order: root(1) \u2192 left subtree pre-order(2\u21924\u21925) \u2192 right subtree(3) = [1,2,4,5,3].",
+      "explanation": "Pre-order: root(1) → left subtree pre-order(2→4→5) → right subtree(3) = [1,2,4,5,3].",
       "tags": [
         "traversal",
         "tracing"
@@ -351,7 +351,7 @@
     {
       "id": "djbt-fc1",
       "front": "In-order traversal",
-      "back": "Left \u2192 Root \u2192 Right. On a BST this yields sorted ascending output.",
+      "back": "Left → Root → Right. On a BST this yields sorted ascending output.",
       "tags": [
         "trees"
       ]
@@ -359,7 +359,7 @@
     {
       "id": "djbt-fc2",
       "front": "Pre-order traversal",
-      "back": "Root \u2192 Left \u2192 Right. Visits root first \u2014 use to copy or serialise.",
+      "back": "Root → Left → Right. Visits root first — use to copy or serialise.",
       "tags": [
         "trees"
       ]
@@ -367,7 +367,7 @@
     {
       "id": "djbt-fc3",
       "front": "Post-order traversal",
-      "back": "Left \u2192 Right \u2192 Root. Visits root last \u2014 use for subtree-size and deletion.",
+      "back": "Left → Right → Root. Visits root last — use for subtree-size and deletion.",
       "tags": [
         "trees"
       ]
@@ -399,7 +399,7 @@
     {
       "id": "djbt-fc7",
       "front": "LCA algorithm",
-      "back": "If both subtrees return non-null \u2192 current node is LCA. Else return whichever found something.",
+      "back": "If both subtrees return non-null → current node is LCA. Else return whichever found something.",
       "tags": [
         "trees"
       ]
@@ -414,7 +414,7 @@
     }
   ],
   "project": {
-    "brief": "Write TreeLab.java with:\n1. inorder / preorder / postorder \u2014 return List<Integer>\n2. height(TreeNode root) \u2192 int\n3. diameterOfBinaryTree(TreeNode root) \u2192 int\n4. isValidBST(TreeNode root) \u2192 boolean  (min/max bounds approach)\n5. lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) \u2192 TreeNode\n6. levelOrder(TreeNode root) \u2192 List<List<Integer>>\nInclude main() tests: a balanced BST, a skewed tree, and a tree where diameter does NOT pass through root.",
+    "brief": "Write TreeLab.java with:\n1. inorder / preorder / postorder — return List<Integer>\n2. height(TreeNode root) → int\n3. diameterOfBinaryTree(TreeNode root) → int\n4. isValidBST(TreeNode root) → boolean  (min/max bounds approach)\n5. lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) → TreeNode\n6. levelOrder(TreeNode root) → List<List<Integer>>\nInclude main() tests: a balanced BST, a skewed tree, and a tree where diameter does NOT pass through root.",
     "checklist": [
       {
         "id": "c1",

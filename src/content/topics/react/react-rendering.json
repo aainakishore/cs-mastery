@@ -1,10 +1,12 @@
 {
   "id": "react-rendering",
-  "unit": 10,
-  "order": 92,
+  "unit": 4,
+  "order": 32,
   "title": "React Rendering and Reconciliation",
   "summary": "How React's reconciler diffs the virtual DOM, what triggers re-renders, keys, React.memo, and performance mental models.",
-  "prereqs": ["react-context"],
+  "prereqs": [
+    "react-context"
+  ],
   "guide": "# React Rendering and Reconciliation\n\n## The Pipeline: From setState to pixels\n\n```\n setState() / new props\n        │\n        ▼\n React marks component as 'dirty'\n        │\n        ▼\n  Render phase (pure, can be interrupted)\n    component() returns new JSX tree\n        │\n        ▼\n  Reconciliation — diff new tree vs old tree\n    'What changed since last time?'\n        │\n        ▼\n  Commit phase (synchronous, not interruptible)\n    Apply only the CHANGED DOM operations\n        │\n        ▼\n  Browser paints new pixels\n        │\n        ▼\n  useEffect / useLayoutEffect run\n```\n\n## Virtual DOM — the diff algorithm\n\nReact doesn't compare every node in the tree exhaustively (that would be O(n³)). It uses heuristics to get O(n):\n\n```\nHeuristic 1: Different element types = replace the whole subtree\n\n  Old: <div><span>text</span></div>\n  New: <p><span>text</span></p>\n  → div becomes p: React unmounts div subtree, mounts p subtree\n  (Even though <span> inside is identical)\n\nHeuristic 2: Same element type = update attributes, recurse into children\n\n  Old: <div className=\"a\"><span>hello</span></div>\n  New: <div className=\"b\"><span>hello</span></div>\n  → Update className attribute only (no unmount)\n\nHeuristic 3: Keys — stable child identity\n\n  Old: [<Item key=\"a\">, <Item key=\"b\">, <Item key=\"c\">]\n  New: [<Item key=\"a\">, <Item key=\"c\">]    ← b removed\n  React matches by key → removes only b\n  Without keys: React doesn't know which item was removed → might\n  update wrong items or unmount everything\n```\n\n## What triggers a re-render?\n\n```\n┌─────────────────────┬──────────────────────────────────────┐\n│ Trigger             │ Affected components                  │\n├─────────────────────┼──────────────────────────────────────┤\n│ setState / dispatch │ The component + descendants          │\n│ Props change        │ The component + descendants          │\n│ Context value change│ All useContext() consumers           │\n│ Parent re-renders   │ All children (by default)            │\n│ forceUpdate (class) │ The component                        │\n└─────────────────────┴──────────────────────────────────────┘\n\nCritical insight: When Parent re-renders, ALL its children\nre-render — even if their props haven't changed — UNLESS\nthey are wrapped in React.memo.\n```\n\n## React.memo — skipping renders from parent\n\n```tsx\n// Without memo: re-renders every time Parent re-renders\nfunction ExpensiveChild({ data }: { data: string[] }) {\n  // Expensive rendering logic\n}\n\n// With memo: only re-renders when data prop changes (by reference)\nconst ExpensiveChild = React.memo(function ExpensiveChild({ data }) {\n  // Expensive rendering logic\n});\n\n// Custom comparator: when deep comparison is needed\nconst Child = React.memo(\n  ({ config }) => <div>{config.title}</div>,\n  (prevProps, nextProps) => prevProps.config.id === nextProps.config.id\n  //                        return true = skip re-render\n  //                        return false = re-render\n);\n```\n\n```\nParent renders:\n  Without memo: Child always re-renders\n  With memo:    Child compares prev/next props with Object.is\n                Same reference? → SKIP\n                Different reference? → RE-RENDER\n\nCommon trap: passing new object/array expressions as props always creates\nnew references — memo always re-renders. Fix with useMemo or useCallback.\n```\n\n## Keys — identity for list items\n\n```tsx\n// BAD: using index as key\n{items.map((item, index) => (\n  <Item key={index} data={item} />\n))}\n// Problem: if items are reordered, React sees key=0 still present\n// and updates it with new data — triggering unnecessary work\n// WORSE: if Item has internal state (e.g., an input), the wrong\n// state sticks to the wrong item after reorder\n\n// GOOD: use stable unique ID\n{items.map(item => (\n  <Item key={item.id} data={item} />\n))}\n// React correctly matches each key to its previous instance\n```\n\n```\nKey forces unmount+remount:\n<Input key=\"a\" />   → unmount with key=\"a\"\n<Input key=\"b\" />   → mount fresh with key=\"b\"\n\nUseful pattern: reset a component's state by changing its key\n  <UserForm key={userId} userId={userId} />\n  // When userId changes, key changes → form resets automatically\n```\n\n## The Render and Commit Phases\n\n```\nRender phase (pure, can be interrupted in Concurrent React):\n  - React calls your component function\n  - Your function returns JSX describing what SHOULD be\n  - React builds new virtual DOM tree\n  - React diffs new vs old\n  → No side effects here! Render can be called multiple times\n\nCommit phase (synchronous, cannot interrupt):\n  - React applies changes to the real DOM\n  - React reads layout effects (useLayoutEffect)\n  - Browser paints\n  - React runs passive effects (useEffect)\n```\n\n## Why renders don't always become DOM updates\n\n```\nRender = React calling your component function\n  ≠\nDOM update = React actually changing the browser DOM\n\nTimeline:\n  Parent renders → Parent's JSX has <Button />\n  → React calls Button() again\n  → Button returns same JSX structure\n  → Reconciler sees: nothing changed in DOM\n  → No DOM operations needed\n  (Button still re-rendered — but it was cheap in this case)\n```\n\n## Concurrent React and Transitions\n\n```tsx\nimport { useTransition, startTransition } from 'react';\n\nfunction SearchPage() {\n  const [isPending, startTransition] = useTransition();\n  const [query, setQuery] = useState('');\n  const [results, setResults] = useState([]);\n\n  function handleSearch(q: string) {\n    setQuery(q); // urgent — update input immediately\n    startTransition(() => {\n      setResults(filter(allData, q)); // non-urgent — can be interrupted\n    });\n  }\n\n  // isPending: true while transition is in progress\n  return <>{isPending ? <Spinner /> : <Results data={results} />}</>;\n}\n```\n\n## Profiling Re-renders\n\n```\nTools:\n  React DevTools → Profiler tab → Record → interact → see which\n  components rendered and why\n\n  Why did Component render?\n    - 'props changed' (which prop?)\n    - 'context changed'\n    - 'state changed'\n    - 'parent rendered'\n\nMental model for diagnosing:\n  1. Is this component rendering too often?\n     → React DevTools profiler\n  2. Why is it rendering?\n     → memo comparison failing? Context too broad? Parent re-render?\n  3. Is the render EXPENSIVE?\n     → Only then add useMemo/React.memo\n```\n\n## Complexity Reference\n\n| Operation | Cost | Notes |\n|---|---|---|\n| Render (calling component fn) | CPU only | No DOM touch |\n| DOM diff + commit | DOM read/write | Battery/paint cost |\n| React.memo comparison | Shallow prop scan | Cheaper than render if render is expensive |\n| Key change | Unmount + remount | Resets state |\n\n## Common Pitfalls\n- Assuming renders are always slow — most are cheap; optimise only measured bottlenecks\n- Using index as list key when items can reorder or be removed\n- Misunderstanding React.memo: it prevents renders from parent, NOT from context changes\n- Object/function props created inline break React.memo silently\n- Missing keys entirely — causes subtle state corruption when lists update\n\n## Connections\n- **react-hooks** — useMemo and useCallback stabilise references to make React.memo work\n- **react-context** — context bypasses React.memo\n- **react-performance** — code splitting, Suspense, and transitions work within this pipeline",
   "questions": [
     {
@@ -19,7 +21,10 @@
       ],
       "answerIndex": 1,
       "explanation": "A 'render' is React calling your component function. The output is a JavaScript object tree (virtual DOM). React may then diff this against the previous output. A render does NOT mean the DOM changes — if nothing in the diff changed, no DOM operations run.",
-      "tags": ["rendering", "virtual-dom"]
+      "tags": [
+        "rendering",
+        "virtual-dom"
+      ]
     },
     {
       "id": "rrn-q2",
@@ -33,7 +38,10 @@
       ],
       "answerIndex": 2,
       "explanation": "Without React.memo, every child re-renders when the parent does — regardless of prop changes. This is usually fine because renders are cheap. But for expensive trees, React.memo can skip the child's render when its props haven't changed.",
-      "tags": ["rendering", "re-renders"]
+      "tags": [
+        "rendering",
+        "re-renders"
+      ]
     },
     {
       "id": "rrn-q3",
@@ -47,7 +55,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React's heuristics: 1) Different element type = unmount and remount (no deep diff needed). 2) Same element type = update in place and recurse. 3) Keys identify stable children in lists. These three rules let React diff any tree in a single pass.",
-      "tags": ["reconciliation", "virtual-dom", "diffing"]
+      "tags": [
+        "reconciliation",
+        "virtual-dom",
+        "diffing"
+      ]
     },
     {
       "id": "rrn-q4",
@@ -61,7 +73,11 @@
       ],
       "answerIndex": 1,
       "explanation": "If you have [A, B, C] with keys [0, 1, 2] and reorder to [C, A, B], keys become [0, 1, 2] again — React sees key=0 still present and updates it with C's data. If A had an open dropdown, that dropdown is now opened on the wrong component. Use stable IDs.",
-      "tags": ["keys", "lists", "reconciliation"]
+      "tags": [
+        "keys",
+        "lists",
+        "reconciliation"
+      ]
     },
     {
       "id": "rrn-q5",
@@ -75,7 +91,10 @@
       ],
       "answerIndex": 1,
       "explanation": "React.memo compares PROPS shallowly. If props haven't changed, it skips the render triggered by the parent. But if the component's own state changes or it consumes a changed context, React.memo cannot help — those are direct triggers.",
-      "tags": ["React.memo", "re-renders"]
+      "tags": [
+        "React.memo",
+        "re-renders"
+      ]
     },
     {
       "id": "rrn-q6",
@@ -90,7 +109,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`{ title: 'Dashboard' }` in JSX creates a new JavaScript object on every render. Object.is comparison: `{} !== {}` (different references). React.memo sees 'config changed' and re-renders MemoChild — even though the content is logically identical. Fix: useMemo or define the config outside the component.",
-      "tags": ["React.memo", "object-identity", "reference"]
+      "tags": [
+        "React.memo",
+        "object-identity",
+        "reference"
+      ]
     },
     {
       "id": "rrn-q7",
@@ -104,7 +127,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Key is React's identity signal. When a key changes, React treats it as a completely different element — unmounting the old instance (running cleanup effects) and mounting a fresh one (no previous state). This is a deliberate pattern to reset component state: `<Form key={userId} />`.",
-      "tags": ["keys", "unmount", "state-reset"]
+      "tags": [
+        "keys",
+        "unmount",
+        "state-reset"
+      ]
     },
     {
       "id": "rrn-q8",
@@ -116,9 +143,16 @@
         "A ref.current mutation",
         "Its own useState setter is called with a new value"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Parent renders (A), context changes (B), and own state changes (D) all trigger re-renders. Ref mutations (C) do NOT trigger renders — that's the entire point of useRef.",
-      "tags": ["re-renders", "triggers"]
+      "tags": [
+        "re-renders",
+        "triggers"
+      ]
     },
     {
       "id": "rrn-q9",
@@ -132,7 +166,11 @@
       ],
       "answerIndex": 1,
       "explanation": "In Concurrent Mode, React can start a render, pause it to handle urgent updates, then resume or discard. This is why your component function must be pure — it may be called multiple times for a single commit. The Commit phase applies DOM changes — it's always synchronous and can't be interrupted.",
-      "tags": ["rendering", "concurrent", "commit-phase"]
+      "tags": [
+        "rendering",
+        "concurrent",
+        "commit-phase"
+      ]
     },
     {
       "id": "rrn-q10",
@@ -146,7 +184,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Renders and DOM updates are separate steps. If the reconciler diffs the new virtual DOM tree against the old one and finds zero differences, the commit phase has no DOM mutations to make. The component ran but the browser DOM wasn't touched.",
-      "tags": ["rendering", "reconciliation", "DOM"]
+      "tags": [
+        "rendering",
+        "reconciliation",
+        "DOM"
+      ]
     },
     {
       "id": "rrn-q11",
@@ -160,7 +202,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Different element types = completely different tree. React doesn't try to reuse children across type changes — it unmounts the old subtree (running cleanup effects) and mounts the new one. This is why small type changes can be expensive in large trees.",
-      "tags": ["reconciliation", "element-type"]
+      "tags": [
+        "reconciliation",
+        "element-type"
+      ]
     },
     {
       "id": "rrn-q12",
@@ -174,7 +219,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`startTransition` marks state updates as 'non-urgent transitions'. If the user types while the transition renders, React pauses the transition render, handles the urgent keystroke, then resumes or restarts the transition. This keeps the input responsive during expensive filtering.",
-      "tags": ["concurrent", "transitions", "useTransition"]
+      "tags": [
+        "concurrent",
+        "transitions",
+        "useTransition"
+      ]
     },
     {
       "id": "rrn-q13",
@@ -188,7 +237,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`[]` in JSX creates a new JavaScript array object on every render. Even though it's empty, it's a different reference each time. Object.is([], []) === false. React.memo sees 'items changed' and re-renders. Fix: `const emptyArr = useMemo(() => [], [])` or define outside the component.",
-      "tags": ["React.memo", "array-identity", "reference"]
+      "tags": [
+        "React.memo",
+        "array-identity",
+        "reference"
+      ]
     },
     {
       "id": "rrn-q14",
@@ -202,7 +255,11 @@
       ],
       "answerIndex": 1,
       "explanation": "'Parent rendered' in the Profiler means the component re-rendered purely because its parent did — not because its own state or props changed. React.memo wraps the component: if the props are shallowly equal to last render, the component is skipped.",
-      "tags": ["profiling", "React.memo", "performance"]
+      "tags": [
+        "profiling",
+        "React.memo",
+        "performance"
+      ]
     },
     {
       "id": "rrn-q15",
@@ -217,7 +274,11 @@
       ],
       "answerIndex": 1,
       "explanation": "This is the intentional key-reset pattern. When userId changes, key changes — React destroys the old ProfileForm instance (runs cleanup effects, discards all useState) and creates a fresh one. This resets all internal form state without needing explicit reset logic in the component.",
-      "tags": ["keys", "state-reset", "patterns"]
+      "tags": [
+        "keys",
+        "state-reset",
+        "patterns"
+      ]
     },
     {
       "id": "rrn-q16",
@@ -231,7 +292,11 @@
       ],
       "answerIndex": 1,
       "explanation": "useEffect is a 'passive effect' — it fires after the browser has painted the new frame. This means the user sees the update before the effect runs. This is the right timing for data fetching, subscriptions, and non-visual side effects.",
-      "tags": ["rendering", "useEffect", "paint"]
+      "tags": [
+        "rendering",
+        "useEffect",
+        "paint"
+      ]
     },
     {
       "id": "rrn-q17",
@@ -243,9 +308,18 @@
         "useCallback on function props passed to the child",
         "Adding the child to a dep array"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "React.memo (A) skips renders when props are shallowly equal. useMemo (B) stabilises object/array references. useCallback (C) stabilises function references. All three together make memo work correctly for all prop types. Dep arrays (D) are unrelated to rendering prevention.",
-      "tags": ["React.memo", "useMemo", "useCallback", "performance"]
+      "tags": [
+        "React.memo",
+        "useMemo",
+        "useCallback",
+        "performance"
+      ]
     },
     {
       "id": "rrn-q18",
@@ -259,7 +333,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Fiber is React's internal reconciler. Each component is a 'fiber' unit of work. Concurrent React can pause the render of low-priority fibers, process high-priority updates (like user input), then resume. This is what makes useTransition and Suspense work.",
-      "tags": ["concurrent", "fiber", "rendering"]
+      "tags": [
+        "concurrent",
+        "fiber",
+        "rendering"
+      ]
     },
     {
       "id": "rrn-q19",
@@ -273,7 +351,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Render = React calling your function. DOM update = React making changes to the browser DOM. These are separate. If the reconciler sees no differences between old and new virtual DOM, the commit phase produces zero DOM operations. The render 'happened' but was effectively free from the user's perspective.",
-      "tags": ["rendering", "DOM", "reconciliation"]
+      "tags": [
+        "rendering",
+        "DOM",
+        "reconciliation"
+      ]
     },
     {
       "id": "rrn-q20",
@@ -287,7 +369,11 @@
       ],
       "answerIndex": 1,
       "explanation": "React.memo has a cost — it stores props, runs comparisons. For cheap components, the comparison can cost more than the render. Profile first. Add memo when you see specific components rendering unnecessarily and see a measurable improvement in the Profiler.",
-      "tags": ["React.memo", "performance", "optimisation"]
+      "tags": [
+        "React.memo",
+        "performance",
+        "optimisation"
+      ]
     }
   ],
   "flashcards": [
@@ -295,59 +381,103 @@
       "id": "rrn-fc1",
       "front": "Render vs DOM update",
       "back": "Render = React calling your component function. DOM update = React writing to the browser DOM. The reconciler diffs render output — if nothing changed, zero DOM operations happen.",
-      "tags": ["rendering", "reconciliation"]
+      "tags": [
+        "rendering",
+        "reconciliation"
+      ]
     },
     {
       "id": "rrn-fc2",
       "front": "React.memo comparison",
       "back": "Shallow Object.is comparison of props. New object/array/function = new reference = memo re-renders. Pair with useMemo/useCallback to stabilise references.",
-      "tags": ["React.memo", "props"]
+      "tags": [
+        "React.memo",
+        "props"
+      ]
     },
     {
       "id": "rrn-fc3",
       "front": "Key = component identity",
       "back": "Same key = update in place. Changed key = unmount old, mount fresh (state reset). Useful pattern: `key={userId}` to reset a form when user changes.",
-      "tags": ["keys", "identity"]
+      "tags": [
+        "keys",
+        "identity"
+      ]
     },
     {
       "id": "rrn-fc4",
       "front": "List key — use ID, not index",
       "back": "Index keys break when items reorder — React attaches state to the wrong item. Use stable unique IDs. Index ok only for static, never-reordered lists.",
-      "tags": ["keys", "lists"]
+      "tags": [
+        "keys",
+        "lists"
+      ]
     },
     {
       "id": "rrn-fc5",
       "front": "React.memo + context",
       "back": "React.memo does NOT block context-triggered re-renders. It only blocks parent-triggered renders. Split contexts to reduce consumer blast radius.",
-      "tags": ["React.memo", "context"]
+      "tags": [
+        "React.memo",
+        "context"
+      ]
     },
     {
       "id": "rrn-fc6",
       "front": "Render phase vs commit phase",
       "back": "Render: pure, interruptible, can run multiple times. Commit: synchronous, applies DOM changes, then runs layout effects. Side effects belong in commit (useEffect).",
-      "tags": ["rendering", "concurrent"]
+      "tags": [
+        "rendering",
+        "concurrent"
+      ]
     },
     {
       "id": "rrn-fc7",
       "front": "useTransition — non-urgent updates",
       "back": "`startTransition(() => expensiveSetState(...))` marks as deferrable. Urgent updates (keystrokes) interrupt it. `isPending` flag shows progress. Keeps UI responsive.",
-      "tags": ["transitions", "concurrent"]
+      "tags": [
+        "transitions",
+        "concurrent"
+      ]
     },
     {
       "id": "rrn-fc8",
       "front": "Re-render triggers",
       "back": "Own state change, context change, parent re-render. NOT: ref mutation, memoized value with same deps, calling a function. Profile to find which trigger is firing.",
-      "tags": ["re-renders", "triggers"]
+      "tags": [
+        "re-renders",
+        "triggers"
+      ]
     }
   ],
   "project": {
     "brief": "You have a dashboard with a `<DataTable items={1000 items} />` component that re-renders every second because a parent timer updates a clock display. Profile (mentally or with DevTools) and design an optimisation strategy: 1) What tools tell you this component is the bottleneck? 2) What is the minimum change to stop unnecessary renders? 3) The items list is computed from a filter function — where do you memoize? 4) The table has a delete handler `onDelete(id)` — how do you stabilise it? 5) What is the risk of over-memoizing this component?",
     "checklist": [
-      { "id": "c1", "text": "Identifies React DevTools Profiler → 'parent rendered' reason on DataTable", "weight": 1 },
-      { "id": "c2", "text": "Wraps DataTable in React.memo as minimum fix", "weight": 1 },
-      { "id": "c3", "text": "Memoizes filtered items: const filtered = useMemo(() => filter(items, query), [items, query])", "weight": 1 },
-      { "id": "c4", "text": "Stabilises onDelete with useCallback: const onDelete = useCallback(id => ..., [relevant deps])", "weight": 1 },
-      { "id": "c5", "text": "Explains risk: if items or onDelete still create new references each render, memo comparison fails and renders continue anyway", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Identifies React DevTools Profiler → 'parent rendered' reason on DataTable",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "Wraps DataTable in React.memo as minimum fix",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Memoizes filtered items: const filtered = useMemo(() => filter(items, query), [items, query])",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Stabilises onDelete with useCallback: const onDelete = useCallback(id => ..., [relevant deps])",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Explains risk: if items or onDelete still create new references each render, memo comparison fails and renders continue anyway",
+        "weight": 1
+      }
     ],
     "hints": [
       "React DevTools Profiler: record, click, stop — hover each bar to see why it rendered.",
@@ -357,4 +487,3 @@
     ]
   }
 }
-

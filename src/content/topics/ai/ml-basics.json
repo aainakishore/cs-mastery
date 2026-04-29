@@ -1,7 +1,7 @@
 {
   "id": "ml-basics",
-  "unit": 2,
-  "order": 5,
+  "unit": 7,
+  "order": 55,
   "title": "ML Basics",
   "summary": "Understand supervised vs unsupervised learning, bias-variance tradeoff, overfitting, and how models are trained and evaluated — the mental model behind all AI.",
   "prereqs": [

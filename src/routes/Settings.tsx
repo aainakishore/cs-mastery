@@ -81,9 +81,10 @@ export function Settings() {
 
   return (
     <Layout title="Settings" back="/">
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-4 py-6 lg:px-8">
+        <div className="max-w-2xl mx-auto space-y-6">
         {/* Stats */}
-        <div className="bg-slate-800 rounded-2xl p-5 grid grid-cols-3 gap-4 text-center">
+        <div className="rounded-2xl p-5 grid grid-cols-3 gap-4 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           <div>
             <div className="text-2xl font-black text-indigo-300">{xp}</div>
             <div className="text-xs text-slate-400">Total XP</div>
@@ -99,7 +100,7 @@ export function Settings() {
         </div>
 
         {/* Preferences */}
-        <div className="bg-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="rounded-2xl p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           <h3 className="font-bold text-slate-200">Preferences</h3>
 
           {/* Sound toggle */}
@@ -203,7 +204,7 @@ export function Settings() {
         </div>
 
         {/* Sync */}
-        <div className="bg-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="rounded-2xl p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           <h3 className="font-bold text-slate-200">Cross-device sync</h3>
           <p className="text-slate-400 text-sm">Export → AirDrop to iPhone → Import on the other device.</p>
           <button onClick={exportProgress} className="w-full flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-600 text-white py-3 rounded-xl font-semibold">
@@ -223,8 +224,10 @@ export function Settings() {
           </button>
         </div>
 
-        <div className="text-center text-slate-600 text-xs">CS Mastery v1.0 — No network. No accounts. 100% local.</div>
-      </div>
+        <div className="text-center text-xs" style={{ color: 'var(--text-subtle)' }}>CS Mastery v1.0 — No network. No accounts. 100% local.</div>
+
+        </div>{/* end max-w-2xl */}
+      </div>{/* end w-full */}
     </Layout>
   )
 }

@@ -1,10 +1,12 @@
 {
   "id": "react-server-components",
-  "unit": 10,
-  "order": 96,
+  "unit": 4,
+  "order": 36,
   "title": "React Server Components",
   "summary": "RSC architecture, server vs client components, server actions, streaming, and the mental model shift from traditional React.",
-  "prereqs": ["react-performance"],
+  "prereqs": [
+    "react-performance"
+  ],
   "guide": "# React Server Components\n\n## The Paradigm Shift\n\nTraditional React: ALL components run in the browser. The server sends HTML only for the initial shell; JavaScript then takes over and renders everything.\n\nRSC introduces a new division:\n\n```\nTraditional React (CSR):\n  Server sends: <div id='root'></div>\n  Browser downloads: app.js (500KB+)\n  Browser runs: React renders everything\n  User waits: for JS to download + parse + execute\n\nReact Server Components:\n  Server runs components that access DB/FS directly\n  Server sends: HTML + serialized React tree\n  Browser receives: pre-rendered content immediately\n  Client components: add interactivity on top\n  User sees: content before JS loads\n```\n\n## The Component Split\n\n```\n┌─────────────────────────────────────────────────┐\n│          React Component Universe                │\n│  ┌──────────────────┐  ┌──────────────────────┐ │\n│  │  Server Component │  │  Client Component    │ │\n│  │  (default in      │  │  ('use client')      │ │\n│  │   Next.js 13+)    │  │                      │ │\n│  │                   │  │                      │ │\n│  │ ✓ async/await     │  │ ✓ useState           │ │\n│  │ ✓ DB queries      │  │ ✓ useEffect          │ │\n│  │ ✓ File system     │  │ ✓ Event handlers     │ │\n│  │ ✓ Private secrets │  │ ✓ Browser APIs        │ │\n│  │ ✗ useState        │  │ ✗ async/await        │ │\n│  │ ✗ Event handlers  │  │ ✗ Direct DB access   │ │\n│  │ ✗ Browser APIs    │  │                      │ │\n│  └──────────────────┘  └──────────────────────┘ │\n└─────────────────────────────────────────────────┘\n```\n\n## Server Component Example — no boilerplate\n\n```tsx\n// app/dashboard/page.tsx  (Next.js 13+ App Router)\n// NO 'use client' = server component by default\n\nasync function DashboardPage() {\n  // Direct DB access — no API route needed, no useEffect, no loading state\n  const user = await db.user.findUnique({ where: { id: userId } });\n  const orders = await db.orders.findMany({ where: { userId } });\n\n  return (\n    <main>\n      <h1>Welcome, {user.name}</h1>\n      <OrderList orders={orders} />\n      <InteractiveCart />  {/* Client component — has useState */}\n    </main>\n  );\n}\n// Zero JavaScript for this component shipped to browser\n// DB credentials never exposed\n```\n\n## 'use client' — the boundary\n\n```\n'use client' marks a component (and all its imports) as a\nclient component. Everything below the boundary runs in the browser.\n\n  app/\n    page.tsx          ← Server component (no 'use client')\n    └── ProductList   ← Server component\n        └── AddToCart ← Client component ('use client')\n            └── Icon  ← Runs as CLIENT (inside client boundary)\n\nYou can pass Server Component output as children to a Client Component:\n\n// Client Component\n'use client';\nfunction Shell({ children }: { children: ReactNode }) {\n  const [open, setOpen] = useState(false);\n  return <div onClick={() => setOpen(true)}>{children}</div>;\n  // children can be server-rendered nodes!\n}\n\n// Server Component wrapping Client Component\nfunction Page() {\n  return (\n    <Shell>  {/* passes RSC output as children */}\n      <ServerRenderedContent />\n    </Shell>\n  );\n}\n```\n\n## Server Actions — forms without API routes\n\n```tsx\n// Server action: marked with 'use server'\nasync function createOrder(formData: FormData) {\n  'use server';  // or at file top-level\n  const product  = formData.get('product') as string;\n  const quantity = Number(formData.get('quantity'));\n\n  // Direct DB write — runs on server, not in browser\n  await db.orders.create({ data: { product, quantity } });\n  revalidatePath('/orders'); // invalidate cached server data\n}\n\n// Usage in Server Component:\n<form action={createOrder}>\n  <input name='product' />\n  <input name='quantity' type='number' />\n  <button type='submit'>Order</button>\n</form>\n// No API route, no fetch, no client-side handler\n// Works even with JavaScript disabled (progressive enhancement)\n```\n\n## Streaming — progressive rendering\n\n```\nWithout streaming:\n  Server waits for ALL data → sends complete HTML → user sees page\n  (User waits 2s for slowest query)\n\nWith streaming (Suspense + async RSC):\n  Server immediately streams static shell\n  Slow sections stream in as their data arrives\n  User sees content progressively\n\n  Timeline:\n  0ms:   <header> streams immediately\n  100ms: <ProductList> streams (fast DB query)\n  800ms: <Recommendations> streams (slow ML query)\n\n// Next.js streaming with Suspense:\nasync function Page() {\n  return (\n    <>\n      <Header />           {/* streams immediately */}\n      <ProductList />      {/* streams after product query */}\n      <Suspense fallback={<Skeleton />}>\n        <Recommendations />  {/* slow — streams later */}\n      </Suspense>\n    </>\n  );\n}\n```\n\n## RSC Data Fetching Patterns\n\n```tsx\n// Parallel fetching — don't waterfall!\nasync function Page() {\n  // BAD — sequential waterfall:\n  const user   = await getUser();    // 200ms\n  const orders = await getOrders();  // 300ms   → 500ms total\n\n  // GOOD — parallel:\n  const [user, orders] = await Promise.all([\n    getUser(),    // }\n    getOrders(),  // } run simultaneously → 300ms total\n  ]);\n\n  return <Profile user={user} orders={orders} />;\n}\n\n// Server Component caching (Next.js):\nconst data = await fetch('/api/data', {\n  next: { revalidate: 60 },    // revalidate every 60s\n  // or:\n  cache: 'no-store',           // always fresh\n});\n```\n\n## What RSC Changes (vs useEffect pattern)\n\n```\n| Concern              | RSC approach           | Old CSR approach           |\n|----------------------|------------------------|----------------------------|\n| Data fetching        | async component, await | useEffect + useState       |\n| Loading state        | Suspense fallback       | isLoading state + spinner  |\n| Error handling       | error.tsx file          | try/catch + error state    |\n| Mutations            | Server actions          | fetch POST + onSuccess      |\n| Private data access  | Direct in component     | API route proxy             |\n| Bundle contribution  | Zero                   | Every component added       |\n```\n\n## Common Pitfalls\n- Trying to use `useState` in a server component — server components run once on server, no re-renders\n- Importing a client-only library (window, document) at the top of a server component — splits break incorrectly\n- Serialisation: sever → client prop passing — must be JSON-serialisable (no functions, no class instances)\n- Missing `'use client'` boundary: event handlers in what React thinks is a server component\n- Fetching serially when parallel is possible — always await Promise.all for independent queries\n\n## Connections\n- **react-rendering** — RSC is a new rendering paradigm alongside client-side rendering\n- **react-performance** — RSC eliminates client-side JS for non-interactive components, improving bundle size\n- **react-state-effects** — useEffect is replaced by async RSC for data fetching; still used inside client components",
   "questions": [
     {
@@ -19,7 +21,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Server components execute on the server — they can access databases, file systems, and secrets directly. Their output (React element tree) is sent to the browser, but the component code itself never runs in the browser. This means their code isn't in the JavaScript bundle.",
-      "tags": ["RSC", "server-components", "architecture"]
+      "tags": [
+        "RSC",
+        "server-components",
+        "architecture"
+      ]
     },
     {
       "id": "rrsc-q2",
@@ -33,7 +39,11 @@
       ],
       "answerIndex": 1,
       "explanation": "'use client' is a directive that marks a boundary. The component and all its imports become client components — they're included in the JavaScript bundle and run in the browser. This is how you opt into useState, event handlers, and browser APIs.",
-      "tags": ["RSC", "client-boundary", "use-client"]
+      "tags": [
+        "RSC",
+        "client-boundary",
+        "use-client"
+      ]
     },
     {
       "id": "rrsc-q3",
@@ -47,7 +57,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Server components run in a Node.js (or edge) environment — they have full access to database drivers, file system APIs, and process.env secrets. This eliminates the need for API routes to proxy server-only operations. The data access code never reaches the browser.",
-      "tags": ["RSC", "server-components", "data-access"]
+      "tags": [
+        "RSC",
+        "server-components",
+        "data-access"
+      ]
     },
     {
       "id": "rrsc-q4",
@@ -61,7 +75,11 @@
       ],
       "answerIndex": 1,
       "explanation": "With streaming, the server sends HTML progressively. Suspense boundaries act as 'wait here' markers. Static parts of the page stream immediately. Parts wrapped in Suspense stream their fallback HTML first, then replace it with real content when the async component's data is ready.",
-      "tags": ["RSC", "streaming", "Suspense"]
+      "tags": [
+        "RSC",
+        "streaming",
+        "Suspense"
+      ]
     },
     {
       "id": "rrsc-q5",
@@ -75,7 +93,11 @@
       ],
       "answerIndex": 2,
       "explanation": "Server components are fundamentally different from lazy-loaded client components. Lazy loading defers when a component's code is downloaded. RSC means the component's code is never downloaded at all — it runs only on the server. This can dramatically reduce bundle size.",
-      "tags": ["RSC", "bundle-size", "performance"]
+      "tags": [
+        "RSC",
+        "bundle-size",
+        "performance"
+      ]
     },
     {
       "id": "rrsc-q6",
@@ -89,7 +111,11 @@
       ],
       "answerIndex": 1,
       "explanation": "The server must serialise props to send them to the client (as part of the RSC payload). Functions cannot be serialised to JSON and sent over a network. Client components that need callbacks must define those callbacks inside their own client boundary (use client).",
-      "tags": ["RSC", "props", "serialization"]
+      "tags": [
+        "RSC",
+        "props",
+        "serialization"
+      ]
     },
     {
       "id": "rrsc-q7",
@@ -103,7 +129,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Server Actions let you write a function with 'use server', call it from a form or client event, and Next.js/React handles the network call automatically. No `fetch('/api/...')`, no JSON stringify, no response parsing. The function runs on the server with direct DB access.",
-      "tags": ["RSC", "server-actions"]
+      "tags": [
+        "RSC",
+        "server-actions"
+      ]
     },
     {
       "id": "rrsc-q8",
@@ -117,7 +146,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Server components execute once on the server — there's no user interaction cycle, no DOM, no event loop for re-renders. Hooks like useState, useEffect, and useCallback require the client runtime. React throws an error if you use them in a server component.",
-      "tags": ["RSC", "useState", "hooks"]
+      "tags": [
+        "RSC",
+        "useState",
+        "hooks"
+      ]
     },
     {
       "id": "rrsc-q9",
@@ -132,7 +165,12 @@
       ],
       "answerIndex": 1,
       "explanation": "In Option A: if getUser takes 200ms and getOrders takes 300ms, total = 500ms. In Option B: both start simultaneously, total = 300ms (the slower one). Always use Promise.all for independent fetches. Option A (waterfall) is only correct when the second fetch needs the first result.",
-      "tags": ["RSC", "data-fetching", "parallel", "waterfall"]
+      "tags": [
+        "RSC",
+        "data-fetching",
+        "parallel",
+        "waterfall"
+      ]
     },
     {
       "id": "rrsc-q10",
@@ -146,7 +184,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Without streaming: server renders everything, sends one HTML blob. With streaming: server sends partial HTML as each part becomes ready. A user sees the header and navigation in 50ms, product list in 200ms, recommendations in 800ms — versus a blank page until 800ms.",
-      "tags": ["RSC", "streaming", "performance"]
+      "tags": [
+        "RSC",
+        "streaming",
+        "performance"
+      ]
     },
     {
       "id": "rrsc-q11",
@@ -160,7 +202,11 @@
       ],
       "answerIndex": 1,
       "explanation": "The pattern: a Server Component renders `<ClientShell><ServerContent /></ClientShell>`. ServerContent is rendered on the server and passed as children to ClientShell (a client component). ClientShell renders it as JSX. This avoids breaking the client boundary while still having interactivity around server-rendered content.",
-      "tags": ["RSC", "client-boundary", "composition"]
+      "tags": [
+        "RSC",
+        "client-boundary",
+        "composition"
+      ]
     },
     {
       "id": "rrsc-q12",
@@ -174,7 +220,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Next.js caches server component outputs. After a mutation (Server Action), you need to invalidate the cache so users see updated data. `revalidatePath('/products')` marks that path's cache as stale — the next request triggers a fresh render. Alternatively, `revalidateTag` for granular cache control.",
-      "tags": ["RSC", "server-actions", "cache-invalidation"]
+      "tags": [
+        "RSC",
+        "server-actions",
+        "cache-invalidation"
+      ]
     },
     {
       "id": "rrsc-q13",
@@ -186,9 +236,16 @@
         "Reading an environment variable (API key)",
         "Rendering a complex static layout with no interactivity"
       ],
-      "answerIndexes": [0, 2, 3],
+      "answerIndexes": [
+        0,
+        2,
+        3
+      ],
       "explanation": "DB queries (A), secret env vars (C), and static layouts (D) all belong in server components — they have no need for the browser runtime. Click handlers (B) require event listeners which are browser-only — they belong in client components ('use client').",
-      "tags": ["RSC", "component-split"]
+      "tags": [
+        "RSC",
+        "component-split"
+      ]
     },
     {
       "id": "rrsc-q14",
@@ -202,7 +259,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Traditional: create app/api/orders/route.ts, write fetch('/api/orders', {...}), parse JSON response, handle errors, maintain types on both sides. Server Action: write one async function, call it directly from a form or client component. Next.js handles the network transport. One file, one type definition.",
-      "tags": ["RSC", "server-actions", "API-routes"]
+      "tags": [
+        "RSC",
+        "server-actions",
+        "API-routes"
+      ]
     },
     {
       "id": "rrsc-q15",
@@ -216,7 +277,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Next.js Pages Router used `getServerSideProps` to fetch data and pass it as props to the page component. App Router RSC replaces this — the component itself is async and fetches data inline at the top. No HOF wrapper, no special return format, just a regular async function.",
-      "tags": ["RSC", "Next.js", "architecture"]
+      "tags": [
+        "RSC",
+        "Next.js",
+        "architecture"
+      ]
     },
     {
       "id": "rrsc-q16",
@@ -230,7 +295,11 @@
       ],
       "answerIndex": 1,
       "explanation": "This is RSC's compelling use case. A markdown renderer might import `remark`, `remark-gfm`, a syntax highlighter — 50-100KB of libraries. As a server component, none of that reaches the browser. The output is plain HTML. 100KB removed from the client bundle.",
-      "tags": ["RSC", "bundle-size", "performance"]
+      "tags": [
+        "RSC",
+        "bundle-size",
+        "performance"
+      ]
     },
     {
       "id": "rrsc-q17",
@@ -244,7 +313,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Next.js App Router automatically wraps the segment's page.tsx in a Suspense boundary when a `loading.tsx` file is present. It shows immediately (before async data resolves) alongside any already-streamed content. No manual `<Suspense>` wrapper needed.",
-      "tags": ["RSC", "streaming", "Next.js"]
+      "tags": [
+        "RSC",
+        "streaming",
+        "Next.js"
+      ]
     },
     {
       "id": "rrsc-q18",
@@ -256,9 +329,16 @@
         "useEffect with a fetch inside",
         "Promise.all for parallel independent queries"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Server components can use any server-side data access: ORM (A), extended fetch (B), parallel Promise.all (D). useEffect (C) doesn't exist in server components — it requires the client React runtime and re-renders.",
-      "tags": ["RSC", "data-fetching"]
+      "tags": [
+        "RSC",
+        "data-fetching"
+      ]
     },
     {
       "id": "rrsc-q19",
@@ -272,7 +352,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Server component imports run on the server. The image processing library never reaches the browser. The component produces HTML (an `<img>` tag) which is streamed to the client. This is one of RSC's key benefits — heavy processing stays on the server.",
-      "tags": ["RSC", "bundle-size", "libraries"]
+      "tags": [
+        "RSC",
+        "bundle-size",
+        "libraries"
+      ]
     },
     {
       "id": "rrsc-q20",
@@ -286,7 +370,11 @@
       ],
       "answerIndex": 1,
       "explanation": "The fundamental shift: in CSR, all components are client-side by default. In RSC, components are server-side by default — you opt into the browser environment with 'use client'. Data fetching moves out of useEffect into async component bodies. Interactive islands use 'use client' at their boundaries.",
-      "tags": ["RSC", "mental-model", "architecture"]
+      "tags": [
+        "RSC",
+        "mental-model",
+        "architecture"
+      ]
     }
   ],
   "flashcards": [
@@ -294,59 +382,104 @@
       "id": "rrsc-fc1",
       "front": "Server vs Client Component",
       "back": "Server: runs on server, async/await, DB/FS access, zero JS to browser. Client ('use client'): runs in browser, useState/useEffect, event handlers, browser APIs.",
-      "tags": ["RSC", "architecture"]
+      "tags": [
+        "RSC",
+        "architecture"
+      ]
     },
     {
       "id": "rrsc-fc2",
       "front": "'use client' — what it marks",
       "back": "A boundary. The file + everything imported under it = client component (ships to browser). Place it as deep as possible to maximise server component territory.",
-      "tags": ["RSC", "client-boundary"]
+      "tags": [
+        "RSC",
+        "client-boundary"
+      ]
     },
     {
       "id": "rrsc-fc3",
       "front": "RSC and bundle size",
       "back": "Server component code NEVER in JS bundle. Heavy libraries (markdown parsers, image processors) run server-side only. Dramatic bundle size reduction.",
-      "tags": ["RSC", "performance"]
+      "tags": [
+        "RSC",
+        "performance"
+      ]
     },
     {
       "id": "rrsc-fc4",
       "front": "Server Action ('use server')",
       "back": "Async function running on server, called from client. Direct DB access. No API route needed. Works as HTML form action for progressive enhancement.",
-      "tags": ["RSC", "server-actions"]
+      "tags": [
+        "RSC",
+        "server-actions"
+      ]
     },
     {
       "id": "rrsc-fc5",
       "front": "Streaming with Suspense",
       "back": "Static parts stream immediately. Suspense-wrapped async parts show skeleton until data resolves. User sees content progressively — not blank then all-at-once.",
-      "tags": ["RSC", "streaming"]
+      "tags": [
+        "RSC",
+        "streaming"
+      ]
     },
     {
       "id": "rrsc-fc6",
       "front": "RSC props: server → client",
       "back": "Must be JSON-serialisable. No functions, class instances, or circular refs. Strings, numbers, plain objects, arrays: OK.",
-      "tags": ["RSC", "props"]
+      "tags": [
+        "RSC",
+        "props"
+      ]
     },
     {
       "id": "rrsc-fc7",
       "front": "Parallel fetching in RSC",
       "back": "`await Promise.all([getUser(), getOrders()])` — run simultaneously. Avoid sequential awaits for independent queries (waterfall = sum of times vs max of times).",
-      "tags": ["RSC", "data-fetching"]
+      "tags": [
+        "RSC",
+        "data-fetching"
+      ]
     },
     {
       "id": "rrsc-fc8",
       "front": "revalidatePath / revalidateTag",
       "back": "Called in Server Action after mutation. Invalidates Next.js cache for a path or tag. Next request fetches fresh data. Replaces client cache invalidation logic.",
-      "tags": ["RSC", "cache", "server-actions"]
+      "tags": [
+        "RSC",
+        "cache",
+        "server-actions"
+      ]
     }
   ],
   "project": {
     "brief": "Design a blog platform using React Server Components (Next.js 13+ App Router). It has: a homepage listing recent posts, individual post pages with markdown content, a comment system with real-time add/delete, and an admin section to publish/unpublish posts. Design: 1) Which components are Server Components and which need 'use client'? 2) How is post data fetched (no API routes)? 3) How does the comment form work as a Server Action? 4) How does the admin publish action invalidate cached post pages? 5) Why is the markdown renderer a perfect Server Component?",
     "checklist": [
-      { "id": "c1", "text": "Homepage and BlogPost page: Server Components — async fetch from DB, zero client JS for content", "weight": 1 },
-      { "id": "c2", "text": "CommentForm: Client Component ('use client') for optimistic UI. Or Server Action form for progressive enhancement", "weight": 1 },
-      { "id": "c3", "text": "addComment Server Action: writes to DB, calls revalidatePath('/posts/[id]') to refresh comments", "weight": 1 },
-      { "id": "c4", "text": "publishPost Server Action: DB update + revalidatePath('/') and revalidatePath('/posts/[id]')", "weight": 1 },
-      { "id": "c5", "text": "Markdown renderer: imports remark/remark-gfm (heavy libs), runs on server only — zero markdown JS in client bundle", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Homepage and BlogPost page: Server Components — async fetch from DB, zero client JS for content",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "CommentForm: Client Component ('use client') for optimistic UI. Or Server Action form for progressive enhancement",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "addComment Server Action: writes to DB, calls revalidatePath('/posts/[id]') to refresh comments",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "publishPost Server Action: DB update + revalidatePath('/') and revalidatePath('/posts/[id]')",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "text": "Markdown renderer: imports remark/remark-gfm (heavy libs), runs on server only — zero markdown JS in client bundle",
+        "weight": 1
+      }
     ],
     "hints": [
       "Post page: async function PostPage({ params }) { const post = await db.post.findUnique({where:{id:params.id}}); return <Markdown source={post.content} />; }",
@@ -356,4 +489,3 @@
     ]
   }
 }
-

@@ -1,10 +1,12 @@
 {
   "id": "ts-interfaces-types",
-  "unit": 10,
-  "order": 81,
+  "unit": 3,
+  "order": 21,
   "title": "Interfaces and Type Aliases",
   "summary": "interface vs type alias, structural typing, declaration merging, and when to reach for each.",
-  "prereqs": ["ts-fundamentals"],
+  "prereqs": [
+    "ts-fundamentals"
+  ],
   "guide": "# Interfaces and Type Aliases\n\nTypeScript has two ways to name a shape: `interface` and `type`. They look almost identical at first glance. The key mental model: **`interface` is an open contract that can be extended and merged later. `type` is a closed, one-shot label that can express anything an interface can't.**\n\n```\n  interface User           type User =\n  ┌──────────────┐        ┌──────────────┐\n  │ name: string │   vs   │ name: string │\n  │ age: number  │        │ age: number  │\n  └──────────────┘        └──────────────┘\n       ▲ open                  ▲ closed\n  can be extended          can be unioned\n  can be merged            can be intersected\n  class can implement      can alias primitives\n```\n\n## Structural Typing — shapes, not names\n\nTypeScript uses **structural typing**: a value is compatible with a type if it has at least the required shape. The name doesn't matter.\n\n```ts\ninterface Point { x: number; y: number; }\n\nfunction draw(p: Point) {\n  console.log(p.x, p.y);\n}\n\n// This object has no 'Point' annotation — but it satisfies the shape\nconst pt = { x: 10, y: 20, label: 'origin' };\ndraw(pt);  // ✓ — extra property 'label' is fine when passing via variable\n\n// Direct object literal DOES trigger excess property checks:\ndraw({ x: 10, y: 20, label: 'origin' });  // ✗ Error — excess property in literal\n```\n\n```\nStructural check mental model:\n\n  Required: { x: number; y: number }\n  Provided: { x: number; y: number; label: string }\n\n  Does provided have ALL required fields with correct types?\n  Yes → compatible ✓\n\n  Excess property check only applies to FRESH object literals\n  passed directly to a typed parameter.\n```\n\n## interface — the open contract\n\n```ts\n// Basic declaration\ninterface Animal {\n  name: string;\n  sound(): string;\n}\n\n// Extension — just like class inheritance\ninterface Dog extends Animal {\n  breed: string;\n}\n\n// Multiple extension\ninterface ServiceDog extends Dog, Trainable {\n  handler: string;\n}\n\n// Classes implement interfaces\nclass Labrador implements Dog {\n  name = 'Rex';\n  breed = 'Labrador';\n  sound() { return 'woof'; }\n}\n```\n\n### Declaration Merging — interfaces can grow\n\nIf you declare the same interface twice, TypeScript **merges** them. This is how `lib.dom.d.ts` and third-party library augmentations work.\n\n```ts\ninterface Window {\n  myAppVersion: string;   // augment the global Window type\n}\n\n// Now window.myAppVersion is typed — no error\nwindow.myAppVersion = '1.0.0';\n\n// Same-name declarations merge:\ninterface Config { host: string; }\ninterface Config { port: number; }\n// Result: Config = { host: string; port: number; }\n```\n\n## type alias — the flexible label\n\n```ts\n// Alias a primitive\ntype UserId = string;\ntype Milliseconds = number;\n\n// Union — only possible with type\ntype StringOrNumber = string | number;\ntype Status = 'idle' | 'loading' | 'success' | 'error';\n\n// Intersection — combine shapes\ntype AdminUser = User & { role: 'admin' };\n\n// Tuple\ntype Pair<T> = [T, T];\n\n// Function signature\ntype Callback = (err: Error | null, data: string) => void;\n\n// Mapped type (impossible with interface)\ntype Readonly<T> = { readonly [K in keyof T]: T[K] };\n\n// Conditional type (impossible with interface)\ntype IsString<T> = T extends string ? true : false;\n```\n\n## interface vs type — the decision table\n\n```\n┌──────────────────────────────┬───────────┬───────────┐\n│ Feature                      │ interface │   type    │\n├──────────────────────────────┼───────────┼───────────┤\n│ Describe object shape        │    ✓      │     ✓     │\n│ Class implements             │    ✓      │     ✓     │\n│ Extends / inheritance        │    ✓      │  via &    │\n│ Declaration merging          │    ✓      │     ✗     │\n│ Union types  A | B           │    ✗      │     ✓     │\n│ Intersection A & B           │  extends  │     ✓     │\n│ Alias primitives             │    ✗      │     ✓     │\n│ Tuple types                  │    ✗      │     ✓     │\n│ Mapped types                 │    ✗      │     ✓     │\n│ Conditional types            │    ✗      │     ✓     │\n│ Recursive self-reference     │    ✓      │     ✓     │\n│ Error messages — cleaner     │    ✓      │  varies   │\n└──────────────────────────────┴───────────┴───────────┘\n\nRule of thumb:\n  Object shapes → interface (benefits from merging, extends, implements)\n  Everything else → type (unions, tuples, mapped, conditional)\n```\n\n## Optional, Readonly, and Index Signatures\n\n```ts\ninterface Config {\n  readonly host: string;        // cannot reassign after creation\n  port?: number;                // optional — may be undefined\n  [key: string]: unknown;       // index signature — any extra string key\n}\n\nconst cfg: Config = { host: 'localhost' };\ncfg.host = '127.0.0.1';  // ✗ Error — readonly\ncfg.port = 3000;          // ✓ — optional but valid\ncfg.debug = true;         // ✓ — index signature allows this\n```\n\n## Discriminated Unions (tagged unions)\n\nA pattern where a shared literal field tells TypeScript which variant is active:\n\n```ts\ntype Shape =\n  | { kind: 'circle';    radius: number }\n  | { kind: 'square';    side: number   }\n  | { kind: 'rectangle'; w: number; h: number };\n\nfunction area(s: Shape): number {\n  switch (s.kind) {\n    case 'circle':    return Math.PI * s.radius ** 2;\n    case 'square':    return s.side ** 2;\n    case 'rectangle': return s.w * s.h;\n    // TypeScript knows s is never here — exhaustive\n  }\n}\n```\n\n```\nDiscriminated union mental model:\n\nShape\n  │\n  ├── kind: 'circle'    → unlocks .radius\n  ├── kind: 'square'    → unlocks .side\n  └── kind: 'rectangle' → unlocks .w, .h\n\nThe 'kind' tag is a TYPE NARROWING KEY.\nEach case == a different shape with different props.\n```\n\n## Common Pitfalls\n- Using `interface` for union types — interfaces can't express `A | B`\n- Forgetting excess property checks only apply to fresh literals (not variables)\n- Declaration merging surprises: adding a field to a global interface (`Window`, `Array`) changes it everywhere\n- Using `type` for object shapes in libraries that need augmentation — consumers can't merge your `type`\n- Confusing structural compatibility with nominal equality — TypeScript doesn't care about class names, only shapes\n\n## Connections\n- **ts-fundamentals** — union `|` and intersection `&` operators\n- **ts-generics** — generic interfaces and constrained type aliases\n- **ts-utility-types** — built-in mapped types (Partial, Readonly) are type aliases\n- **ts-advanced-types** — mapped and conditional types only available via `type`",
   "questions": [
     {
@@ -19,7 +21,10 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript is structurally typed. A value with `{ x: number; y: number; extra: string }` satisfies `Point = { x: number; y: number }` — the name and extra field don't matter. This is the opposite of nominal typing (Java/C# where the exact class name matters).",
-      "tags": ["structural-typing", "fundamentals"]
+      "tags": [
+        "structural-typing",
+        "fundamentals"
+      ]
     },
     {
       "id": "tsit-q2",
@@ -33,7 +38,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`interface` supports declaration merging: two identically-named interfaces are merged into one. `type` does not — declaring the same type alias name twice is an error.",
-      "tags": ["interface", "declaration-merging"]
+      "tags": [
+        "interface",
+        "declaration-merging"
+      ]
     },
     {
       "id": "tsit-q3",
@@ -48,7 +56,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Interface declaration merging combines both declarations. The effective shape is `{ host: string; port: number }`. The object satisfies both fields — no error.",
-      "tags": ["interface", "declaration-merging"]
+      "tags": [
+        "interface",
+        "declaration-merging"
+      ]
     },
     {
       "id": "tsit-q4",
@@ -62,7 +73,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`string | number` is a union type — only expressible with `type`. Interfaces cannot represent unions. Object shapes, extension, and recursive types are possible with both.",
-      "tags": ["type-alias", "union", "comparison"]
+      "tags": [
+        "type-alias",
+        "union",
+        "comparison"
+      ]
     },
     {
       "id": "tsit-q5",
@@ -77,7 +92,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Excess property checks apply only to fresh object literals passed directly. Passing via a variable (`pt`) skips the check — TypeScript only verifies the required fields exist. Pass `draw({ x: 1, y: 2, label: 'origin' })` directly and you'll get an error.",
-      "tags": ["structural-typing", "excess-property-check"]
+      "tags": [
+        "structural-typing",
+        "excess-property-check"
+      ]
     },
     {
       "id": "tsit-q6",
@@ -91,7 +109,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Classes can implement both `interface` and object-shape `type` aliases. `class Foo implements MyType {}` works as long as `MyType` is an object shape, not a union or primitive.",
-      "tags": ["interface", "type-alias", "classes"]
+      "tags": [
+        "interface",
+        "type-alias",
+        "classes"
+      ]
     },
     {
       "id": "tsit-q7",
@@ -106,7 +128,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Intersection `A & B` requires a value to satisfy BOTH shapes. The result is `{ x: number; y: string }` — all properties from both types are required.",
-      "tags": ["intersection", "type-alias"]
+      "tags": [
+        "intersection",
+        "type-alias"
+      ]
     },
     {
       "id": "tsit-q8",
@@ -120,7 +145,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`readonly` prevents reassignment at the TypeScript compile time level only — the JS output has no protection. It's shallow: `readonly arr: number[]` prevents `arr = []` but NOT `arr.push(1)`. Deep immutability requires `as const` or `ReadonlyArray`.",
-      "tags": ["readonly", "interface", "immutability"]
+      "tags": [
+        "readonly",
+        "interface",
+        "immutability"
+      ]
     },
     {
       "id": "tsit-q9",
@@ -132,9 +161,18 @@
         "type IsArray<T> = T extends any[] ? true : false",
         "type User = { name: string; age: number }"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "Union types, tuple types, and conditional types require `type`. Object shapes (option D) can be expressed by both `type` and `interface`.",
-      "tags": ["type-alias", "union", "conditional-types", "tuples"]
+      "tags": [
+        "type-alias",
+        "union",
+        "conditional-types",
+        "tuples"
+      ]
     },
     {
       "id": "tsit-q10",
@@ -148,7 +186,10 @@
       ],
       "answerIndex": 1,
       "explanation": "A discriminated (tagged) union has a shared field with a different literal type in each member. TypeScript narrows based on that field — checking `s.kind === 'circle'` tells TS that `s` is the circle variant.",
-      "tags": ["discriminated-union", "narrowing"]
+      "tags": [
+        "discriminated-union",
+        "narrowing"
+      ]
     },
     {
       "id": "tsit-q11",
@@ -163,7 +204,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Inside `if (s.kind === 'circle')`, TypeScript narrows `s` to the circle member of the union. `s.radius` is safe to access because TypeScript knows which variant it is.",
-      "tags": ["discriminated-union", "narrowing"]
+      "tags": [
+        "discriminated-union",
+        "narrowing"
+      ]
     },
     {
       "id": "tsit-q12",
@@ -177,7 +221,10 @@
       ],
       "answerIndex": 1,
       "explanation": "An index signature says: 'this object may have any number of string keys, and their values are typed as unknown (or whatever the index value type is)'. Explicitly declared properties must also be assignable to the index value type.",
-      "tags": ["index-signature", "interface"]
+      "tags": [
+        "index-signature",
+        "interface"
+      ]
     },
     {
       "id": "tsit-q13",
@@ -191,7 +238,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Declaration merging lets library consumers add fields to your interface in their own code. `type` cannot be merged. This is how packages like Express extend `Request` with user-defined fields.",
-      "tags": ["interface", "declaration-merging", "library-design"]
+      "tags": [
+        "interface",
+        "declaration-merging",
+        "library-design"
+      ]
     },
     {
       "id": "tsit-q14",
@@ -206,7 +257,10 @@
       ],
       "answerIndex": 2,
       "explanation": "Type aliases are transparent — `UserId` IS `string`. `'abc'` is a valid string. `'active'` satisfies `'active' | 'inactive'`. No errors.",
-      "tags": ["type-alias", "literal-types"]
+      "tags": [
+        "type-alias",
+        "literal-types"
+      ]
     },
     {
       "id": "tsit-q15",
@@ -220,7 +274,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Excess property checks are triggered only when TypeScript can attribute a fresh object literal to a specific type. Passing via an intermediate variable `const x = { ... }; fn(x)` bypasses the check.",
-      "tags": ["excess-property-check", "structural-typing"]
+      "tags": [
+        "excess-property-check",
+        "structural-typing"
+      ]
     },
     {
       "id": "tsit-q16",
@@ -234,7 +291,11 @@
       ],
       "answerIndex": 1,
       "explanation": "In most cases they're equivalent. However, if two intersected types have a property with incompatible types, `A & B` gives that property type `never` (the intersection of incompatibles). `interface extends` may give an error at declaration time. The IDE error messages also differ.",
-      "tags": ["interface", "intersection", "extends"]
+      "tags": [
+        "interface",
+        "intersection",
+        "extends"
+      ]
     },
     {
       "id": "tsit-q17",
@@ -249,7 +310,11 @@
       ],
       "answerIndex": 3,
       "explanation": "`string & number` is impossible — no value can be both. TypeScript resolves it to `never`. This is a signal that your intersection types are incompatible and the type can never be constructed.",
-      "tags": ["intersection", "never", "incompatible-types"]
+      "tags": [
+        "intersection",
+        "never",
+        "incompatible-types"
+      ]
     },
     {
       "id": "tsit-q18",
@@ -261,9 +326,16 @@
         "TypeScript checks the declared type name at runtime",
         "Extra properties make a value incompatible with a narrower type"
       ],
-      "answerIndexes": [0, 1],
+      "answerIndexes": [
+        0,
+        1
+      ],
       "explanation": "Structural typing: two classes with identical shapes are mutually assignable (unlike Java). Class instances satisfy interfaces structurally. TypeScript has zero runtime type knowledge. Extra properties make a value a SUBTYPE (more specific) — compatible with the narrower type, not incompatible.",
-      "tags": ["structural-typing", "classes", "compatibility"]
+      "tags": [
+        "structural-typing",
+        "classes",
+        "compatibility"
+      ]
     },
     {
       "id": "tsit-q19",
@@ -277,7 +349,11 @@
       ],
       "answerIndex": 1,
       "explanation": "With `name?: string`, the key can be absent: `{}` is valid. With `name: string | undefined`, the key must be present: `{ name: undefined }` is required. This distinction matters for destructuring defaults and Object.keys() results.",
-      "tags": ["optional-properties", "interface", "undefined"]
+      "tags": [
+        "optional-properties",
+        "interface",
+        "undefined"
+      ]
     },
     {
       "id": "tsit-q20",
@@ -291,7 +367,11 @@
       ],
       "answerIndex": 1,
       "explanation": "Because `Window` is an `interface` in `lib.dom.d.ts`, you can merge into it: `interface Window { myProp: string }`. TypeScript merges your declaration with the existing one. This is why `interface` is preferred for extendable public API shapes.",
-      "tags": ["declaration-merging", "interface", "global-augmentation"]
+      "tags": [
+        "declaration-merging",
+        "interface",
+        "global-augmentation"
+      ]
     }
   ],
   "flashcards": [
@@ -299,58 +379,96 @@
       "id": "tsit-fc1",
       "front": "interface vs type — one-line rule",
       "back": "interface for object shapes you want to extend or merge. type for unions, tuples, mapped types, and everything else.",
-      "tags": ["interface", "type-alias"]
+      "tags": [
+        "interface",
+        "type-alias"
+      ]
     },
     {
       "id": "tsit-fc2",
       "front": "Declaration merging",
       "back": "Two `interface X` declarations with the same name are merged. `type X` declared twice is an error. Use for library augmentation (e.g. adding fields to Express `Request`).",
-      "tags": ["declaration-merging", "interface"]
+      "tags": [
+        "declaration-merging",
+        "interface"
+      ]
     },
     {
       "id": "tsit-fc3",
       "front": "Structural typing",
       "back": "Compatibility = matching shape, not name. `{ x: number; y: number; extra: string }` satisfies `Point = { x: number; y: number }`. Extra fields are fine via variable; not via fresh literal.",
-      "tags": ["structural-typing"]
+      "tags": [
+        "structural-typing"
+      ]
     },
     {
       "id": "tsit-fc4",
       "front": "Excess property check — when triggered",
       "back": "Only on fresh object literals directly in a typed position. Pass via variable to bypass. Direct: error. Variable: passes if required fields present.",
-      "tags": ["excess-property-check"]
+      "tags": [
+        "excess-property-check"
+      ]
     },
     {
       "id": "tsit-fc5",
       "front": "Discriminated union tag field",
       "back": "A literal-typed shared field (`kind`, `type`, `tag`) that TypeScript narrows on in switch/if. Each case gives you the correct variant with its unique fields unlocked.",
-      "tags": ["discriminated-union", "narrowing"]
+      "tags": [
+        "discriminated-union",
+        "narrowing"
+      ]
     },
     {
       "id": "tsit-fc6",
       "front": "Incompatible intersection → never",
       "back": "`{ name: string } & { name: number }` gives `name: never` — `string & number` is impossible. A signal your type design has a conflict.",
-      "tags": ["intersection", "never"]
+      "tags": [
+        "intersection",
+        "never"
+      ]
     },
     {
       "id": "tsit-fc7",
       "front": "readonly vs const for objects",
       "back": "`readonly` on property = can't reassign the property. `const` on variable = can't reassign the reference. Neither prevents mutation of nested objects/arrays.",
-      "tags": ["readonly", "immutability"]
+      "tags": [
+        "readonly",
+        "immutability"
+      ]
     },
     {
       "id": "tsit-fc8",
       "front": "optional ? vs | undefined",
       "back": "`prop?: T` — key can be absent. `prop: T | undefined` — key must be present, value may be undefined. Matters for destructuring, Object.keys(), and strictness settings.",
-      "tags": ["optional-properties", "undefined"]
+      "tags": [
+        "optional-properties",
+        "undefined"
+      ]
     }
   ],
   "project": {
     "brief": "Design the type system for a notification service that handles three kinds of notifications: email (with `to`, `subject`, `body`), SMS (with `to`, `message`, `maxChars`), and push notification (with `deviceToken`, `title`, `badge`). 1) Model each as a member of a discriminated union — choose the tag field name and value. 2) Write a `send(n: Notification)` function signature that uses narrowing to handle each case. 3) Decide: should each variant be an `interface` or a `type` member? Why? 4) A third-party library augments your Notification type with an `analytics` field. Which approach lets consumers do this without modifying your source?",
     "checklist": [
-      { "id": "c1", "text": "Discriminated union defined with a clear tag field and three variants", "weight": 1 },
-      { "id": "c2", "text": "send() function uses narrowing (switch on tag) to access variant-specific fields", "weight": 1 },
-      { "id": "c3", "text": "Justification given for interface vs type choice per variant", "weight": 1 },
-      { "id": "c4", "text": "Explains why interface allows third-party augmentation via declaration merging", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "Discriminated union defined with a clear tag field and three variants",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "send() function uses narrowing (switch on tag) to access variant-specific fields",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "Justification given for interface vs type choice per variant",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Explains why interface allows third-party augmentation via declaration merging",
+        "weight": 1
+      }
     ],
     "hints": [
       "Discriminated union tag: `type NotificationType = 'email' | 'sms' | 'push'`. Each variant has `kind: 'email'` etc.",
@@ -360,4 +478,3 @@
     ]
   }
 }
-

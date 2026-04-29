@@ -1,7 +1,7 @@
 {
   "id": "ftp",
-  "unit": 3,
-  "order": 11,
+  "unit": 6,
+  "order": 47,
   "title": "FTP",
   "summary": "File Transfer Protocol: active vs passive mode, security issues, and SFTP/FTPS alternatives.",
   "prereqs": [

@@ -1,212 +1,468 @@
 {
   "id": "fin-technical-analysis",
-  "unit": 8,
-  "order": 51,
+  "unit": 15,
+  "order": 112,
   "title": "Technical Analysis",
   "summary": "Reading price charts, candlesticks, support/resistance, and technical indicators to time trades.",
-  "prereqs": ["fin-stock-market-basics"],
+  "prereqs": [
+    "fin-stock-market-basics"
+  ],
   "guide": "# Technical Analysis\n\nTechnical analysis (TA) is the study of **price and volume history** to forecast future price movement. It doesn't care *why* a company is valuable — only *what the chart is telling you*.\n\n**Motto:** \"The price discounts everything\" — a Dow Theory principle saying all known information is already reflected in the price.\n\n## Candlestick Charts\nEach candle represents one period (1min, 1hr, 1day). It contains:\n- **Open** — price at period start\n- **Close** — price at period end\n- **High / Low** — extremes during period\n- **Color**: Green/white = close > open (bullish). Red/black = close < open (bearish)\n- **Wicks/Shadows** — thin lines above/below the body showing high/low\n\n**Analogy:** A candle is like a battle report. The body shows who won (bulls vs bears). Long wicks show where the other side fought back.\n\n## Key Candlestick Patterns\n| Pattern | Meaning |\n|---|---|\n| **Doji** | Open ≈ Close; indecision |\n| **Hammer** | Long lower wick, small body; bullish reversal after downtrend |\n| **Shooting Star** | Long upper wick, small body; bearish reversal after uptrend |\n| **Engulfing** | Large candle body engulfs prior candle; strong reversal signal |\n| **Marubozu** | No wicks; complete dominance by one side |\n\n## Support and Resistance\n- **Support**: A price level where buying historically overwhelms selling (price 'bounces' up)\n- **Resistance**: A price level where selling overwhelms buying (price 'bounces' down)\n\n**Real-world scenario:** HDFC Bank repeatedly stalls at ₹1700. Traders who bought at ₹1700 previously now sell at breakeven when price returns — creating resistance. After a breakout (price closes above ₹1700), resistance becomes the new support.\n\n**Analogy:** Support = floor. Resistance = ceiling. Breakouts = floor becomes ceiling or ceiling becomes floor.\n\n## Trend Lines\n- **Uptrend**: Higher highs + higher lows. Draw line connecting lows.\n- **Downtrend**: Lower highs + lower lows. Draw line connecting highs.\n- **Sideways/Range-bound**: Price oscillates between support and resistance.\n\n## Moving Averages (MA)\n- **SMA (Simple MA)**: Average of closing prices over N days. Lags price.\n- **EMA (Exponential MA)**: Gives more weight to recent prices. Reacts faster.\n- **Golden Cross**: 50-day MA crosses above 200-day MA → bullish signal.\n- **Death Cross**: 50-day MA crosses below 200-day MA → bearish signal.\n\n## RSI (Relative Strength Index)\n- Oscillates 0–100. Measures speed and change of price movements.\n- **>70**: Overbought (potential price fall)\n- **<30**: Oversold (potential price rise)\n- RSI divergence (price makes new high but RSI doesn't) = warning signal.\n\n## MACD\n- MACD line = 12-day EMA − 26-day EMA\n- Signal line = 9-day EMA of MACD\n- **Crossover**: MACD crosses above signal → bullish. Below → bearish.\n- **Histogram**: Distance between MACD and signal line.\n\n## Volume\nVolume confirms moves. **High volume + price up = strong move.** High volume + price down = panic or distribution. Low volume on a breakout = weak, possibly false.\n\n## Common Pitfalls\n1. **Over-relying on a single indicator** — use confluence of signals.\n2. **Seeing patterns that aren't there** (apophenia) — human brain finds patterns in noise.\n3. **Ignoring the broader trend** — a bullish candlestick in a strong downtrend is unreliable.\n4. **Not placing stop losses** because the pattern looks 'perfect'.\n5. **Hindsight bias** — every chart looks obvious after the fact.\n\n## Mind Map\n- Technical Analysis\n  - Chart Types: Candlestick, Line, Bar\n  - Patterns: Hammer, Doji, Engulfing\n  - Levels: Support, Resistance, Trendlines\n  - Indicators: MA, RSI, MACD, Bollinger Bands\n  - Volume: Confirms or weakens signals\n\n## Connections\n- **Stock Market Basics** — need price/volume data from exchanges\n- **Options Trading** — TA heavily used for timing option entries\n- **Trading Psychology** — understanding WHY patterns repeat (crowd behavior)",
   "questions": [
     {
       "id": "fta-q1",
       "type": "mcq",
       "prompt": "In a candlestick chart, a green (bullish) candle means:",
-      "choices": ["Volume was high", "Close > Open", "The stock went up 5%+", "Open > Close"],
+      "choices": [
+        "Volume was high",
+        "Close > Open",
+        "The stock went up 5%+",
+        "Open > Close"
+      ],
       "answerIndex": 1,
       "explanation": "A green/white bullish candle means the closing price was higher than the opening price.",
-      "tags": ["candlesticks"]
+      "tags": [
+        "candlesticks"
+      ]
     },
     {
       "id": "fta-q2",
       "type": "mcq",
       "prompt": "RSI above 70 indicates:",
-      "choices": ["Oversold condition", "Overbought condition", "Rising volume", "Bullish MACD crossover"],
+      "choices": [
+        "Oversold condition",
+        "Overbought condition",
+        "Rising volume",
+        "Bullish MACD crossover"
+      ],
       "answerIndex": 1,
       "explanation": "RSI > 70 = overbought (may be due for pullback). RSI < 30 = oversold (may bounce).",
-      "tags": ["rsi", "indicators"]
+      "tags": [
+        "rsi",
+        "indicators"
+      ]
     },
     {
       "id": "fta-q3",
       "type": "mcq",
       "prompt": "What is a 'Golden Cross'?",
-      "choices": ["50-day MA crosses below 200-day MA", "RSI crosses 50", "50-day MA crosses above 200-day MA", "MACD hits zero"],
+      "choices": [
+        "50-day MA crosses below 200-day MA",
+        "RSI crosses 50",
+        "50-day MA crosses above 200-day MA",
+        "MACD hits zero"
+      ],
       "answerIndex": 2,
       "explanation": "Golden Cross = 50-day SMA crosses above 200-day SMA. Considered a bullish long-term signal.",
-      "tags": ["moving-averages"]
+      "tags": [
+        "moving-averages"
+      ]
     },
     {
       "id": "fta-q4",
       "type": "mcq",
       "prompt": "A 'Hammer' candlestick pattern, appearing after a downtrend, suggests:",
-      "choices": ["Continuation of downtrend", "Price is irrelevant", "Potential bullish reversal", "High volatility ahead"],
+      "choices": [
+        "Continuation of downtrend",
+        "Price is irrelevant",
+        "Potential bullish reversal",
+        "High volatility ahead"
+      ],
       "answerIndex": 2,
       "explanation": "A Hammer has a long lower wick (sellers drove price down but buyers pushed back) — bullish reversal signal after a downtrend.",
-      "tags": ["candlestick-patterns"]
+      "tags": [
+        "candlestick-patterns"
+      ]
     },
     {
       "id": "fta-q5",
       "type": "mcq",
       "prompt": "Resistance becoming support after a breakout is an example of:",
-      "choices": ["RSI divergence", "Role reversal in technical analysis", "Moving average crossover", "Fundamental rerating"],
+      "choices": [
+        "RSI divergence",
+        "Role reversal in technical analysis",
+        "Moving average crossover",
+        "Fundamental rerating"
+      ],
       "answerIndex": 1,
       "explanation": "When price breaks above resistance and retests it, that old resistance level often becomes new support — called role reversal.",
-      "tags": ["support-resistance"]
+      "tags": [
+        "support-resistance"
+      ]
     },
     {
       "id": "fta-q6",
       "type": "mcq",
       "prompt": "MACD is calculated as:",
-      "choices": ["12-day SMA minus 26-day SMA", "12-day EMA minus 26-day EMA", "RSI of closing prices", "Volume multiplied by price change"],
+      "choices": [
+        "12-day SMA minus 26-day SMA",
+        "12-day EMA minus 26-day EMA",
+        "RSI of closing prices",
+        "Volume multiplied by price change"
+      ],
       "answerIndex": 1,
       "explanation": "MACD = 12-day EMA − 26-day EMA. The Signal line is a 9-day EMA of MACD.",
-      "tags": ["macd", "indicators"]
+      "tags": [
+        "macd",
+        "indicators"
+      ]
     },
     {
       "id": "fta-q7",
       "type": "mcq",
       "prompt": "High volume on an upward price move indicates:",
-      "choices": ["Weak move, likely reversal", "Strong move, institutional participation", "Overbought condition", "Bearish divergence"],
+      "choices": [
+        "Weak move, likely reversal",
+        "Strong move, institutional participation",
+        "Overbought condition",
+        "Bearish divergence"
+      ],
       "answerIndex": 1,
       "explanation": "High volume confirms the move's strength — more participants are involved, making the move more reliable.",
-      "tags": ["volume"]
+      "tags": [
+        "volume"
+      ]
     },
     {
       "id": "fta-q8",
       "type": "multi",
       "prompt": "Which candlestick patterns indicate potential REVERSAL? (Select all that apply)",
-      "choices": ["Hammer", "Marubozu", "Doji", "Shooting Star", "Spinning Top"],
-      "answerIndexes": [0, 2, 3, 4],
+      "choices": [
+        "Hammer",
+        "Marubozu",
+        "Doji",
+        "Shooting Star",
+        "Spinning Top"
+      ],
+      "answerIndexes": [
+        0,
+        2,
+        3,
+        4
+      ],
       "explanation": "Hammer (bullish reversal), Doji (indecision/reversal), Shooting Star (bearish reversal), Spinning Top (indecision) are reversal signals. Marubozu is a continuation pattern.",
-      "tags": ["candlestick-patterns"]
+      "tags": [
+        "candlestick-patterns"
+      ]
     },
     {
       "id": "fta-q9",
       "type": "mcq",
       "prompt": "In an uptrend, the correct way to draw a trendline is:",
-      "choices": ["Connect the highs", "Connect the lows", "Connect closing prices", "Use a flat horizontal line"],
+      "choices": [
+        "Connect the highs",
+        "Connect the lows",
+        "Connect closing prices",
+        "Use a flat horizontal line"
+      ],
       "answerIndex": 1,
       "explanation": "In an uptrend, connect the series of higher lows. A break below this line signals potential trend reversal.",
-      "tags": ["trendlines"]
+      "tags": [
+        "trendlines"
+      ]
     },
     {
       "id": "fta-q10",
       "type": "mcq",
       "prompt": "EMA reacts faster to recent price changes than SMA because:",
-      "choices": ["It uses more data points", "It applies more weight to recent prices", "It includes volume data", "It adjusts for inflation"],
+      "choices": [
+        "It uses more data points",
+        "It applies more weight to recent prices",
+        "It includes volume data",
+        "It adjusts for inflation"
+      ],
       "answerIndex": 1,
       "explanation": "EMA uses exponential weighting — recent prices matter more than older ones, making it more responsive.",
-      "tags": ["moving-averages"]
+      "tags": [
+        "moving-averages"
+      ]
     },
     {
       "id": "fta-q11",
       "type": "fillBlank",
       "prompt": "The core principle of technical analysis is that the price ___ everything.",
-      "accepted": ["discounts", "reflects", "incorporates"],
+      "accepted": [
+        "discounts",
+        "reflects",
+        "incorporates"
+      ],
       "explanation": "Dow Theory states 'the market discounts everything' — all known info is baked into the current price.",
-      "tags": ["ta-principles"]
+      "tags": [
+        "ta-principles"
+      ]
     },
     {
       "id": "fta-q12",
       "type": "match",
       "prompt": "Match the indicator/pattern to its interpretation:",
-      "left": ["RSI < 30", "Golden Cross", "Shooting Star", "Doji"],
-      "right": ["Oversold — potential bounce", "Bullish long-term signal", "Bearish reversal signal", "Indecision in the market"],
-      "pairs": [[0,0],[1,1],[2,2],[3,3]],
+      "left": [
+        "RSI < 30",
+        "Golden Cross",
+        "Shooting Star",
+        "Doji"
+      ],
+      "right": [
+        "Oversold — potential bounce",
+        "Bullish long-term signal",
+        "Bearish reversal signal",
+        "Indecision in the market"
+      ],
+      "pairs": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          3
+        ]
+      ],
       "explanation": "Each maps to its standard textbook interpretation.",
-      "tags": ["indicators", "candlestick-patterns"]
+      "tags": [
+        "indicators",
+        "candlestick-patterns"
+      ]
     },
     {
       "id": "fta-q13",
       "type": "mcq",
       "prompt": "A 'Death Cross' occurs when:",
-      "choices": ["Price falls below support", "50-day MA crosses below 200-day MA", "RSI drops below 30", "MACD crosses below signal line"],
+      "choices": [
+        "Price falls below support",
+        "50-day MA crosses below 200-day MA",
+        "RSI drops below 30",
+        "MACD crosses below signal line"
+      ],
       "answerIndex": 1,
       "explanation": "Death Cross = bearish long-term signal. Opposite of Golden Cross.",
-      "tags": ["moving-averages"]
+      "tags": [
+        "moving-averages"
+      ]
     },
     {
       "id": "fta-q14",
       "type": "mcq",
       "prompt": "A breakout on LOW volume is considered:",
-      "choices": ["Very bullish", "Potentially false/unreliable", "Confirmation of trend", "Guaranteed resistance break"],
+      "choices": [
+        "Very bullish",
+        "Potentially false/unreliable",
+        "Confirmation of trend",
+        "Guaranteed resistance break"
+      ],
       "answerIndex": 1,
       "explanation": "Low volume breakouts lack conviction — fewer market participants support the move, making it more prone to false breakouts.",
-      "tags": ["volume", "breakouts"]
+      "tags": [
+        "volume",
+        "breakouts"
+      ]
     },
     {
       "id": "fta-q15",
       "type": "mcq",
       "prompt": "Bollinger Bands are primarily used to measure:",
-      "choices": ["Trend direction", "Volatility and price extremes", "Trading volume", "Dividend yield"],
+      "choices": [
+        "Trend direction",
+        "Volatility and price extremes",
+        "Trading volume",
+        "Dividend yield"
+      ],
       "answerIndex": 1,
       "explanation": "Bollinger Bands place two standard deviation lines around a moving average — wider bands = higher volatility.",
-      "tags": ["bollinger-bands", "volatility"]
+      "tags": [
+        "bollinger-bands",
+        "volatility"
+      ]
     },
     {
       "id": "fta-q16",
       "type": "mcq",
       "prompt": "RSI divergence (price makes new high, RSI does not) suggests:",
-      "choices": ["Strong uptrend confirmation", "Potential trend weakness/reversal", "Volume surge", "Time to buy more"],
+      "choices": [
+        "Strong uptrend confirmation",
+        "Potential trend weakness/reversal",
+        "Volume surge",
+        "Time to buy more"
+      ],
       "answerIndex": 1,
       "explanation": "Bearish divergence = price making new highs but RSI failing to confirm — momentum is waning, reversal possible.",
-      "tags": ["rsi", "divergence"]
+      "tags": [
+        "rsi",
+        "divergence"
+      ]
     },
     {
       "id": "fta-q17",
       "type": "mcq",
       "prompt": "Which indicator compares a stock's closing price to its price range over a period?",
-      "choices": ["MACD", "RSI", "Stochastic Oscillator", "OBV"],
+      "choices": [
+        "MACD",
+        "RSI",
+        "Stochastic Oscillator",
+        "OBV"
+      ],
       "answerIndex": 2,
       "explanation": "Stochastic Oscillator measures closing price vs high-low range over N periods, identifying overbought/oversold conditions.",
-      "tags": ["stochastic", "indicators"]
+      "tags": [
+        "stochastic",
+        "indicators"
+      ]
     },
     {
       "id": "fta-q18",
       "type": "mcq",
       "prompt": "A 'Marubozu' candle has:",
-      "choices": ["Very long wicks and small body", "No wicks — body spans the entire range", "Equal upper and lower wicks", "An open equal to its close"],
+      "choices": [
+        "Very long wicks and small body",
+        "No wicks — body spans the entire range",
+        "Equal upper and lower wicks",
+        "An open equal to its close"
+      ],
       "answerIndex": 1,
       "explanation": "Marubozu = candle with no wicks. Complete bulls or bears control — price never crossed outside the open-close range.",
-      "tags": ["candlestick-patterns"]
+      "tags": [
+        "candlestick-patterns"
+      ]
     },
     {
       "id": "fta-q19",
       "type": "mcq",
       "prompt": "Why might a trader use an EMA instead of an SMA?",
-      "choices": ["EMA is more accurate for forecasting", "EMA reacts faster to recent price changes", "EMA uses volume data", "EMA never gives false signals"],
+      "choices": [
+        "EMA is more accurate for forecasting",
+        "EMA reacts faster to recent price changes",
+        "EMA uses volume data",
+        "EMA never gives false signals"
+      ],
       "answerIndex": 1,
       "explanation": "EMA weighting makes it more responsive to recent moves — useful in fast-moving markets.",
-      "tags": ["moving-averages"]
+      "tags": [
+        "moving-averages"
+      ]
     },
     {
       "id": "fta-q20",
       "type": "mcq",
       "prompt": "Technical analysts PRIMARILY care about:",
-      "choices": ["Company earnings reports", "Balance sheet quality", "Historical price and volume data", "Interest rate movements"],
+      "choices": [
+        "Company earnings reports",
+        "Balance sheet quality",
+        "Historical price and volume data",
+        "Interest rate movements"
+      ],
       "answerIndex": 2,
       "explanation": "TA is purely chart-based — price and volume history. Fundamental data is for fundamental analysts.",
-      "tags": ["ta-principles"]
+      "tags": [
+        "ta-principles"
+      ]
     }
   ],
   "flashcards": [
-    { "id": "fta-fc1", "front": "Candlestick: Green body means?", "back": "Close > Open. Bullish candle — buyers were in control for that period.", "tags": ["candlesticks"] },
-    { "id": "fta-fc2", "front": "Support level", "back": "Price floor where buying historically overcomes selling. Price tends to bounce upward from here.", "tags": ["support-resistance"] },
-    { "id": "fta-fc3", "front": "RSI > 70 / RSI < 30", "back": ">70 = Overbought (potential pullback). <30 = Oversold (potential bounce). Not a guaranteed signal alone.", "tags": ["rsi"] },
-    { "id": "fta-fc4", "front": "Golden Cross vs Death Cross", "back": "Golden: 50MA crosses ABOVE 200MA (bullish). Death: 50MA crosses BELOW 200MA (bearish).", "tags": ["moving-averages"] },
-    { "id": "fta-fc5", "front": "Hammer candle", "back": "Small body at top, long lower wick. After downtrend = bullish reversal signal. Buyers fought back.", "tags": ["candlestick-patterns"] },
-    { "id": "fta-fc6", "front": "MACD calculation", "back": "MACD = 12-day EMA − 26-day EMA. Signal line = 9-day EMA of MACD. Crossovers give buy/sell signals.", "tags": ["macd"] },
-    { "id": "fta-fc7", "front": "Volume and price moves", "back": "High volume confirms a move. Low volume on breakout = suspect. Volume is the fuel for price movement.", "tags": ["volume"] },
-    { "id": "fta-fc8", "front": "Role Reversal", "back": "When price breaks through resistance and retests from above, old resistance becomes new support.", "tags": ["support-resistance"] }
+    {
+      "id": "fta-fc1",
+      "front": "Candlestick: Green body means?",
+      "back": "Close > Open. Bullish candle — buyers were in control for that period.",
+      "tags": [
+        "candlesticks"
+      ]
+    },
+    {
+      "id": "fta-fc2",
+      "front": "Support level",
+      "back": "Price floor where buying historically overcomes selling. Price tends to bounce upward from here.",
+      "tags": [
+        "support-resistance"
+      ]
+    },
+    {
+      "id": "fta-fc3",
+      "front": "RSI > 70 / RSI < 30",
+      "back": ">70 = Overbought (potential pullback). <30 = Oversold (potential bounce). Not a guaranteed signal alone.",
+      "tags": [
+        "rsi"
+      ]
+    },
+    {
+      "id": "fta-fc4",
+      "front": "Golden Cross vs Death Cross",
+      "back": "Golden: 50MA crosses ABOVE 200MA (bullish). Death: 50MA crosses BELOW 200MA (bearish).",
+      "tags": [
+        "moving-averages"
+      ]
+    },
+    {
+      "id": "fta-fc5",
+      "front": "Hammer candle",
+      "back": "Small body at top, long lower wick. After downtrend = bullish reversal signal. Buyers fought back.",
+      "tags": [
+        "candlestick-patterns"
+      ]
+    },
+    {
+      "id": "fta-fc6",
+      "front": "MACD calculation",
+      "back": "MACD = 12-day EMA − 26-day EMA. Signal line = 9-day EMA of MACD. Crossovers give buy/sell signals.",
+      "tags": [
+        "macd"
+      ]
+    },
+    {
+      "id": "fta-fc7",
+      "front": "Volume and price moves",
+      "back": "High volume confirms a move. Low volume on breakout = suspect. Volume is the fuel for price movement.",
+      "tags": [
+        "volume"
+      ]
+    },
+    {
+      "id": "fta-fc8",
+      "front": "Role Reversal",
+      "back": "When price breaks through resistance and retests from above, old resistance becomes new support.",
+      "tags": [
+        "support-resistance"
+      ]
+    }
   ],
   "project": {
     "brief": "**Design a Trade Plan:** You're looking at a daily chart of Reliance Industries. The stock has been in a downtrend for 3 months. This week, a Hammer candle formed exactly at a major support level (₹2,200 — tested 3 times). The 50-day EMA just crossed above the 200-day EMA (Golden Cross). RSI is at 35 (just below oversold). Volume on the Hammer day was 2x average.\n\nDesign a complete trade plan: entry trigger, position size logic, stop-loss, target, and what would invalidate your thesis. Also explain which signals give you confidence and which give you pause.",
     "checklist": [
-      { "id": "p1", "text": "Identify and explain all bullish signals present in the scenario", "weight": 20 },
-      { "id": "p2", "text": "Define a specific entry trigger (e.g., 'enter on next day's open if price holds above ₹2,220')", "weight": 15 },
-      { "id": "p3", "text": "Set a logical stop-loss level and explain why you chose it", "weight": 20 },
-      { "id": "p4", "text": "Define a price target and explain your risk:reward ratio", "weight": 20 },
-      { "id": "p5", "text": "List 2+ conditions that would invalidate your bullish thesis", "weight": 15 },
-      { "id": "p6", "text": "Explain the risk of acting on confluence alone (what TA can't predict)", "weight": 10 }
+      {
+        "id": "p1",
+        "text": "Identify and explain all bullish signals present in the scenario",
+        "weight": 20
+      },
+      {
+        "id": "p2",
+        "text": "Define a specific entry trigger (e.g., 'enter on next day's open if price holds above ₹2,220')",
+        "weight": 15
+      },
+      {
+        "id": "p3",
+        "text": "Set a logical stop-loss level and explain why you chose it",
+        "weight": 20
+      },
+      {
+        "id": "p4",
+        "text": "Define a price target and explain your risk:reward ratio",
+        "weight": 20
+      },
+      {
+        "id": "p5",
+        "text": "List 2+ conditions that would invalidate your bullish thesis",
+        "weight": 15
+      },
+      {
+        "id": "p6",
+        "text": "Explain the risk of acting on confluence alone (what TA can't predict)",
+        "weight": 10
+      }
     ],
     "hints": [
       "Multiple confirming signals at once (confluence) increase reliability — count them here.",
@@ -215,4 +471,3 @@
     ]
   }
 }
-

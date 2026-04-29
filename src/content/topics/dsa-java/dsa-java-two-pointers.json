@@ -1,14 +1,14 @@
 {
   "id": "dsa-java-two-pointers",
-  "unit": 9,
-  "order": 77,
+  "unit": 8,
+  "order": 78,
   "title": "Two Pointers in Java",
   "summary": "Converging pointers (two-sum, palindrome), same-direction pointers (remove duplicates, fast/slow), Dutch National Flag 3-way partition, and interval merging.",
   "prereqs": [
     "dsa-java-arrays",
     "dsa-java-sorting"
   ],
-  "guide": "# Two Pointers in Java\n\nThe two-pointer technique places two index variables into an array or string and moves them strategically \u2014 usually toward each other or in the same direction \u2014 to avoid a nested O(n\u00b2) loop. The core insight: **sorted order or a known invariant lets you decide which pointer to move without trying all combinations**.\n\n## Pattern 1 \u2014 Converging pointers on a sorted array\n```java\n// Picture two people walking toward each other from opposite ends.\n// If their sum is too small \u2192 left person steps right (increases sum).\n// If their sum is too large \u2192 right person steps left (decreases sum).\n// They meet exactly when no valid pair remains.\n//\n// Two Sum (sorted array):\nint[] twoSum(int[] nums, int target) {\n    int l = 0, r = nums.length - 1;\n    while (l < r) {\n        int sum = nums[l] + nums[r];\n        if      (sum == target) return new int[]{l, r};\n        else if (sum < target)  l++;  // need bigger sum \u2192 advance left\n        else                    r--;  // need smaller sum \u2192 retreat right\n    }\n    return new int[]{-1, -1};  // no pair found\n}\n// Time: O(n)   Space: O(1)  (vs O(n\u00b2) brute force)\n```\n\n## Pattern 2 \u2014 Same-direction pointers (fast/slow)\n```java\n// One pointer (fast) races ahead finding 'useful' elements;\n// the other (slow) marks where the next useful element should be placed.\n//\n// Remove duplicates from sorted array in-place:\n// slow = last position of deduplicated region\n// fast = scanner looking for new unique values\n//\n// [1, 1, 2, 3, 3, 4]\n//  s                        slow=0\n//     f                     nums[f]=1 == nums[s] \u2192 skip\n//        f                  nums[f]=2 != nums[s] \u2192 place at ++slow\n// [1, 2, 2, 3, 3, 4] (slow=1, continue...)\nint removeDuplicates(int[] nums) {\n    int slow = 0;\n    for (int fast = 1; fast < nums.length; fast++)\n        if (nums[fast] != nums[slow]) nums[++slow] = nums[fast];\n    return slow + 1;  // new length\n}\n```\n\n## Pattern 3 \u2014 Dutch National Flag (3-way partition)\n```java\n// Sort an array of 0s, 1s, and 2s in O(n) time O(1) space.\n//\n// Three regions maintained at every step:\n//  [0...low-1]   all 0s  (confirmed)\n//  [low...mid-1] all 1s  (confirmed)\n//  [mid...high]  unknown (unsorted territory)\n//  [high+1...n-1] all 2s  (confirmed)\n//\n// Visual: three hands squeezing inward until mid > high.\n//\nvoid sortColors(int[] nums) {\n    int low = 0, mid = 0, high = nums.length - 1;\n    while (mid <= high) {\n        if      (nums[mid] == 0) swap(nums, low++, mid++);  // 0: expand left zone\n        else if (nums[mid] == 1) mid++;                     // 1: already in place\n        else                     swap(nums, mid, high--);   // 2: send to right zone\n        // Note: mid does NOT increment after swapping with high \u2014\n        // the swapped element hasn't been examined yet!\n    }\n}\n```\n\n## Pattern 4 \u2014 Three Sum (sorted + converging inner pair)\n```java\n// Fix one element, then use converging two-pointer on the rest.\n// Sort first so duplicates are adjacent \u2014 easy to skip.\n//\nList<List<Integer>> threeSum(int[] nums) {\n    Arrays.sort(nums);\n    List<List<Integer>> res = new ArrayList<>();\n    for (int i = 0; i < nums.length - 2; i++) {\n        if (i > 0 && nums[i] == nums[i-1]) continue;  // skip duplicate anchor\n        int l = i + 1, r = nums.length - 1;\n        while (l < r) {\n            int sum = nums[i] + nums[l] + nums[r];\n            if      (sum == 0) {\n                res.add(Arrays.asList(nums[i], nums[l++], nums[r--]));\n                while (l < r && nums[l] == nums[l-1]) l++;  // skip duplicates\n                while (l < r && nums[r] == nums[r+1]) r--;  // skip duplicates\n            }\n            else if (sum < 0) l++;\n            else              r--;\n        }\n    }\n    return res;\n}\n```\n\n## Pattern 5 \u2014 Merging sorted intervals\n```java\n// Sort by start. Walk with one pointer, merging overlapping intervals.\n//\n// [1,3],[2,6],[8,10],[15,18]\n//  \u2514\u2500\u2500merge\u2500\u2500\u2518 \u2192 [1,6]\n//              [8,10] no overlap \u2192 keep\n//                     [15,18] no overlap \u2192 keep\n//\nint[][] merge(int[][] intervals) {\n    Arrays.sort(intervals, Comparator.comparingInt(a -> a[0]));\n    List<int[]> merged = new ArrayList<>();\n    for (int[] cur : intervals) {\n        if (merged.isEmpty() || merged.get(merged.size()-1)[1] < cur[0])\n            merged.add(cur);   // no overlap \u2014 add as new interval\n        else\n            merged.get(merged.size()-1)[1] = Math.max(merged.get(merged.size()-1)[1], cur[1]);\n    }\n    return merged.toArray(new int[0][]);\n}\n```\n\n## Common Pitfalls\n- Using converging two-pointer on an UNSORTED array \u2014 the sorted invariant is what makes the decision (advance l or retreat r) correct\n- Dutch National Flag: incrementing mid after swapping with high \u2014 the incoming element from high is unseen and could be anything\n- Three Sum: forgetting to skip duplicate anchor values at index i \u2014 produces duplicate triplets\n- Two Sum: the classic two-pointer only works for finding ONE pair; for ALL pairs use a loop with duplicate-skipping\n- Palindrome check: off-by-one \u2014 loop must be l < r not l <= r (single middle character is always a palindrome)\n\n## Connections\n- **Sorting**: converging two-pointer and interval merging require sorted input\n- **Arrays**: all patterns operate in-place with O(1) extra space\n- **Sliding Window**: sliding window IS two-pointer (same-direction) but with window state tracking\n- **Linked Lists**: fast/slow pointer on a linked list detects cycles and finds the middle",
+  "guide": "# Two Pointers in Java\n\nThe two-pointer technique places two index variables into an array or string and moves them strategically — usually toward each other or in the same direction — to avoid a nested O(n²) loop. The core insight: **sorted order or a known invariant lets you decide which pointer to move without trying all combinations**.\n\n## Pattern 1 — Converging pointers on a sorted array\n```java\n// Picture two people walking toward each other from opposite ends.\n// If their sum is too small → left person steps right (increases sum).\n// If their sum is too large → right person steps left (decreases sum).\n// They meet exactly when no valid pair remains.\n//\n// Two Sum (sorted array):\nint[] twoSum(int[] nums, int target) {\n    int l = 0, r = nums.length - 1;\n    while (l < r) {\n        int sum = nums[l] + nums[r];\n        if      (sum == target) return new int[]{l, r};\n        else if (sum < target)  l++;  // need bigger sum → advance left\n        else                    r--;  // need smaller sum → retreat right\n    }\n    return new int[]{-1, -1};  // no pair found\n}\n// Time: O(n)   Space: O(1)  (vs O(n²) brute force)\n```\n\n## Pattern 2 — Same-direction pointers (fast/slow)\n```java\n// One pointer (fast) races ahead finding 'useful' elements;\n// the other (slow) marks where the next useful element should be placed.\n//\n// Remove duplicates from sorted array in-place:\n// slow = last position of deduplicated region\n// fast = scanner looking for new unique values\n//\n// [1, 1, 2, 3, 3, 4]\n//  s                        slow=0\n//     f                     nums[f]=1 == nums[s] → skip\n//        f                  nums[f]=2 != nums[s] → place at ++slow\n// [1, 2, 2, 3, 3, 4] (slow=1, continue...)\nint removeDuplicates(int[] nums) {\n    int slow = 0;\n    for (int fast = 1; fast < nums.length; fast++)\n        if (nums[fast] != nums[slow]) nums[++slow] = nums[fast];\n    return slow + 1;  // new length\n}\n```\n\n## Pattern 3 — Dutch National Flag (3-way partition)\n```java\n// Sort an array of 0s, 1s, and 2s in O(n) time O(1) space.\n//\n// Three regions maintained at every step:\n//  [0...low-1]   all 0s  (confirmed)\n//  [low...mid-1] all 1s  (confirmed)\n//  [mid...high]  unknown (unsorted territory)\n//  [high+1...n-1] all 2s  (confirmed)\n//\n// Visual: three hands squeezing inward until mid > high.\n//\nvoid sortColors(int[] nums) {\n    int low = 0, mid = 0, high = nums.length - 1;\n    while (mid <= high) {\n        if      (nums[mid] == 0) swap(nums, low++, mid++);  // 0: expand left zone\n        else if (nums[mid] == 1) mid++;                     // 1: already in place\n        else                     swap(nums, mid, high--);   // 2: send to right zone\n        // Note: mid does NOT increment after swapping with high —\n        // the swapped element hasn't been examined yet!\n    }\n}\n```\n\n## Pattern 4 — Three Sum (sorted + converging inner pair)\n```java\n// Fix one element, then use converging two-pointer on the rest.\n// Sort first so duplicates are adjacent — easy to skip.\n//\nList<List<Integer>> threeSum(int[] nums) {\n    Arrays.sort(nums);\n    List<List<Integer>> res = new ArrayList<>();\n    for (int i = 0; i < nums.length - 2; i++) {\n        if (i > 0 && nums[i] == nums[i-1]) continue;  // skip duplicate anchor\n        int l = i + 1, r = nums.length - 1;\n        while (l < r) {\n            int sum = nums[i] + nums[l] + nums[r];\n            if      (sum == 0) {\n                res.add(Arrays.asList(nums[i], nums[l++], nums[r--]));\n                while (l < r && nums[l] == nums[l-1]) l++;  // skip duplicates\n                while (l < r && nums[r] == nums[r+1]) r--;  // skip duplicates\n            }\n            else if (sum < 0) l++;\n            else              r--;\n        }\n    }\n    return res;\n}\n```\n\n## Pattern 5 — Merging sorted intervals\n```java\n// Sort by start. Walk with one pointer, merging overlapping intervals.\n//\n// [1,3],[2,6],[8,10],[15,18]\n//  └──merge──┘ → [1,6]\n//              [8,10] no overlap → keep\n//                     [15,18] no overlap → keep\n//\nint[][] merge(int[][] intervals) {\n    Arrays.sort(intervals, Comparator.comparingInt(a -> a[0]));\n    List<int[]> merged = new ArrayList<>();\n    for (int[] cur : intervals) {\n        if (merged.isEmpty() || merged.get(merged.size()-1)[1] < cur[0])\n            merged.add(cur);   // no overlap — add as new interval\n        else\n            merged.get(merged.size()-1)[1] = Math.max(merged.get(merged.size()-1)[1], cur[1]);\n    }\n    return merged.toArray(new int[0][]);\n}\n```\n\n## Common Pitfalls\n- Using converging two-pointer on an UNSORTED array — the sorted invariant is what makes the decision (advance l or retreat r) correct\n- Dutch National Flag: incrementing mid after swapping with high — the incoming element from high is unseen and could be anything\n- Three Sum: forgetting to skip duplicate anchor values at index i — produces duplicate triplets\n- Two Sum: the classic two-pointer only works for finding ONE pair; for ALL pairs use a loop with duplicate-skipping\n- Palindrome check: off-by-one — loop must be l < r not l <= r (single middle character is always a palindrome)\n\n## Connections\n- **Sorting**: converging two-pointer and interval merging require sorted input\n- **Arrays**: all patterns operate in-place with O(1) extra space\n- **Sliding Window**: sliding window IS two-pointer (same-direction) but with window state tracking\n- **Linked Lists**: fast/slow pointer on a linked list detects cycles and finds the middle",
   "questions": [
     {
       "id": "djtp-q1",
@@ -31,7 +31,7 @@
       "type": "mcq",
       "prompt": "Two Sum (sorted array) two-pointer time complexity:",
       "choices": [
-        "O(n\u00b2)",
+        "O(n²)",
         "O(n log n)",
         "O(n)",
         "O(1)"
@@ -46,7 +46,7 @@
       "id": "djtp-q3",
       "type": "codeOutput",
       "prompt": "Two Sum on sorted [1,2,3,4,6], target=6. Pair:",
-      "code": "// l=0(1) r=4(6): sum=7 > 6 \u2192 r--\n// l=0(1) r=3(4): sum=5 < 6 \u2192 l++\n// l=1(2) r=3(4): sum=6 == 6 \u2192 found",
+      "code": "// l=0(1) r=4(6): sum=7 > 6 → r--\n// l=0(1) r=3(4): sum=5 < 6 → l++\n// l=1(2) r=3(4): sum=6 == 6 → found",
       "choices": [
         "[0,4]",
         "[1,3]",
@@ -66,7 +66,7 @@
       "prompt": "Same-direction slow/fast pointers: slow marks:",
       "choices": [
         "The last examined element",
-        "The boundary of the 'processed and valid' region \u2014 where the next accepted element should go",
+        "The boundary of the 'processed and valid' region — where the next accepted element should go",
         "The middle of the array",
         "The pivot"
       ],
@@ -80,7 +80,7 @@
       "id": "djtp-q5",
       "type": "codeOutput",
       "prompt": "Remove duplicates from [1,1,2,3,3]. New length:",
-      "code": "// slow=0\n// fast scans: 1(dup skip), 2(write\u2192slow=1), 3(write\u2192slow=2), 3(dup skip)\n// slow+1 = 3",
+      "code": "// slow=0\n// fast scans: 1(dup skip), 2(write→slow=1), 3(write→slow=2), 3(dup skip)\n// slow+1 = 3",
       "choices": [
         "2",
         "3",
@@ -88,7 +88,7 @@
         "5"
       ],
       "answerIndex": 1,
-      "explanation": "Unique elements: 1,2,3 \u2014 length 3.",
+      "explanation": "Unique elements: 1,2,3 — length 3.",
       "tags": [
         "same-direction",
         "tracing"
@@ -116,12 +116,12 @@
       "prompt": "Dutch Flag: after swap(nums, mid, high--), mid is NOT incremented because:",
       "choices": [
         "It is an off-by-one error",
-        "The element swapped from high is unseen \u2014 it could be 0, 1, or 2 and must be examined next",
+        "The element swapped from high is unseen — it could be 0, 1, or 2 and must be examined next",
         "high-- already advances the pointer",
         "It causes an infinite loop otherwise"
       ],
       "answerIndex": 1,
-      "explanation": "You just received an unknown element at mid from the right zone \u2014 you haven't processed it yet.",
+      "explanation": "You just received an unknown element at mid from the right zone — you haven't processed it yet.",
       "tags": [
         "dutch-flag"
       ]
@@ -130,7 +130,7 @@
       "id": "djtp-q8",
       "type": "codeOutput",
       "prompt": "Dutch Flag on [2,0,1]. Final array:",
-      "code": "// mid=0,low=0,high=2\n// nums[0]=2 \u2192 swap(0,high=2) \u2192 [1,0,2] high=1\n// nums[0]=1 \u2192 mid++ \u2192 [1,0,2] mid=1\n// nums[1]=0 \u2192 swap(low=0,mid=1) \u2192 [0,1,2] low=1,mid=2\n// mid>high \u2192 done",
+      "code": "// mid=0,low=0,high=2\n// nums[0]=2 → swap(0,high=2) → [1,0,2] high=1\n// nums[0]=1 → mid++ → [1,0,2] mid=1\n// nums[1]=0 → swap(low=0,mid=1) → [0,1,2] low=1,mid=2\n// mid>high → done",
       "choices": [
         "[0,1,2]",
         "[2,1,0]",
@@ -149,13 +149,13 @@
       "type": "mcq",
       "prompt": "Palindrome check using two pointers:",
       "choices": [
-        "O(n) time O(n) space \u2014 copy reverse",
-        "O(n) time O(1) space \u2014 converging l and r",
-        "O(n\u00b2) time",
+        "O(n) time O(n) space — copy reverse",
+        "O(n) time O(1) space — converging l and r",
+        "O(n²) time",
         "O(log n) time"
       ],
       "answerIndex": 1,
-      "explanation": "l starts at 0, r at n-1. Compare and move inward \u2014 O(n) single pass, no extra array.",
+      "explanation": "l starts at 0, r at n-1. Compare and move inward — O(n) single pass, no extra array.",
       "tags": [
         "palindrome"
       ]
@@ -183,11 +183,11 @@
       "choices": [
         "O(n)",
         "O(n log n)",
-        "O(n\u00b2)",
-        "O(n\u00b3)"
+        "O(n²)",
+        "O(n³)"
       ],
       "answerIndex": 2,
-      "explanation": "Outer loop O(n) \u00d7 inner two-pointer O(n) = O(n\u00b2). Sorting is O(n log n) \u2014 dominated by O(n\u00b2).",
+      "explanation": "Outer loop O(n) × inner two-pointer O(n) = O(n²). Sorting is O(n log n) — dominated by O(n²).",
       "tags": [
         "complexity"
       ]
@@ -198,12 +198,12 @@
       "prompt": "Interval merging: you sort by interval start because:",
       "choices": [
         "End time is irrelevant",
-        "Intervals that could overlap are adjacent after sorting \u2014 single forward scan suffices",
+        "Intervals that could overlap are adjacent after sorting — single forward scan suffices",
         "It produces the output in order",
         "Binary search requires it"
       ],
       "answerIndex": 1,
-      "explanation": "Sorting ensures the next interval either overlaps the current one (starts \u2264 current end) or is definitively separate.",
+      "explanation": "Sorting ensures the next interval either overlaps the current one (starts ≤ current end) or is definitively separate.",
       "tags": [
         "intervals"
       ]
@@ -228,7 +228,7 @@
       "id": "djtp-q14",
       "type": "codeOutput",
       "prompt": "Merge [[1,3],[2,6],[8,10],[15,18]]. Count of merged intervals:",
-      "code": "// [1,3]+[2,6]\u2192[1,6]  [8,10]  [15,18]\n// 3 merged intervals",
+      "code": "// [1,3]+[2,6]→[1,6]  [8,10]  [15,18]\n// 3 merged intervals",
       "choices": [
         "2",
         "3",
@@ -236,7 +236,7 @@
         "1"
       ],
       "answerIndex": 1,
-      "explanation": "[1,6], [8,10], [15,18] \u2014 three non-overlapping merged intervals.",
+      "explanation": "[1,6], [8,10], [15,18] — three non-overlapping merged intervals.",
       "tags": [
         "intervals",
         "tracing"
@@ -248,12 +248,12 @@
       "prompt": "Container With Most Water uses converging pointers because:",
       "choices": [
         "It needs the maximum",
-        "Moving the shorter side inward is the only direction that can increase area \u2014 moving the taller side can only decrease it",
+        "Moving the shorter side inward is the only direction that can increase area — moving the taller side can only decrease it",
         "The array is sorted",
         "It is always O(log n)"
       ],
       "answerIndex": 1,
-      "explanation": "Area = min(height[l], height[r]) \u00d7 (r-l). The width shrinks by 1 each step, so you must try to increase the height by moving the shorter side.",
+      "explanation": "Area = min(height[l], height[r]) × (r-l). The width shrinks by 1 each step, so you must try to increase the height by moving the shorter side.",
       "tags": [
         "applications"
       ]
@@ -262,7 +262,7 @@
       "id": "djtp-q16",
       "type": "codeOutput",
       "prompt": "Container With Most Water on heights [1,8,6,2,5,4,8,3,7]. Max area:",
-      "code": "// Best: l=1(h=8), r=8(h=7) \u2192 min(8,7)\u00d77=49\n// vs l=0,r=8: min(1,7)\u00d78=8",
+      "code": "// Best: l=1(h=8), r=8(h=7) → min(8,7)×7=49\n// vs l=0,r=8: min(1,7)×8=8",
       "choices": [
         "49",
         "56",
@@ -270,7 +270,7 @@
         "36"
       ],
       "answerIndex": 0,
-      "explanation": "Indices 1 and 8 with heights 8 and 7: area = 7 \u00d7 7 = 49.",
+      "explanation": "Indices 1 and 8 with heights 8 and 7: area = 7 × 7 = 49.",
       "tags": [
         "applications",
         "tracing"
@@ -306,7 +306,7 @@
         0,
         1
       ],
-      "explanation": "Remove duplicates already receives a sorted array (problem guarantee). Dutch Flag sorts via the algorithm itself \u2014 no pre-sort needed. Two Sum and Three Sum need intentional sorting.",
+      "explanation": "Remove duplicates already receives a sorted array (problem guarantee). Dutch Flag sorts via the algorithm itself — no pre-sort needed. Two Sum and Three Sum need intentional sorting.",
       "tags": [
         "prerequisites"
       ]
@@ -316,10 +316,10 @@
       "type": "mcq",
       "prompt": "Trapping Rain Water optimal solution:",
       "choices": [
-        "O(n) two-pointer \u2014 l and r converge, tracking max heights from each side",
+        "O(n) two-pointer — l and r converge, tracking max heights from each side",
         "O(n) prefix/suffix max arrays",
         "O(n log n) sort then scan",
-        "Both A and B are O(n) \u2014 two-pointer uses O(1) space vs O(n)"
+        "Both A and B are O(n) — two-pointer uses O(1) space vs O(n)"
       ],
       "answerIndex": 3,
       "explanation": "Prefix/suffix approach O(n) space. Two-pointer achieves same in O(1) space by processing the shorter column first.",
@@ -333,7 +333,7 @@
       "prompt": "Two pointers fail (give wrong answer) on an unsorted array for two-sum because:",
       "choices": [
         "They are too slow",
-        "Without sorted order, you cannot determine which pointer to move \u2014 a small left value paired with a small right value could match, but moving either pointer might skip the answer",
+        "Without sorted order, you cannot determine which pointer to move — a small left value paired with a small right value could match, but moving either pointer might skip the answer",
         "Negative numbers break it",
         "Arrays must always be sorted in Java"
       ],
@@ -396,7 +396,7 @@
     {
       "id": "djtp-fc7",
       "front": "Container With Most Water",
-      "back": "Move the SHORTER side inward \u2014 only way to potentially increase area.",
+      "back": "Move the SHORTER side inward — only way to potentially increase area.",
       "tags": [
         "two-pointers"
       ]
@@ -411,7 +411,7 @@
     }
   ],
   "project": {
-    "brief": "Write TwoPointersLab.java with:\n1. twoSum(int[] sorted, int target) \u2192 int[]  (converging, sorted input)\n2. removeDuplicates(int[] nums) \u2192 int  (in-place, sorted)\n3. sortColors(int[] nums)  (Dutch National Flag, in-place)\n4. threeSum(int[] nums) \u2192 List<List<Integer>>  (all unique triplets)\n5. merge(int[][] intervals) \u2192 int[][]  (sorted merged intervals)\n6. maxArea(int[] height) \u2192 int  (container with most water)\nInclude main() tests: all zeros, all same, no valid pair, single interval, already merged.",
+    "brief": "Write TwoPointersLab.java with:\n1. twoSum(int[] sorted, int target) → int[]  (converging, sorted input)\n2. removeDuplicates(int[] nums) → int  (in-place, sorted)\n3. sortColors(int[] nums)  (Dutch National Flag, in-place)\n4. threeSum(int[] nums) → List<List<Integer>>  (all unique triplets)\n5. merge(int[][] intervals) → int[][]  (sorted merged intervals)\n6. maxArea(int[] height) → int  (container with most water)\nInclude main() tests: all zeros, all same, no valid pair, single interval, already merged.",
     "checklist": [
       {
         "id": "c1",
@@ -445,9 +445,9 @@
       }
     ],
     "hints": [
-      "sortColors: while(mid <= high) is the loop condition \u2014 not mid < high.",
+      "sortColors: while(mid <= high) is the loop condition — not mid < high.",
       "threeSum: after adding a triplet, advance both l++ and r-- then skip while duplicates.",
-      "merge: the overlap condition is intervals[i][0] <= last[1] \u2014 not strictly less than."
+      "merge: the overlap condition is intervals[i][0] <= last[1] — not strictly less than."
     ]
   }
 }

@@ -1,7 +1,7 @@
 {
   "id": "angular-routing",
-  "unit": 10,
-  "order": 102,
+  "unit": 5,
+  "order": 42,
   "title": "Angular Routing",
   "summary": "Route configuration, lazy loading, route guards, resolvers, and navigation with Angular Router.",
   "prereqs": [
@@ -15,7 +15,7 @@
       "prompt": "Why must `{ path: '**' }` be last?",
       "choices": [
         "TypeScript requirement",
-        "Angular matches top-to-bottom \u2014 wildcard first catches all URLs",
+        "Angular matches top-to-bottom — wildcard first catches all URLs",
         "Optional",
         "Wildcards deprecated"
       ],
@@ -31,7 +31,7 @@
       "prompt": "Main benefit of lazy-loaded routes?",
       "choices": [
         "Cache busting",
-        "Smaller initial bundle \u2014 route code downloads on first visit",
+        "Smaller initial bundle — route code downloads on first visit",
         "Faster requests",
         "Enables guards"
       ],
@@ -66,7 +66,7 @@
       "choices": [
         "Redirects to home",
         "Destroys component",
-        "Blocks navigation \u2014 page stays blank unless redirected",
+        "Blocks navigation — page stays blank unless redirected",
         "Logs warning"
       ],
       "answerIndex": 2,
@@ -98,7 +98,7 @@
       "prompt": "Route Resolver purpose?",
       "choices": [
         "Guards access",
-        "Pre-fetches data before component activates \u2014 available synchronously in snapshot.data",
+        "Pre-fetches data before component activates — available synchronously in snapshot.data",
         "Type-checks params",
         "Handles 404"
       ],
@@ -193,7 +193,9 @@
       ],
       "answerIndex": 1,
       "explanation": "By default Angular uses prefix matching. '' is a prefix of every URL, so without pathMatch:'full' every navigation triggers the redirect.",
-      "tags": ["routing"]
+      "tags": [
+        "routing"
+      ]
     },
     {
       "id": "aro-q12",
@@ -207,7 +209,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Nested routes require the parent component to have its own <router-outlet>. The child renders there, not in the root outlet.",
-      "tags": ["routing", "nested-routes"]
+      "tags": [
+        "routing",
+        "nested-routes"
+      ]
     },
     {
       "id": "aro-q13",
@@ -221,7 +226,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Preloading is a background optimization. The app still only executes modules when navigated to, but the JS is already downloaded.",
-      "tags": ["routing", "lazy-loading"]
+      "tags": [
+        "routing",
+        "lazy-loading"
+      ]
     },
     {
       "id": "aro-q14",
@@ -236,7 +244,10 @@
       ],
       "answerIndex": 1,
       "explanation": "snapshot is taken once at component activation. If Angular reuses the component for a new param, snapshot is stale. Subscribe to paramMap Observable instead.",
-      "tags": ["routing", "route-params"]
+      "tags": [
+        "routing",
+        "route-params"
+      ]
     },
     {
       "id": "aro-q15",
@@ -248,9 +259,15 @@
         "Make data available synchronously in snapshot.data",
         "Cancel navigation on error"
       ],
-      "answerIndexes": [0, 2],
+      "answerIndexes": [
+        0,
+        2
+      ],
       "explanation": "Resolvers pre-fetch data (guaranteed available in snapshot.data). They do NOT guard access — that's canActivate. They can cancel by returning EMPTY.",
-      "tags": ["routing", "resolver"]
+      "tags": [
+        "routing",
+        "resolver"
+      ]
     },
     {
       "id": "aro-q16",
@@ -264,7 +281,10 @@
       ],
       "answerIndex": 1,
       "explanation": "canActivateChild is placed on the parent route and fires before any of its children activate, without listing the guard on each child individually.",
-      "tags": ["routing", "guards"]
+      "tags": [
+        "routing",
+        "guards"
+      ]
     },
     {
       "id": "aro-q17",
@@ -278,7 +298,9 @@
       ],
       "answerIndex": 2,
       "explanation": "Array syntax: each element is a path segment. Variables are interpolated. Result: /user/42/details.",
-      "tags": ["routing"]
+      "tags": [
+        "routing"
+      ]
     },
     {
       "id": "aro-q18",
@@ -292,7 +314,10 @@
       ],
       "answerIndex": 0,
       "explanation": "canMatch gates the route matching phase. If it returns false/UrlTree, Angular continues to the next route definition. Enables role-based route tables.",
-      "tags": ["routing", "guards"]
+      "tags": [
+        "routing",
+        "guards"
+      ]
     },
     {
       "id": "aro-q19",
@@ -307,7 +332,10 @@
       ],
       "answerIndex": 2,
       "explanation": "false simply blocks navigation with no redirect. The URL may update but no component renders. Always return a UrlTree to redirect.",
-      "tags": ["routing", "guards"]
+      "tags": [
+        "routing",
+        "guards"
+      ]
     },
     {
       "id": "aro-q20",
@@ -321,7 +349,9 @@
       ],
       "answerIndex": 1,
       "explanation": "forRoot creates the singleton Router + directive providers. forChild adds routes to the existing router. Calling forRoot in a lazy module creates a second Router — breaks app.",
-      "tags": ["routing"]
+      "tags": [
+        "routing"
+      ]
     }
   ],
   "flashcards": [
@@ -380,13 +410,18 @@
       "id": "aro-fc7",
       "front": "pathMatch: 'full'",
       "back": "Required on empty path redirects. Without it, '' prefix-matches every URL. With it, only matches exactly ''. Essential for { path: '', redirectTo: '/home' }.",
-      "tags": ["routing"]
+      "tags": [
+        "routing"
+      ]
     },
     {
       "id": "aro-fc8",
       "front": "canMatch vs canActivate",
       "back": "canActivate: blocks after route matched. canMatch: fires before matching — false makes Angular skip to next route definition. Enables role-partitioned route tables.",
-      "tags": ["routing", "guards"]
+      "tags": [
+        "routing",
+        "guards"
+      ]
     }
   ],
   "project": {

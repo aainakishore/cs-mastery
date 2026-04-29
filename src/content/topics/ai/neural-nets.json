@@ -1,7 +1,7 @@
 {
   "id": "neural-nets",
-  "unit": 2,
-  "order": 6,
+  "unit": 7,
+  "order": 56,
   "title": "Neural Nets and Backprop Intuition",
   "summary": "Master Neural Nets and Backprop Intuition: trade-offs, failure modes, and production patterns.",
   "prereqs": [

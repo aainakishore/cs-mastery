@@ -1,7 +1,7 @@
 {
   "id": "angular-standalone",
-  "unit": 10,
-  "order": 105,
+  "unit": 5,
+  "order": 45,
   "title": "Angular Standalone Components",
   "summary": "Standalone components and directives, bootstrapping without NgModule, functional providers, and migration.",
   "prereqs": [
@@ -16,7 +16,7 @@
       "prompt": "What does `standalone: true` enable?",
       "choices": [
         "Run outside Angular",
-        "Component declares its own deps in imports[] \u2014 no NgModule needed",
+        "Component declares its own deps in imports[] — no NgModule needed",
         "Lazy-loads by default",
         "AOT-compiled only"
       ],
@@ -49,7 +49,7 @@
       "prompt": "Why import NgIf/NgFor individually instead of CommonModule?",
       "choices": [
         "Faster execution",
-        "Tree-shaking \u2014 unused directives/pipes in CommonModule won't be bundled",
+        "Tree-shaking — unused directives/pipes in CommonModule won't be bundled",
         "Required for standalone",
         "CommonModule deprecated"
       ],
@@ -105,7 +105,7 @@
         "Bridge module required"
       ],
       "answerIndex": 1,
-      "explanation": "Standalone components go in NgModule.imports \u2014 enables incremental migration.",
+      "explanation": "Standalone components go in NgModule.imports — enables incremental migration.",
       "tags": [
         "standalone",
         "migration"
@@ -117,12 +117,12 @@
       "prompt": "TestBed for standalone component?",
       "choices": [
         "declarations: [Comp]",
-        "imports: [Comp] \u2014 brings own deps",
+        "imports: [Comp] — brings own deps",
         "TestBed.overrideComponent only",
         "No TestBed needed"
       ],
       "answerIndex": 1,
-      "explanation": "Standalone components are imported \u2014 they bring their own dependencies.",
+      "explanation": "Standalone components are imported — they bring their own dependencies.",
       "tags": [
         "standalone",
         "testing"
@@ -196,7 +196,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Module-scoped services created a new instance per lazy-loaded module. providedIn: 'root' makes one singleton. This is a behavior change that can cause state leaks between feature areas.",
-      "tags": ["standalone", "migration"]
+      "tags": [
+        "standalone",
+        "migration"
+      ]
     },
     {
       "id": "ast-q12",
@@ -210,7 +213,10 @@
       ],
       "answerIndex": 2,
       "explanation": "@if/@for are compiled syntax, not directives. No runtime import needed. This is a key advantage over *ngIf/*ngFor.",
-      "tags": ["standalone", "tree-shaking"]
+      "tags": [
+        "standalone",
+        "tree-shaking"
+      ]
     },
     {
       "id": "ast-q13",
@@ -224,7 +230,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Only standalone classes can go directly in imports[]. Legacy pipes/directives need a module wrapper that exports them. Incremental migration allows this.",
-      "tags": ["standalone", "migration"]
+      "tags": [
+        "standalone",
+        "migration"
+      ]
     },
     {
       "id": "ast-q14",
@@ -239,7 +248,9 @@
       ],
       "answerIndex": 1,
       "explanation": "Standalone components go in NgModule.imports[], not declarations[]. Angular throws a compile-time error if you try to declare them.",
-      "tags": ["standalone"]
+      "tags": [
+        "standalone"
+      ]
     },
     {
       "id": "ast-q15",
@@ -251,9 +262,15 @@
         "Non-standalone components directly",
         "Standalone pipes and directives"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Standalone imports[] accepts: standalone components, standalone directives, standalone pipes, and NgModules. Non-standalone items need to be wrapped in an NgModule first.",
-      "tags": ["standalone"]
+      "tags": [
+        "standalone"
+      ]
     },
     {
       "id": "ast-q16",
@@ -267,7 +284,10 @@
       ],
       "answerIndex": 1,
       "explanation": "withInterceptors takes functional interceptors: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn) => Observable<HttpEvent<unknown>>",
-      "tags": ["standalone", "HttpClient"]
+      "tags": [
+        "standalone",
+        "HttpClient"
+      ]
     },
     {
       "id": "ast-q17",
@@ -281,7 +301,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Override the parent standalone component's imports array via TestBed.overrideComponent with set.imports containing the mock.",
-      "tags": ["standalone", "testing"]
+      "tags": [
+        "standalone",
+        "testing"
+      ]
     },
     {
       "id": "ast-q18",
@@ -295,7 +318,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Leaf components have no sub-components to worry about. Converting them first means their parents' imports lists only need updating once, not multiple times.",
-      "tags": ["standalone", "migration"]
+      "tags": [
+        "standalone",
+        "migration"
+      ]
     },
     {
       "id": "ast-q19",
@@ -310,7 +336,9 @@
       ],
       "answerIndex": 2,
       "explanation": "Standalone components must go in imports[], not declarations[]. Angular enforces this at compile time.",
-      "tags": ["standalone"]
+      "tags": [
+        "standalone"
+      ]
     },
     {
       "id": "ast-q20",
@@ -322,9 +350,15 @@
         "Fewer zone.js patches",
         "Simpler lazy loading via loadComponent"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "Standalone enables explicit per-component deps, better tree-shaking from granular imports, and simpler lazy loading. Zone.js behavior is independent of standalone.",
-      "tags": ["standalone"]
+      "tags": [
+        "standalone"
+      ]
     }
   ],
   "flashcards": [
@@ -385,13 +419,19 @@
       "id": "ast-fc7",
       "front": "Standalone in NgModule",
       "back": "Add to NgModule.imports[] — NOT declarations[]. This enables incremental migration: use standalone components inside legacy NgModule apps immediately.",
-      "tags": ["standalone", "migration"]
+      "tags": [
+        "standalone",
+        "migration"
+      ]
     },
     {
       "id": "ast-fc8",
       "front": "Angular @if / @for",
       "back": "Angular 17+ built-in control flow syntax. No import needed — compiled directly. Replaces *ngIf/*ngFor. No NgIf/NgFor in imports[] required.",
-      "tags": ["standalone", "tree-shaking"]
+      "tags": [
+        "standalone",
+        "tree-shaking"
+      ]
     }
   ],
   "project": {
@@ -414,17 +454,17 @@
       },
       {
         "id": "c4",
-        "text": "Routing: loadChildren \u2192 import('./product.routes').then(m => m.productRoutes)",
+        "text": "Routing: loadChildren → import('./product.routes').then(m => m.productRoutes)",
         "weight": 1
       },
       {
         "id": "c5",
-        "text": "ProductService: providedIn: root \u2192 global singleton (behavior change from module-scoped)",
+        "text": "ProductService: providedIn: root → global singleton (behavior change from module-scoped)",
         "weight": 1
       }
     ],
     "hints": [
-      "Start with leaf components \u2014 simplest imports.",
+      "Start with leaf components — simplest imports.",
       "ProductService was module-scoped (new instance per lazy load). providedIn:root makes it a global singleton.",
       "Routes file (no module): export const productRoutes: Routes = [...]"
     ]

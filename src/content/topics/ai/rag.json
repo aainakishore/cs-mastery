@@ -1,7 +1,7 @@
 {
   "id": "rag",
-  "unit": 6,
-  "order": 34,
+  "unit": 11,
+  "order": 95,
   "title": "RAG - Retrieval-Augmented Generation",
   "summary": "Master RAG - Retrieval-Augmented Generation: trade-offs, failure modes, and production patterns.",
   "prereqs": [

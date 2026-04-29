@@ -1,7 +1,7 @@
 {
   "id": "cloud-fundamentals",
-  "unit": 5,
-  "order": 25,
+  "unit": 10,
+  "order": 86,
   "title": "Cloud Fundamentals",
   "summary": "Master Cloud Fundamentals: trade-offs, failure modes, and production patterns.",
   "prereqs": [

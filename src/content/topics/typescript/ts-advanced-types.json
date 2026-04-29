@@ -1,10 +1,12 @@
 {
   "id": "ts-advanced-types",
-  "unit": 10,
-  "order": 84,
+  "unit": 3,
+  "order": 24,
   "title": "TypeScript Advanced Types",
   "summary": "Conditional types, mapped types, template literal types, and the `infer` keyword — the type-level programming layer of TypeScript.",
-  "prereqs": ["ts-utility-types"],
+  "prereqs": [
+    "ts-utility-types"
+  ],
   "guide": "# TypeScript Advanced Types\n\nAdvanced types are where TypeScript becomes a **type-level programming language**. You can write logic — conditionals, loops (mapped types), string manipulation (template literals) — but all of it runs at compile time on types, producing zero JavaScript output.\n\n## Conditional Types\n\nThe mental model: a ternary expression for types.\n\n```\nT extends U ? TrueType : FalseType\n\n'Is T assignable to U?'\nYes → resolve to TrueType\nNo  → resolve to FalseType\n\nExample trace:\n  type IsString<T> = T extends string ? 'yes' : 'no';\n  IsString<string>   → 'yes'\n  IsString<number>   → 'no'\n  IsString<'hello'>  → 'yes'  (string literal extends string)\n```\n\n```ts\n// Basic conditional type\ntype IsArray<T> = T extends any[] ? true : false;\ntype A = IsArray<number[]>;  // true\ntype B = IsArray<string>;    // false\n\n// Conditional + union distribution\n// When T is a union, conditional types DISTRIBUTE over each member:\ntype OnlyStrings<T> = T extends string ? T : never;\ntype C = OnlyStrings<string | number | boolean>;\n// = OnlyStrings<string> | OnlyStrings<number> | OnlyStrings<boolean>\n// = string             | never                | never\n// = string\n```\n\n```\nDistribution visual:\n\nOnlyStrings<string | number | boolean>\n  ↓ distributes over each union member\n  string extends string  → string\n  number extends string  → never\n  boolean extends string → never\n  ↓ union of results\n  string | never | never = string\n```\n\n## The `infer` Keyword — Pattern Matching on Types\n\n`infer` lets you **capture** a portion of a type and give it a name inside a conditional branch.\n\n```ts\n// Extract the element type from an array:\ntype ElementType<T> = T extends (infer U)[] ? U : never;\ntype N = ElementType<number[]>;   // number\ntype S = ElementType<string[]>;   // string\ntype X = ElementType<boolean>;    // never (not an array)\n\n// Extract return type of a function:\ntype ReturnOf<T> = T extends (...args: any[]) => infer R ? R : never;\ntype R1 = ReturnOf<() => string>;       // string\ntype R2 = ReturnOf<(x: number) => boolean>; // boolean\n\n// Infer a Promise's resolved value:\ntype UnwrapPromise<T> = T extends Promise<infer V> ? V : T;\ntype V1 = UnwrapPromise<Promise<number>>; // number\ntype V2 = UnwrapPromise<string>;          // string (not a promise, returns as-is)\n```\n\n```\ninfer mental model — pattern match at type level:\n\n  T extends (infer U)[]      ← pattern: 'T must be an array of SOMETHING'\n                    ▲\n                'capture whatever SOMETHING is into U'\n\n  If T = number[]\n    T matches (infer U)[] with U = number  → resolves to number\n\n  If T = boolean\n    T does NOT match (infer U)[]            → resolves to never\n```\n\n## Mapped Types — Transform Every Property\n\nMapped types iterate over the keys of a type and produce a new type:\n\n```ts\n// Template: { [K in keyof T]: NewType }\n\n// Make all properties optional (Partial<T> is implemented this way):\ntype MyPartial<T> = { [K in keyof T]?: T[K] };\n\n// Make all properties readonly:\ntype MyReadonly<T> = { readonly [K in keyof T]: T[K] };\n\n// Transform values — wrap every property in a Promise:\ntype Async<T> = { [K in keyof T]: Promise<T[K]> };\ntype AsyncUser = Async<{ name: string; age: number }>;\n// { name: Promise<string>; age: Promise<number> }\n\n// Add a prefix to all keys using template literal types:\ntype Getters<T> = {\n  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K]\n};\ntype UserGetters = Getters<{ name: string; age: number }>;\n// { getName: () => string; getAge: () => number }\n```\n\n```\nMapped type iteration:\n\n  { [K in keyof User]: ... }\n\n  K iterates over:  'name' | 'age' | 'email'\n  Each iteration:   K = 'name'  → process T['name'] = string\n                    K = 'age'   → process T['age']  = number\n                    K = 'email' → process T['email'] = string\n```\n\n## Template Literal Types — String Manipulation at Type Level\n\n```ts\ntype Greeting = `Hello, ${string}!`;  // any string matching that pattern\nconst g: Greeting = 'Hello, world!';  // ✓\n\ntype EventName = 'click' | 'focus' | 'blur';\ntype HandlerName = `on${Capitalize<EventName>}`;  // 'onClick' | 'onFocus' | 'onBlur'\n\n// Combine with mapped types for dynamic property names:\ntype EventHandlers = {\n  [K in EventName as `on${Capitalize<K>}`]: (e: Event) => void;\n};\n// { onClick: (e: Event) => void; onFocus: (e: Event) => void; onBlur: ... }\n```\n\n## `never` — The Bottom Type\n\n`never` is the type with no possible values. It signals impossible states:\n\n```ts\n// Exhaustive checks — if TypeScript reaches this, all cases are handled:\nfunction exhaustive(x: never): never {\n  throw new Error(`Unhandled case: ${x}`);\n}\n\ntype Shape = { kind: 'circle' } | { kind: 'square' };\nfunction handle(s: Shape) {\n  switch (s.kind) {\n    case 'circle': return 'circle!';\n    case 'square': return 'square!';\n    default:       return exhaustive(s);  // ✓ s is never here — all cases handled\n  }\n  // If you add { kind: 'triangle' } to Shape,\n  // the default branch becomes an error — triangle can't be passed as never\n}\n```\n\n## Recursive Types\n\n```ts\n// JSON value — a type that refers to itself:\ntype JSONValue =\n  | string\n  | number\n  | boolean\n  | null\n  | JSONValue[]           // array of JSONValues\n  | { [key: string]: JSONValue }; // object of JSONValues\n\n// Deep Partial — recursively makes all nested objects Partial too:\ntype DeepPartial<T> = T extends object\n  ? { [K in keyof T]?: DeepPartial<T[K]> }\n  : T;\n```\n\n## Advanced Type Cheatsheet\n\n| Pattern | Syntax | Use case |\n|---|---|---|\n| Conditional | `T extends U ? A : B` | Branch on type |\n| Distribution | conditional over union T | Filter union members |\n| Infer | `infer U` inside extends | Capture sub-types |\n| Mapped | `{ [K in keyof T]: ... }` | Transform all properties |\n| Key remapping | `as NewKey` in mapped | Rename keys |\n| Template literal | `` `prefix_${T}` `` | Construct string types |\n| never | bottom type | Exhaustive checks, impossible states |\n\n## Common Pitfalls\n- Forgetting that conditional types distribute over unions — `Flatten<A | B>` applies to each member separately\n- Using `infer` outside a conditional `extends` branch — invalid syntax\n- Infinite recursion in recursive types — TypeScript has depth limits; add a base case\n- `never[]` instead of typed array — calling a generic function with no args often infers `never`\n- Mapped type modifiers: `+?` (add optional), `-?` (remove optional), `+readonly`, `-readonly` — forgetting the minus (-) to remove modifiers\n\n## Connections\n- **ts-utility-types** — all built-in utilities (Partial, Pick, Omit) are implemented as mapped/conditional types\n- **ts-generics** — infer and conditional types heavily leverage generic type parameters\n- **ts-interfaces-types** — discriminated unions feed into conditional type narrowing\n- **ts-decorators** — metadata reflection uses conditional types for param/return extraction",
   "questions": [
     {
@@ -19,7 +21,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Conditional types are ternary expressions at the type level. `extends` here means 'is assignable to' — not class inheritance. The entire expression is resolved at compile time and produces either type A or type B.",
-      "tags": ["conditional-types", "extends"]
+      "tags": [
+        "conditional-types",
+        "extends"
+      ]
     },
     {
       "id": "tsat-q2",
@@ -34,7 +39,11 @@
       ],
       "answerIndex": 1,
       "explanation": "When T is a union, conditional types distribute over each member. `string extends string → string`, `number extends string → never`, `boolean extends string → never`. Union: `string | never | never = string`.",
-      "tags": ["conditional-types", "distribution", "union"]
+      "tags": [
+        "conditional-types",
+        "distribution",
+        "union"
+      ]
     },
     {
       "id": "tsat-q3",
@@ -48,7 +57,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`infer` is a type-level pattern match capture. `T extends (infer U)[]` says: if T is an array, capture the element type as U. You can then use U in the true branch. Zero runtime impact.",
-      "tags": ["infer", "conditional-types"]
+      "tags": [
+        "infer",
+        "conditional-types"
+      ]
     },
     {
       "id": "tsat-q4",
@@ -63,7 +75,10 @@
       ],
       "answerIndex": 2,
       "explanation": "`string[]` matches the pattern `(infer U)[]` with U = `string`. The conditional is true, so the result is U = `string`.",
-      "tags": ["infer", "conditional-types"]
+      "tags": [
+        "infer",
+        "conditional-types"
+      ]
     },
     {
       "id": "tsat-q5",
@@ -77,7 +92,10 @@
       ],
       "answerIndex": 1,
       "explanation": "The mapped type iterates over every key K of T. For each, the value becomes `Promise<T[K]>`. So `name` (string) becomes `Promise<string>` and `age` (number) becomes `Promise<number>`.",
-      "tags": ["mapped-types", "generics"]
+      "tags": [
+        "mapped-types",
+        "generics"
+      ]
     },
     {
       "id": "tsat-q6",
@@ -91,7 +109,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`Partial<T>` is a mapped type that adds `?` to every property. You can see this in TypeScript's `lib.es5.d.ts`. Understanding this lets you write your own custom variants like `DeepPartial`.",
-      "tags": ["mapped-types", "utility-types", "partial"]
+      "tags": [
+        "mapped-types",
+        "utility-types",
+        "partial"
+      ]
     },
     {
       "id": "tsat-q7",
@@ -106,7 +128,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Template literal types distribute over union members. `Capitalize<'click'>` = `'Click'`, so `` `on${...}` `` gives `'onClick'`. Same for `'focus'` → `'onFocus'`. Result: `'onClick' | 'onFocus'`.",
-      "tags": ["template-literal-types", "mapped-types"]
+      "tags": [
+        "template-literal-types",
+        "mapped-types"
+      ]
     },
     {
       "id": "tsat-q8",
@@ -120,7 +145,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Passing a value to `function exhaustive(x: never): never` only compiles if `x` IS never. If you add a new union member and don't handle it in the switch, the default branch receives a value of that type (not never) — TypeScript errors. It's a compile-time completeness check.",
-      "tags": ["never", "exhaustive-check"]
+      "tags": [
+        "never",
+        "exhaustive-check"
+      ]
     },
     {
       "id": "tsat-q9",
@@ -135,7 +163,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`Promise<number[]>` matches `Promise<infer V>` with V = `number[]`. The conditional is true — result is V = `number[]`. Note: this unwraps ONE layer. For nested Promises use a recursive variant like `Awaited<T>`.",
-      "tags": ["infer", "conditional-types", "async"]
+      "tags": [
+        "infer",
+        "conditional-types",
+        "async"
+      ]
     },
     {
       "id": "tsat-q10",
@@ -149,7 +181,10 @@
       ],
       "answerIndex": 1,
       "explanation": "`[K in keyof T as NewKey]` remaps the key. The classic use: `` `get${Capitalize<string & K>}` `` turns `{ name: string }` into `{ getName: () => string }`. Zero runtime impact — purely a type-level rename.",
-      "tags": ["mapped-types", "key-remapping"]
+      "tags": [
+        "mapped-types",
+        "key-remapping"
+      ]
     },
     {
       "id": "tsat-q11",
@@ -161,9 +196,16 @@
         "ReturnType<F>",
         "Required<T>"
       ],
-      "answerIndexes": [0, 1, 3],
+      "answerIndexes": [
+        0,
+        1,
+        3
+      ],
       "explanation": "`Partial`, `Readonly`, and `Required` are all mapped types — they iterate over `keyof T` and transform each property. `ReturnType` is a conditional type with `infer`, not a mapped type.",
-      "tags": ["mapped-types", "utility-types"]
+      "tags": [
+        "mapped-types",
+        "utility-types"
+      ]
     },
     {
       "id": "tsat-q12",
@@ -177,7 +219,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Mapped type modifiers: `+?` adds optional (default), `-?` removes optional (making required). Likewise `+readonly` / `-readonly`. `Required<T>` uses `-?` to strip all optional markers.",
-      "tags": ["mapped-types", "modifiers"]
+      "tags": [
+        "mapped-types",
+        "modifiers"
+      ]
     },
     {
       "id": "tsat-q13",
@@ -192,7 +237,11 @@
       ],
       "answerIndex": 0,
       "explanation": "When T = `never` (the empty union), distributing over it produces `never` — there are no members to iterate over. `OnlyString<never> = never`. This is often surprising but mathematically consistent.",
-      "tags": ["conditional-types", "never", "distribution"]
+      "tags": [
+        "conditional-types",
+        "never",
+        "distribution"
+      ]
     },
     {
       "id": "tsat-q14",
@@ -206,7 +255,11 @@
       ],
       "answerIndex": 1,
       "explanation": "`keyof T` produces `string | number | symbol`. `Capitalize` only accepts `string`. The intersection `string & K` narrows to only the string keys — filtering out number and symbol keys from the remapping.",
-      "tags": ["mapped-types", "template-literal-types", "keyof"]
+      "tags": [
+        "mapped-types",
+        "template-literal-types",
+        "keyof"
+      ]
     },
     {
       "id": "tsat-q15",
@@ -220,7 +273,10 @@
       ],
       "answerIndex": 1,
       "explanation": "TypeScript evaluates recursive types lazily but has internal depth limits (typically ~100 levels). For most real-world data shapes this is fine. For extremely deep nesting or circular types, you may need to use a different approach.",
-      "tags": ["recursive-types", "limitations"]
+      "tags": [
+        "recursive-types",
+        "limitations"
+      ]
     },
     {
       "id": "tsat-q16",
@@ -235,7 +291,10 @@
       ],
       "answerIndex": 2,
       "explanation": "`(x: number) => string[]` matches `(...args: any[]) => infer R` with R = `string[]`. The function return type is captured as string[].",
-      "tags": ["infer", "conditional-types"]
+      "tags": [
+        "infer",
+        "conditional-types"
+      ]
     },
     {
       "id": "tsat-q17",
@@ -249,7 +308,11 @@
       ],
       "answerIndex": 0,
       "explanation": "To prevent distribution: wrap in brackets. `[T] extends [string] ? T : never` with T = `string | number` gives `string | number` (the full union, not filtered). This is the escape hatch when distribution would give undesired results.",
-      "tags": ["conditional-types", "distribution", "tuple"]
+      "tags": [
+        "conditional-types",
+        "distribution",
+        "tuple"
+      ]
     },
     {
       "id": "tsat-q18",
@@ -261,9 +324,17 @@
         "T extends infer U         — directly as extends target",
         "type Alias = infer U      — standalone outside conditional"
       ],
-      "answerIndexes": [0, 1, 2],
+      "answerIndexes": [
+        0,
+        1,
+        2
+      ],
       "explanation": "Options A, B, and C are valid — `infer` can appear in the `extends` clause of a conditional at any point where a type could appear. Option D is invalid — `infer` only has meaning inside a `T extends ... ?` conditional and cannot be used standalone.",
-      "tags": ["infer", "conditional-types", "syntax"]
+      "tags": [
+        "infer",
+        "conditional-types",
+        "syntax"
+      ]
     },
     {
       "id": "tsat-q19",
@@ -277,7 +348,9 @@
       ],
       "answerIndex": 1,
       "explanation": "Template literals at the type level can construct new string literal unions from existing ones (e.g., `` `get${Capitalize<EventName>}` ``), constrain function parameters to specific patterns, and in combination with mapped types, generate entire interfaces dynamically.",
-      "tags": ["template-literal-types"]
+      "tags": [
+        "template-literal-types"
+      ]
     },
     {
       "id": "tsat-q20",
@@ -291,7 +364,10 @@
       ],
       "answerIndex": 1,
       "explanation": "Recursive types let TypeScript validate arbitrarily nested structures. Any value typed as `JSONValue` must be one of those forms — including objects with `JSONValue` values and arrays of `JSONValue`. This catches values like `undefined` or `Date` objects that aren't valid JSON.",
-      "tags": ["recursive-types", "json"]
+      "tags": [
+        "recursive-types",
+        "json"
+      ]
     }
   ],
   "flashcards": [
@@ -299,58 +375,94 @@
       "id": "tsat-fc1",
       "front": "Conditional type syntax",
       "back": "`T extends U ? A : B` — if T is assignable to U, use type A; otherwise type B. Runs at compile time. Zero JavaScript output.",
-      "tags": ["conditional-types"]
+      "tags": [
+        "conditional-types"
+      ]
     },
     {
       "id": "tsat-fc2",
       "front": "Distribution over unions",
       "back": "When T is a union, `T extends U ? A : B` applies to EACH member separately and unions the results. `string | number extends string ? T : never` → `string | never` = `string`.",
-      "tags": ["conditional-types", "distribution"]
+      "tags": [
+        "conditional-types",
+        "distribution"
+      ]
     },
     {
       "id": "tsat-fc3",
       "front": "infer keyword",
       "back": "Captures part of a matched type inside a conditional extends clause. `T extends Array<infer U>` captures the element type as U. Only valid INSIDE a conditional type extends expression.",
-      "tags": ["infer"]
+      "tags": [
+        "infer"
+      ]
     },
     {
       "id": "tsat-fc4",
       "front": "Mapped type template",
       "back": "`{ [K in keyof T]: NewType }` — iterate over all keys of T, produce a transformed type. Add `?` for optional, `readonly` for immutable, `as Rename` for key remapping.",
-      "tags": ["mapped-types"]
+      "tags": [
+        "mapped-types"
+      ]
     },
     {
       "id": "tsat-fc5",
       "front": "Template literal types",
       "back": "`` `prefix_${T}` `` constructs new string literal unions. Distributes over union T. Combined with Capitalize/Lowercase/Uppercase/Uncapitalize for casing transforms.",
-      "tags": ["template-literal-types"]
+      "tags": [
+        "template-literal-types"
+      ]
     },
     {
       "id": "tsat-fc6",
       "front": "never as exhaustive check",
       "back": "Pass the default branch to `(x: never) => never`. Compiles only if all union cases are handled. Adding a new case without updating the switch = compile error immediately.",
-      "tags": ["never", "exhaustive-check"]
+      "tags": [
+        "never",
+        "exhaustive-check"
+      ]
     },
     {
       "id": "tsat-fc7",
       "front": "Prevent distribution — tuple trick",
       "back": "`[T] extends [U] ? A : B` wraps T in a tuple, preventing distributivity. Use when you want the conditional to test T as a whole union, not member by member.",
-      "tags": ["conditional-types", "distribution"]
+      "tags": [
+        "conditional-types",
+        "distribution"
+      ]
     },
     {
       "id": "tsat-fc8",
       "front": "Mapped modifier -?",
       "back": "`-?` in a mapped type REMOVES the optional modifier. Example: `Required<T>` = `{ [K in keyof T]-?: T[K] }`. Use `+?` to add optional, `-readonly` to remove readonly.",
-      "tags": ["mapped-types", "modifiers"]
+      "tags": [
+        "mapped-types",
+        "modifiers"
+      ]
     }
   ],
   "project": {
     "brief": "Build a type-level 'Event System' using advanced types. You have an event map: `{ click: MouseEvent; keydown: KeyboardEvent; resize: UIEvent }`. Task: 1) Write a generic `EventHandler<Map, K extends keyof Map>` type that extracts the correct event type for a given key. 2) Write a `AllHandlers<Map>` mapped type that produces `{ onClick: (e: MouseEvent) => void; onKeydown: (e: KeyboardEvent) => void; onResize: (e: UIEvent) => void }` — with 'on' prefix and Capitalize applied to key names. 3) Write an `ExtractEventType<Map, K>` using `infer` in a conditional type to extract event types from functions stored in the map. 4) If you add a new event `hover: PointerEvent` to the map, which types update automatically and which require manual changes?",
     "checklist": [
-      { "id": "c1", "text": "EventHandler<Map, K> uses indexed access T[K] to get event type", "weight": 1 },
-      { "id": "c2", "text": "AllHandlers<Map> uses mapped type with template literal key remapping", "weight": 1 },
-      { "id": "c3", "text": "ExtractEventType uses infer in a conditional type to capture event type from a handler function type", "weight": 1 },
-      { "id": "c4", "text": "Explains that mapped types (AllHandlers) auto-update; manually written Record-style types need updating", "weight": 1 }
+      {
+        "id": "c1",
+        "text": "EventHandler<Map, K> uses indexed access T[K] to get event type",
+        "weight": 1
+      },
+      {
+        "id": "c2",
+        "text": "AllHandlers<Map> uses mapped type with template literal key remapping",
+        "weight": 1
+      },
+      {
+        "id": "c3",
+        "text": "ExtractEventType uses infer in a conditional type to capture event type from a handler function type",
+        "weight": 1
+      },
+      {
+        "id": "c4",
+        "text": "Explains that mapped types (AllHandlers) auto-update; manually written Record-style types need updating",
+        "weight": 1
+      }
     ],
     "hints": [
       "EventHandler: `type EventHandler<Map, K extends keyof Map> = (e: Map[K]) => void` — indexed access for event type.",
@@ -360,4 +472,3 @@
     ]
   }
 }
-
